@@ -1,0 +1,4 @@
+company_code,employee_code,email,first_name_th,last_name_th,first_name_en,last_name_en,position_th,position_en,department,role,hire_date,phone,annual_leave_balance,sick_leave_balance,personal_leave_balance,line_user_id
+SAFECON,SC-001,somchai@safecon.co.th,สมชาย,ใจดี,Somchai,Jaidee,วิศวกรโครงการ,Project Engineer,Engineering,employee,2022-03-01,0812345678,8,28,4,
+SAFECON,SC-002,somying@safecon.co.th,สมหญิง,รักงาน,Somying,Rakngarn,ผู้จัดการโครงการ,Project Manager,Engineering,supervisor,2019-06-15,0898765432,10,30,5,
+HIGHCON,HC-001,manat@highcon.co.th,มานัต,ทำดี,Manat,Tamdee,วิศวกร,Engineer,Operations,employee,2023-01-10,0856789012,6,30,5,
