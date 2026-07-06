@@ -1,0 +1,29 @@
+{
+  "framework": "nextjs",
+  "buildCommand": "npm run build",
+  "outputDirectory": ".next",
+  "installCommand": "npm install --legacy-peer-deps",
+  "regions": ["sin1"],
+  "functions": {
+    "src/app/api/admin/users/import/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/pdf/leave/[id]/route.ts": {
+      "maxDuration": 30
+    },
+    "src/app/api/pdf/timesheet/[id]/route.ts": {
+      "maxDuration": 30
+    }
+  },
+  "env": {
+    "NEXT_PUBLIC_SUPABASE_URL":      "@supabase-url",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@supabase-anon-key",
+    "SUPABASE_SERVICE_ROLE_KEY":     "@supabase-service-role-key",
+    "NEXT_PUBLIC_APP_URL":           "@app-url",
+    "NEXT_PUBLIC_APP_NAME":          "HiSafe-CON WorkSpace",
+    "WORKER_SERVICE_URL":            "@worker-service-url",
+    "WORKER_API_KEY":                "@worker-api-key",
+    "LINE_CHANNEL_ACCESS_TOKEN":     "@line-channel-access-token",
+    "LINE_CHANNEL_SECRET":           "@line-channel-secret"
+  }
+}
