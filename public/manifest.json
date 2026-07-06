@@ -1,0 +1,35 @@
+{
+  "name": "HiSafe-CON WorkSpace",
+  "short_name": "HiSafe-CON",
+  "description": "ระบบจัดการการลาและ Timesheet สำหรับ Safecon และ Highcon",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1e3a8a",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/logos/safecon.png",
+      "sizes": "1200x630",
+      "type": "image/png",
+      "label": "HiSafe-CON WorkSpace Dashboard"
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "lang": "th",
+  "dir": "ltr"
+}
