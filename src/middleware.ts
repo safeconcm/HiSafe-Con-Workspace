@@ -9,7 +9,7 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 // Routes that don't require authentication
-const PUBLIC_ROUTES = ['/login', '/forgot-password', '/api/auth/callback']
+const PUBLIC_ROUTES = ['/login', '/forgot-password', '/reset-password', '/api/auth/callback', '/manifest.json', '/sw.js']
 
 // Routes that require specific roles
 const ROLE_ROUTES: Record<string, string[]> = {
