@@ -1,15 +1,16 @@
 'use client'
 // src/app/(auth)/login/page.tsx
 // Email/Password + Google OAuth + Remember Me
-// Split-screen, interactive art panel on the left (brand/parallax/cursor
-// spotlight) + clean form panel on the right.
+// Single full-bleed hero scene (city skyline + crane, cursor-follow spotlight,
+// parallax glows) with the login form floating as a card on top — reflows to
+// one column on mobile/tablet instead of a hard 50/50 split.
 
 import { useState, useEffect, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Image from 'next/image'
 import Link from 'next/link'
-import { Eye, EyeOff, Loader2, Mail, HardHat, ShieldCheck } from 'lucide-react'
+import { Eye, EyeOff, Loader2, Mail, Users } from 'lucide-react'
 
 function GoogleIcon() {
   return (
@@ -22,20 +23,63 @@ function GoogleIcon() {
   )
 }
 
-/** Abstract blueprint line-art of a construction crane + framed structure. */
-function BlueprintArt({ className = '' }: { className?: string }) {
+/** Layered city skyline + tower crane silhouette — sits along the bottom of
+ *  the hero, fading into the dark background so it reads as an illustration
+ *  rather than a literal photo cutout. */
+function CitySkyline({ className = '' }: { className?: string }) {
   return (
-    <svg viewBox="0 0 480 360" fill="none" className={className}>
-      <g stroke="rgba(251,191,36,0.55)" strokeWidth="1.4" strokeLinecap="round">
-        <path className="animate-dash" d="M60 330 L60 60 L280 60" />
-        <path className="animate-dash" style={{ animationDelay: '.15s' }} d="M60 90 L420 90" />
-        <path className="animate-dash" style={{ animationDelay: '.3s' }} d="M280 60 L280 330" />
-        <path className="animate-dash" style={{ animationDelay: '.45s' }} d="M120 330 L120 140 L230 140 L230 330" />
-        <path className="animate-dash" style={{ animationDelay: '.6s' }} d="M300 330 L300 180 L400 180 L400 330" />
+    <svg viewBox="0 0 1000 320" preserveAspectRatio="xMidYMax slice" fill="none" className={className}>
+      {/* back layer — faint, distant buildings */}
+      <g fill="rgba(99,130,180,0.22)">
+        <rect x="0"   y="150" width="70"  height="170" />
+        <rect x="80"  y="110" width="55"  height="210" />
+        <rect x="150" y="170" width="90"  height="150" />
+        <rect x="640" y="130" width="60"  height="190" />
+        <rect x="715" y="165" width="100" height="155" />
+        <rect x="830" y="100" width="65"  height="220" />
+        <rect x="905" y="160" width="95"  height="160" />
       </g>
-      <g stroke="rgba(148,163,184,0.35)" strokeWidth="1">
-        <line x1="60" y1="330" x2="420" y2="330" />
-        <circle cx="280" cy="60" r="4" fill="rgba(251,191,36,0.6)" />
+      {/* mid layer */}
+      <g fill="rgba(45,66,102,0.55)">
+        <rect x="30"  y="190" width="80"  height="130" />
+        <rect x="120" y="140" width="50"  height="180" />
+        <rect x="185" y="205" width="65"  height="115" />
+        <rect x="600" y="175" width="70"  height="145" />
+        <rect x="690" y="120" width="55"  height="200" />
+        <rect x="765" y="200" width="80"  height="120" />
+        <rect x="860" y="150" width="60"  height="170" />
+      </g>
+      {/* front layer — near-black, largest shapes, blends into bg */}
+      <g fill="#0a0f1a">
+        <rect x="0"   y="230" width="120" height="90" />
+        <rect x="140" y="255" width="80"  height="65" />
+        <rect x="240" y="215" width="60"  height="105" rx="2" />
+        <rect x="256" y="195" width="28"  height="24" />
+        <polygon points="256,195 270,175 284,195" />
+        <rect x="560" y="240" width="100" height="80" />
+        <rect x="720" y="260" width="90"  height="60" />
+        <rect x="840" y="220" width="70"  height="100" />
+        <rect x="900" y="250" width="100" height="70" />
+      </g>
+      {/* windows on front-layer buildings */}
+      <g fill="rgba(251,191,36,0.35)">
+        {Array.from({ length: 5 }).map((_, r) =>
+          Array.from({ length: 6 }).map((_, c) => (
+            <rect key={`${r}-${c}`} x={12 + c * 17} y={244 + r * 14} width="6" height="8" />
+          ))
+        )}
+      </g>
+      {/* tower crane, right of center — amber accent, drawn on */}
+      <g stroke="rgba(251,191,36,0.75)" strokeWidth="2.5" strokeLinecap="round">
+        <path className="animate-dash" d="M430 320 L430 60" />
+        <path className="animate-dash" style={{ animationDelay: '.15s' }} d="M430 70 L340 70" />
+        <path className="animate-dash" style={{ animationDelay: '.3s' }} d="M430 70 L520 78" />
+        <path className="animate-dash" style={{ animationDelay: '.45s' }} d="M430 100 L400 60 L460 60 Z" />
+        <path d="M355 70 L355 95" strokeWidth="1.8" opacity="0.6" />
+      </g>
+      <circle cx="430" cy="70" r="4" fill="rgba(251,191,36,0.8)" />
+      <g stroke="rgba(148,163,184,0.3)" strokeWidth="1">
+        <line x1="0" y1="320" x2="1000" y2="320" />
       </g>
     </svg>
   )
@@ -62,12 +106,12 @@ function LoginForm() {
   const [loading,  setLoading]  = useState<string|null>(null)
   const [error,    setError]    = useState('')
 
-  const panelRef = useRef<HTMLDivElement>(null)
+  const sceneRef = useRef<HTMLDivElement>(null)
   const [mouse, setMouse] = useState({ x: 50, y: 30 })
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      const el = panelRef.current
+      const el = sceneRef.current
       if (!el) return
       const rect = el.getBoundingClientRect()
       setMouse({
@@ -118,80 +162,54 @@ function LoginForm() {
   }
 
   return (
-    <div className="min-h-screen flex bg-[#0a0f1a]">
+    <div
+      ref={sceneRef}
+      className="min-h-screen relative overflow-hidden bg-[#0a0f1a] blueprint-grid"
+      style={{ '--mx': `${mouse.x}%`, '--my': `${mouse.y}%` } as React.CSSProperties}
+    >
+      {/* ── Background scene (full-bleed, shared across all breakpoints) ── */}
+      <div className="cursor-spotlight absolute inset-0 pointer-events-none" />
+      <div className="hero-horizon-glow absolute inset-0 pointer-events-none" />
 
-      {/* ── Left: interactive brand panel ─────────────────────────── */}
       <div
-        ref={panelRef}
-        className="hidden lg:flex lg:w-[56%] relative overflow-hidden blueprint-grid"
-        style={{ '--mx': `${mouse.x}%`, '--my': `${mouse.y}%` } as React.CSSProperties}
-      >
-        <div className="cursor-spotlight absolute inset-0 pointer-events-none" />
+        className="absolute -top-24 -left-16 w-[28rem] h-[28rem] rounded-full bg-[#0C447C]/25 blur-3xl animate-blob pointer-events-none"
+        style={{ transform: `translate(${(mouse.x - 50) * 0.15}px, ${(mouse.y - 50) * 0.1}px)` }}
+      />
+      <div
+        className="absolute -bottom-16 -right-10 w-96 h-96 rounded-full bg-amber-400/10 blur-3xl animate-blob pointer-events-none"
+        style={{ animationDelay: '-7s', transform: `translate(${(mouse.x - 50) * -0.1}px, ${(mouse.y - 50) * -0.08}px)` }}
+      />
 
-        {/* floating parallax color blobs */}
-        <div
-          className="absolute -top-20 -left-10 w-96 h-96 rounded-full bg-[#0C447C]/30 blur-3xl animate-blob pointer-events-none"
-          style={{ transform: `translate(${(mouse.x - 50) * 0.15}px, ${(mouse.y - 50) * 0.1}px)` }}
-        />
-        <div
-          className="absolute bottom-0 right-0 w-80 h-80 rounded-full bg-amber-400/10 blur-3xl animate-blob pointer-events-none"
-          style={{ animationDelay: '-7s', transform: `translate(${(mouse.x - 50) * -0.1}px, ${(mouse.y - 50) * -0.08}px)` }}
-        />
+      <CitySkyline className="absolute bottom-0 inset-x-0 w-full h-[38%] sm:h-[42%] lg:h-[46%] opacity-90 pointer-events-none" />
 
-        <BlueprintArt
-          className="absolute inset-0 w-full h-full opacity-70 pointer-events-none"
-        />
+      {/* ── Foreground content: brand block + form card ────────────────── */}
+      <div className="relative z-10 min-h-screen flex flex-col lg:flex-row items-center justify-center gap-10 lg:gap-20 max-w-6xl mx-auto px-6 py-14 lg:py-10">
 
-        <div className="relative z-10 flex flex-col justify-between h-full w-full p-12 xl:p-16">
-          <div className="flex items-center gap-2 text-amber-400 animate-fade-in-up">
-            <HardHat className="w-4 h-4" />
-            <span className="text-[11px] font-mono tracking-[0.3em] uppercase">Site Access Portal</span>
+        {/* Brand block */}
+        <div className="w-full max-w-md text-center lg:text-left animate-fade-in-up">
+          <div className="flex items-center justify-center lg:justify-start gap-4 bg-white/[0.05] backdrop-blur-sm border border-white/10 rounded-xl px-5 py-3 w-fit mx-auto lg:mx-0 mb-6">
+            <Image src="/logos/safecon.png" alt="Safecon" width={68} height={34} className="object-contain" />
+            <div className="w-px h-8 bg-white/20" />
+            <Image src="/logos/highcon.png" alt="Highcon" width={52} height={34} className="object-contain" />
           </div>
 
-          <div className="animate-fade-in-up" style={{ animationDelay: '.1s' }}>
-            <h1 className="text-4xl xl:text-5xl font-bold text-white leading-[1.15] tracking-tight">
-              มาตรฐานความปลอดภัย<br />
-              ที่ไว้ใจได้ในทุกไซต์งาน
-            </h1>
-            <p className="text-slate-400 mt-5 max-w-md text-sm leading-relaxed">
-              ระบบบริหารงานบุคคล การลา และ Timesheet สำหรับทีมงานก่อสร้าง
-              เซฟคอนและไฮคอน — เชื่อมทุกไซต์งานไว้ในที่เดียว
-            </p>
-          </div>
-
-          <div
-            className="flex items-center gap-6 bg-white/[0.04] backdrop-blur-sm border border-white/10 rounded-xl px-6 py-4 w-fit animate-fade-in-up"
-            style={{ animationDelay: '.2s' }}
-          >
-            <Image src="/logos/safecon.png" alt="Safecon" width={80} height={40} className="object-contain" />
-            <div className="w-px h-10 bg-white/20" />
-            <Image src="/logos/highcon.png" alt="Highcon" width={60} height={40} className="object-contain" />
-          </div>
-        </div>
-      </div>
-
-      {/* ── Right: form panel ──────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col bg-white relative">
-        <div className="h-1.5 bg-gradient-to-r from-[#0C447C] via-amber-400 to-[#CC1F1A] shrink-0" />
-
-        {/* Mobile-only compact header */}
-        <div className="lg:hidden blueprint-grid px-6 py-6 flex flex-col items-center gap-3">
-          <div className="flex items-center gap-1.5 text-amber-400">
-            <HardHat className="w-3.5 h-3.5" />
-            <span className="text-[10px] font-mono tracking-[0.25em] uppercase">Site Access Portal</span>
-          </div>
-          <div className="flex items-center gap-4 bg-white/[0.04] border border-white/10 rounded-lg px-4 py-2.5">
-            <Image src="/logos/safecon.png" alt="Safecon" width={60} height={30} className="object-contain" />
-            <div className="w-px h-7 bg-white/20" />
-            <Image src="/logos/highcon.png" alt="Highcon" width={45} height={30} className="object-contain" />
-          </div>
+          <h1 className="text-3xl sm:text-4xl xl:text-5xl font-bold text-white leading-tight tracking-tight">
+            HiSafe-CON <span className="text-amber-400">WorkSpace</span>
+          </h1>
+          <p className="text-slate-300 mt-4 text-sm sm:text-base leading-relaxed max-w-sm mx-auto lg:mx-0">
+            ระบบบริหารงานบุคคลกลาง สำหรับทีมงานเซฟคอนและไฮคอน
+            จัดการข้อมูลพนักงาน การลา และไทม์ชีท ไว้ในที่เดียว
+          </p>
         </div>
 
-        <div className="flex-1 flex items-center justify-center px-6 py-10 sm:px-10">
-          <div className="w-full max-w-sm animate-fade-in-up" style={{ animationDelay: '.15s' }}>
+        {/* Form card */}
+        <div className="w-full max-w-sm animate-fade-in-up" style={{ animationDelay: '.15s' }}>
+          <div className="rounded-2xl bg-white shadow-2xl shadow-black/50 p-7 sm:p-8 relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#0C447C] via-amber-400 to-[#CC1F1A]" />
+
             <div className="mb-7">
               <div className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-700 mb-2">
-                <ShieldCheck className="w-3.5 h-3.5" />
+                <Users className="w-3.5 h-3.5" />
                 HiSafe-CON WorkSpace
               </div>
               <h2 className="text-2xl font-semibold text-gray-900">เข้าสู่ระบบ</h2>
@@ -222,9 +240,9 @@ function LoginForm() {
               <div>
                 <label className="form-label">อีเมล</label>
                 <div className="relative">
-                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
                   <input type="email" required autoComplete="email" value={email}
-                    onChange={e => setEmail(e.target.value)} className="auth-input pl-9" placeholder="your@email.com" />
+                    onChange={e => setEmail(e.target.value)} className="auth-input pl-10 pr-3" placeholder="your@email.com" />
                 </div>
               </div>
               <div>
@@ -235,7 +253,7 @@ function LoginForm() {
                 <div className="relative">
                   <input type={showPwd ? 'text' : 'password'} required autoComplete="current-password"
                     value={password} onChange={e => setPassword(e.target.value)}
-                    className="auth-input pr-10" placeholder="••••••••" />
+                    className="auth-input pl-3 pr-10" placeholder="••••••••" />
                   <button type="button" onClick={() => setShowPwd(s => !s)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors">
                     {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}

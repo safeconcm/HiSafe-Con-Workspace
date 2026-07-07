@@ -101,7 +101,7 @@ export default function ResetPasswordPage() {
                     <input
                       type={showPwd ? 'text' : 'password'} required
                       value={password} onChange={e => setPassword(e.target.value)}
-                      className="auth-input pr-10" placeholder="••••••••"
+                      className="auth-input pl-3 pr-10" placeholder="••••••••"
                     />
                     <button type="button" onClick={() => setShowPwd(s => !s)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
@@ -114,7 +114,7 @@ export default function ResetPasswordPage() {
                   <input
                     type={showPwd ? 'text' : 'password'} required
                     value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
-                    className="auth-input" placeholder="••••••••"
+                    className="auth-input px-3" placeholder="••••••••"
                   />
                 </div>
                 <button type="submit" disabled={loading}

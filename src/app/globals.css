@@ -123,8 +123,13 @@
   transition: background .15s ease-out;
 }
 
+/* Warm horizon glow sitting behind the skyline illustration on the login hero */
+.hero-horizon-glow {
+  background: radial-gradient(80% 60% at 50% 100%, rgba(251,191,36,0.16), transparent 70%);
+}
+
 .auth-input {
-  @apply block w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm bg-white/90 transition-all duration-200
+  @apply block w-full rounded-lg border border-gray-300 py-2.5 text-sm bg-white/90 transition-all duration-200
          focus:outline-none focus:ring-4 focus:ring-amber-400/20 focus:border-amber-400/70 disabled:bg-gray-50;
 }
 
