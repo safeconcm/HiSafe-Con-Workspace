@@ -17,14 +17,21 @@ export default async function DashboardLayout({
   if (!authUser) redirect('/login')
 
   const admin = createAdminClient()
-  const { data: userRow } = await admin
+  const { data: userRow, error: userRowError } = await admin
     .from('users')
     .select('id, company_id, employee_code, email, first_name_th, last_name_th, role, avatar_url')
     .eq('auth_user_id', authUser.id)
     .eq('status', 'active')
     .single()
 
-  if (!userRow) redirect('/login?error=no_profile')
+  if (!userRow) {
+    console.error('[dashboard layout] no_profile lookup failed', {
+      authUserId: authUser.id,
+      error: userRowError,
+    })
+    const debug = userRowError ? `${userRowError.code ?? ''}:${userRowError.message ?? ''}` : 'no_error_no_data'
+    redirect(`/login?error=no_profile&debug=${encodeURIComponent(debug)}`)
+  }
 
   const { data: companyRow } = await admin
     .from('companies')
