@@ -6,7 +6,8 @@ import {
   serverError, writeAuditLog, dispatchNotifications, isSupervisorOrAbove,
 } from '@/lib/api-helpers'
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const params = await ctx.params
   const session = getSessionFromHeaders(req)
   if (!session) return unauthorized()
   if (!isSupervisorOrAbove(session)) return forbidden()

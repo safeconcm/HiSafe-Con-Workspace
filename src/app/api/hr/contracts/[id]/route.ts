@@ -6,9 +6,10 @@ import {
   serverError, writeAuditLog, isHROrAdmin,
 } from '@/lib/api-helpers'
 
-type Ctx = { params: { id: string } }
+type Ctx = { params: Promise<{ id: string }> }
 
-export async function GET(req: NextRequest, { params }: Ctx) {
+export async function GET(req: NextRequest, ctx: Ctx) {
+  const params = await ctx.params
   const session = getSessionFromHeaders(req)
   if (!session) return unauthorized()
 
@@ -28,7 +29,8 @@ export async function GET(req: NextRequest, { params }: Ctx) {
   return ok(data)
 }
 
-export async function PATCH(req: NextRequest, { params }: Ctx) {
+export async function PATCH(req: NextRequest, ctx: Ctx) {
+  const params = await ctx.params
   const session = getSessionFromHeaders(req)
   if (!session)              return unauthorized()
   if (!isHROrAdmin(session)) return forbidden()

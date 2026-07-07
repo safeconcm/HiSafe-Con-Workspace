@@ -8,7 +8,8 @@ import {
 } from '@/lib/api-helpers'
 import { generateTimesheetHTML, type TimesheetTemplateData } from '@/lib/pdf/timesheet-template'
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const params = await ctx.params
   const session = getSessionFromHeaders(req)
   if (!session) return unauthorized()
 

@@ -7,8 +7,9 @@ import {
 
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  ctx: { params: Promise<{ id: string }> }
 ) {
+  const params = await ctx.params
   const session = getSessionFromHeaders(req)
   if (!session) return unauthorized()
 

@@ -10,10 +10,11 @@ import {
   notFound, serverError, writeAuditLog,
 } from '@/lib/api-helpers'
 
-type Ctx = { params: { id: string } }
+type Ctx = { params: Promise<{ id: string }> }
 
 // ── GET ──────────────────────────────────────────────────────
-export async function GET(req: NextRequest, { params }: Ctx) {
+export async function GET(req: NextRequest, ctx: Ctx) {
+  const params = await ctx.params
   const session = getSessionFromHeaders(req)
   if (!session) return unauthorized()
 
@@ -46,7 +47,8 @@ export async function GET(req: NextRequest, { params }: Ctx) {
 }
 
 // ── PATCH ─────────────────────────────────────────────────────
-export async function PATCH(req: NextRequest, { params }: Ctx) {
+export async function PATCH(req: NextRequest, ctx: Ctx) {
+  const params = await ctx.params
   const session = getSessionFromHeaders(req)
   if (!session) return unauthorized()
 
@@ -107,7 +109,8 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
 }
 
 // ── DELETE (cancel) ───────────────────────────────────────────
-export async function DELETE(req: NextRequest, { params }: Ctx) {
+export async function DELETE(req: NextRequest, ctx: Ctx) {
+  const params = await ctx.params
   const session = getSessionFromHeaders(req)
   if (!session) return unauthorized()
 

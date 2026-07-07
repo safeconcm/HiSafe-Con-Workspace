@@ -9,9 +9,10 @@ import {
   notFound, serverError, writeAuditLog,
 } from '@/lib/api-helpers'
 
-type Ctx = { params: { id: string } }
+type Ctx = { params: Promise<{ id: string }> }
 
-export async function GET(req: NextRequest, { params }: Ctx) {
+export async function GET(req: NextRequest, ctx: Ctx) {
+  const params = await ctx.params
   const session = getSessionFromHeaders(req)
   if (!session) return unauthorized()
   if (!['admin', 'hr'].includes(session.role)) return forbidden()
@@ -46,7 +47,8 @@ export async function GET(req: NextRequest, { params }: Ctx) {
   return ok({ user, balances: balances ?? [] })
 }
 
-export async function PATCH(req: NextRequest, { params }: Ctx) {
+export async function PATCH(req: NextRequest, ctx: Ctx) {
+  const params = await ctx.params
   const session = getSessionFromHeaders(req)
   if (!session)                return unauthorized()
   if (session.role !== 'admin') return forbidden()

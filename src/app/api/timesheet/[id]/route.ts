@@ -9,10 +9,11 @@ import {
   notFound, serverError, writeAuditLog, isHROrAdmin,
 } from '@/lib/api-helpers'
 
-type Ctx = { params: { id: string } }
+type Ctx = { params: Promise<{ id: string }> }
 
 // ── GET ──────────────────────────────────────────────────────
-export async function GET(req: NextRequest, { params }: Ctx) {
+export async function GET(req: NextRequest, ctx: Ctx) {
+  const params = await ctx.params
   const session = getSessionFromHeaders(req)
   if (!session) return unauthorized()
 
@@ -53,7 +54,8 @@ export async function GET(req: NextRequest, { params }: Ctx) {
 }
 
 // ── PATCH — save timesheet lines ─────────────────────────────
-export async function PATCH(req: NextRequest, { params }: Ctx) {
+export async function PATCH(req: NextRequest, ctx: Ctx) {
+  const params = await ctx.params
   const session = getSessionFromHeaders(req)
   if (!session) return unauthorized()
 

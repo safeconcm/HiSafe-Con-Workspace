@@ -6,7 +6,8 @@ import {
   writeAuditLog, isHROrAdmin,
 } from '@/lib/api-helpers'
 
-export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
+export async function PATCH(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const params = await ctx.params
   const session = getSessionFromHeaders(req)
   if (!session)              return unauthorized()
   if (!isHROrAdmin(session)) return forbidden()

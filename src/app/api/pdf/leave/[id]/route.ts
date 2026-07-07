@@ -12,7 +12,8 @@ import { generateLeaveHTML, type LeaveTemplateData } from '@/lib/pdf/leave-templ
 import { LEAVE_TYPE_LABEL } from '@/utils'
 import type { LeaveType } from '@/types/database'
 
-export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
+export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
+  const params = await ctx.params
   const session = getSessionFromHeaders(req)
   if (!session) return unauthorized()
 
