@@ -9,7 +9,7 @@ import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 
 // Routes that don't require authentication
-const PUBLIC_ROUTES = ['/login', '/forgot-password', '/reset-password', '/api/auth/callback', '/manifest.json', '/sw.js']
+const PUBLIC_ROUTES = ['/login', '/forgot-password', '/reset-password', '/api/auth/callback', '/api/auth/logout', '/api/auth/line', '/manifest.json', '/sw.js']
 
 // Routes that require specific roles
 const ROLE_ROUTES: Record<string, string[]> = {
@@ -61,7 +61,7 @@ export async function middleware(request: NextRequest) {
   if (!authUser) {
     const loginUrl = new URL('/login', request.url)
     loginUrl.searchParams.set('next', pathname)
-    return NextResponse.redirect(loginUrl)
+    return NextResponse.redirect(loginUrl, 303)
   }
 
   // ── Fetch user profile from DB (cached in cookie for perf) ──
@@ -88,7 +88,7 @@ export async function middleware(request: NextRequest) {
         error: userRowError,
       })
       await supabase.auth.signOut()
-      return NextResponse.redirect(new URL('/login?error=no_profile', request.url))
+      return NextResponse.redirect(new URL('/login?error=no_profile', request.url), 303)
     }
 
     // Fetch company code
@@ -124,7 +124,7 @@ export async function middleware(request: NextRequest) {
   // ── Role-based route guard ───────────────────────────────────
   for (const [prefix, allowedRoles] of Object.entries(ROLE_ROUTES)) {
     if (pathname.startsWith(prefix) && !allowedRoles.includes(sessionUser.role)) {
-      return NextResponse.redirect(new URL('/dashboard', request.url))
+      return NextResponse.redirect(new URL('/dashboard', request.url), 303)
     }
   }
 
