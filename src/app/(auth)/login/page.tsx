@@ -2,7 +2,7 @@
 // src/app/(auth)/login/page.tsx
 // Email/Password + Google OAuth + LINE Login + Remember Me
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Image from 'next/image'
@@ -29,6 +29,14 @@ function LINEIcon() {
 }
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginForm />
+    </Suspense>
+  )
+}
+
+function LoginForm() {
   const router       = useRouter()
   const searchParams = useSearchParams()
   const next         = searchParams.get('next') ?? '/dashboard'
