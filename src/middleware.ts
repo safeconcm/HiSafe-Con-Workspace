@@ -72,7 +72,7 @@ export async function middleware(request: NextRequest) {
 
   if (!sessionUser || sessionUser.auth_user_id !== authUser.id) {
     // Fetch fresh from DB
-    const { data: userRow } = await supabase
+    const { data: userRow, error: userRowError } = await supabase
       .from('users')
       .select(
         'id, company_id, employee_code, email, first_name_th, last_name_th, role, avatar_url'
@@ -83,8 +83,16 @@ export async function middleware(request: NextRequest) {
 
     if (!userRow) {
       // Auth user exists but no profile — deactivated or not set up
+      console.error('[middleware] no_profile lookup failed', {
+        authUserId: authUser.id,
+        error: userRowError,
+      })
       await supabase.auth.signOut()
-      return NextResponse.redirect(new URL('/login?error=no_profile', request.url))
+      const debugUrl = new URL('/login?error=no_profile', request.url)
+      if (userRowError) {
+        debugUrl.searchParams.set('debug', `${userRowError.code ?? ''}:${userRowError.message ?? ''}`)
+      }
+      return NextResponse.redirect(debugUrl)
     }
 
     // Fetch company code
