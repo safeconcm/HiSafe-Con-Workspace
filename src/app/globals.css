@@ -9,6 +9,46 @@
   --sidebar-width: 256px;
 }
 
+/* ── Per-company theming ──────────────────────────────────────────
+   Overrides Tailwind's default blue/gray CSS variables (Tailwind v4
+   exposes its whole palette as custom properties) scoped under a
+   [data-company] wrapper placed at the root of the dashboard shell.
+   Every existing bg-blue-*, text-blue-*, ring-blue-*, border-blue-*
+   and bg-gray-50/100 utility class re-themes automatically — no
+   per-page changes needed. Colors are muted/pastel derivatives of
+   each company's brand color, not the vivid brand hex itself. */
+[data-company="SAFECON"] {
+  --color-gray-50:  #F3F6F0;
+  --color-gray-100: #E7EDE0;
+  --color-gray-200: #D7E0C9;
+  --color-blue-50:  #EEF3E7;
+  --color-blue-100: #DEE9D1;
+  --color-blue-200: #C3D8AC;
+  --color-blue-300: #A5C287;
+  --color-blue-400: #87A968;
+  --color-blue-500: #6B8F4E;
+  --color-blue-600: #56753E;
+  --color-blue-700: #495F35;
+  --color-blue-800: #3B4C2B;
+  --color-blue-900: #2F3C23;
+}
+
+[data-company="HIGHCON"] {
+  --color-gray-50:  #F1F4F7;
+  --color-gray-100: #E3E9EF;
+  --color-gray-200: #CBD9E5;
+  --color-blue-50:  #EAF0F6;
+  --color-blue-100: #D6E1EC;
+  --color-blue-200: #B1C6DA;
+  --color-blue-300: #8AA9C4;
+  --color-blue-400: #6690B2;
+  --color-blue-500: #4E7699;
+  --color-blue-600: #3F617F;
+  --color-blue-700: #365269;
+  --color-blue-800: #2C4356;
+  --color-blue-900: #233544;
+}
+
 @layer base {
   body { font-family: var(--font-sarabun), sans-serif; @apply text-gray-900 bg-gray-50; }
   p, li, td, th, label, span { line-height: 1.7; }
@@ -47,7 +87,46 @@
     linear-gradient(90deg, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
   background-size: 100% 100%, 80px 80px, 80px 80px, 16px 16px, 16px 16px;
   background-position: center;
+  animation: grid-drift 40s linear infinite;
 }
 
 .corner-bracket { @apply absolute w-4 h-4 border-amber-400/70; }
+
+/* ── Auth panel interactivity ──────────────────────────────────── */
+@keyframes grid-drift {
+  from { background-position: center, 0 0, 0 0, 0 0, 0 0; }
+  to   { background-position: center, 80px 80px, 80px 80px, 16px 16px, 16px 16px; }
+}
+
+@keyframes blob-float {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33%      { transform: translate(3%, -4%) scale(1.06); }
+  66%      { transform: translate(-3%, 3%) scale(0.96); }
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes dash-draw {
+  from { stroke-dashoffset: 400; }
+  to   { stroke-dashoffset: 0; }
+}
+
+.animate-fade-in-up { animation: fade-in-up .7s cubic-bezier(.22,1,.36,1) both; }
+.animate-blob        { animation: blob-float 14s ease-in-out infinite; }
+.animate-dash         { stroke-dasharray: 400; animation: dash-draw 2.4s ease-out forwards; }
+
+.cursor-spotlight {
+  background: radial-gradient(500px circle at var(--mx, 50%) var(--my, 30%), rgba(255,255,255,0.10), transparent 62%);
+  transition: background .15s ease-out;
+}
+
+.auth-input {
+  @apply block w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm bg-white/90 transition-all duration-200
+         focus:outline-none focus:ring-4 focus:ring-amber-400/20 focus:border-amber-400/70 disabled:bg-gray-50;
+}
+
+.btn-lift { @apply transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0; }
 

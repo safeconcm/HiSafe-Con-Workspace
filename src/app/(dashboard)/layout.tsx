@@ -62,7 +62,7 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50">
+    <div data-company={sessionUser.company_code} className="flex h-screen overflow-hidden bg-gray-50">
       <Sidebar session={sessionUser} company={companyRow} />
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <Topbar session={sessionUser} />

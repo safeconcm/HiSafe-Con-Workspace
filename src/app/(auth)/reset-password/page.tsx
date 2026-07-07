@@ -58,8 +58,9 @@ export default function ResetPasswordPage() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center blueprint-grid px-4">
-      <div className="w-full max-w-sm">
-        <div className="card p-8">
+      <div className="w-full max-w-sm animate-fade-in-up">
+        <div className="card p-8 relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#0C447C] via-amber-400 to-[#CC1F1A]" />
           {checking ? (
             <div className="flex justify-center py-8">
               <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
@@ -100,7 +101,7 @@ export default function ResetPasswordPage() {
                     <input
                       type={showPwd ? 'text' : 'password'} required
                       value={password} onChange={e => setPassword(e.target.value)}
-                      className="form-input pr-10" placeholder="••••••••"
+                      className="auth-input pr-10" placeholder="••••••••"
                     />
                     <button type="button" onClick={() => setShowPwd(s => !s)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
@@ -113,11 +114,11 @@ export default function ResetPasswordPage() {
                   <input
                     type={showPwd ? 'text' : 'password'} required
                     value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)}
-                    className="form-input" placeholder="••••••••"
+                    className="auth-input" placeholder="••••••••"
                   />
                 </div>
                 <button type="submit" disabled={loading}
-                  className="w-full flex items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60 transition-colors">
+                  className="btn-lift w-full flex items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60">
                   {loading && <Loader2 className="w-4 h-4 animate-spin" />}
                   ตั้งรหัสผ่านใหม่
                 </button>

@@ -34,9 +34,10 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center blueprint-grid px-4">
-      <div className="w-full max-w-sm">
-        <div className="card p-8">
-          <Link href="/login" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 mb-6">
+      <div className="w-full max-w-sm animate-fade-in-up">
+        <div className="card p-8 relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#0C447C] via-amber-400 to-[#CC1F1A]" />
+          <Link href="/login" className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-700 mb-6 mt-1">
             <ArrowLeft className="w-4 h-4" />
             กลับไปหน้าเข้าสู่ระบบ
           </Link>
@@ -60,12 +61,12 @@ export default function ForgotPasswordPage() {
                   <input
                     id="email" type="email" required
                     value={email} onChange={e => setEmail(e.target.value)}
-                    className="form-input" placeholder="your@email.com"
+                    className="auth-input" placeholder="your@email.com"
                   />
                 </div>
                 <button
                   type="submit" disabled={loading}
-                  className="w-full rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-800 disabled:opacity-60"
+                  className="btn-lift w-full rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-800 disabled:opacity-60"
                 >
                   {loading ? 'กำลังส่ง...' : 'ส่งลิงก์รีเซ็ต'}
                 </button>

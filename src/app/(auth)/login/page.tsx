@@ -1,13 +1,15 @@
 'use client'
 // src/app/(auth)/login/page.tsx
-// Email/Password + Google OAuth + LINE Login + Remember Me
+// Email/Password + Google OAuth + Remember Me
+// Split-screen, interactive art panel on the left (brand/parallax/cursor
+// spotlight) + clean form panel on the right.
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Image from 'next/image'
 import Link from 'next/link'
-import { Eye, EyeOff, Loader2, Mail, HardHat } from 'lucide-react'
+import { Eye, EyeOff, Loader2, Mail, HardHat, ShieldCheck } from 'lucide-react'
 
 function GoogleIcon() {
   return (
@@ -20,10 +22,21 @@ function GoogleIcon() {
   )
 }
 
-function LINEIcon() {
+/** Abstract blueprint line-art of a construction crane + framed structure. */
+function BlueprintArt({ className = '' }: { className?: string }) {
   return (
-    <svg className="w-5 h-5" viewBox="0 0 24 24">
-      <path fill="#fff" d="M19.365 9.863c.349 0 .63.285.63.631 0 .345-.281.63-.63.63H17.61v1.125h1.755c.349 0 .63.283.63.63 0 .344-.281.629-.63.629h-2.386c-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.627-.63h2.386c.349 0 .63.285.63.63 0 .349-.281.63-.63.63H17.61v1.125h1.755zm-3.855 3.016c0 .27-.174.51-.432.596-.064.021-.133.031-.199.031-.211 0-.391-.09-.51-.25l-2.443-3.317v2.94c0 .344-.279.629-.631.629-.346 0-.626-.285-.626-.629V8.108c0-.27.173-.51.43-.595.06-.023.136-.033.194-.033.195 0 .375.104.495.254l2.462 3.33V8.108c0-.345.282-.63.63-.63.345 0 .63.285.63.63v4.771zm-5.741 0c0 .344-.282.629-.631.629-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.627-.63.349 0 .631.285.631.63v4.771zm-2.466.629H4.917c-.345 0-.63-.285-.63-.629V8.108c0-.345.285-.63.63-.63.348 0 .63.285.63.63v4.141h1.756c.348 0 .629.283.629.63 0 .344-.281.629-.629.629M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.59.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.078 9.436-6.975C23.176 14.393 24 12.458 24 10.314"/>
+    <svg viewBox="0 0 480 360" fill="none" className={className}>
+      <g stroke="rgba(251,191,36,0.55)" strokeWidth="1.4" strokeLinecap="round">
+        <path className="animate-dash" d="M60 330 L60 60 L280 60" />
+        <path className="animate-dash" style={{ animationDelay: '.15s' }} d="M60 90 L420 90" />
+        <path className="animate-dash" style={{ animationDelay: '.3s' }} d="M280 60 L280 330" />
+        <path className="animate-dash" style={{ animationDelay: '.45s' }} d="M120 330 L120 140 L230 140 L230 330" />
+        <path className="animate-dash" style={{ animationDelay: '.6s' }} d="M300 330 L300 180 L400 180 L400 330" />
+      </g>
+      <g stroke="rgba(148,163,184,0.35)" strokeWidth="1">
+        <line x1="60" y1="330" x2="420" y2="330" />
+        <circle cx="280" cy="60" r="4" fill="rgba(251,191,36,0.6)" />
+      </g>
     </svg>
   )
 }
@@ -49,6 +62,23 @@ function LoginForm() {
   const [loading,  setLoading]  = useState<string|null>(null)
   const [error,    setError]    = useState('')
 
+  const panelRef = useRef<HTMLDivElement>(null)
+  const [mouse, setMouse] = useState({ x: 50, y: 30 })
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      const el = panelRef.current
+      if (!el) return
+      const rect = el.getBoundingClientRect()
+      setMouse({
+        x: ((e.clientX - rect.left) / rect.width) * 100,
+        y: ((e.clientY - rect.top) / rect.height) * 100,
+      })
+    }
+    window.addEventListener('mousemove', handler)
+    return () => window.removeEventListener('mousemove', handler)
+  }, [])
+
   useEffect(() => {
     const saved = localStorage.getItem('hsc_remember_email')
     if (saved) setEmail(saved)
@@ -58,17 +88,11 @@ function LoginForm() {
     const code = searchParams.get('error')
     if (!code) return
     const messages: Record<string, string> = {
-      no_profile:            'ไม่พบบัญชีผู้ใช้งานนี้ในระบบ กรุณาติดต่อผู้ดูแลระบบ',
-      callback:              'เกิดข้อผิดพลาดระหว่างเข้าสู่ระบบ กรุณาลองใหม่อีกครั้ง',
-      line_not_configured:   'ยังไม่ได้เปิดใช้งานการเข้าสู่ระบบด้วย LINE',
-      line_no_code:          'เข้าสู่ระบบด้วย LINE ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
-      line_token_failed:     'เข้าสู่ระบบด้วย LINE ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
-      line_profile_failed:   'ไม่สามารถดึงข้อมูลโปรไฟล์ LINE ได้',
-      line_not_linked:       'บัญชี LINE นี้ยังไม่ได้เชื่อมกับผู้ใช้งานในระบบ',
-      account_inactive:      'บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบ',
-      no_auth_user:          'ไม่พบบัญชีสำหรับเข้าสู่ระบบ กรุณาติดต่อผู้ดูแลระบบ',
-      session_failed:        'ไม่สามารถสร้างเซสชันการเข้าสู่ระบบได้ กรุณาลองใหม่อีกครั้ง',
-      line_unknown:          'เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ กรุณาลองใหม่อีกครั้ง',
+      no_profile:       'ไม่พบบัญชีผู้ใช้งานนี้ในระบบ กรุณาติดต่อผู้ดูแลระบบ',
+      callback:         'เกิดข้อผิดพลาดระหว่างเข้าสู่ระบบ กรุณาลองใหม่อีกครั้ง',
+      account_inactive: 'บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบ',
+      no_auth_user:     'ไม่พบบัญชีสำหรับเข้าสู่ระบบ กรุณาติดต่อผู้ดูแลระบบ',
+      session_failed:   'ไม่สามารถสร้างเซสชันการเข้าสู่ระบบได้ กรุณาลองใหม่อีกครั้ง',
     }
     setError(messages[code] ?? 'เกิดข้อผิดพลาดระหว่างเข้าสู่ระบบ กรุณาลองใหม่อีกครั้ง')
   }, [searchParams])
@@ -93,102 +117,148 @@ function LoginForm() {
     })
   }
 
-  const handleLINE = () => {
-    setLoading('line')
-    window.location.href = `/api/auth/line?next=${encodeURIComponent(next)}`
-  }
-
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center blueprint-grid px-4 py-10 relative">
-      {/* eyebrow */}
-      <div className="flex items-center gap-2 mb-5 text-amber-400">
-        <HardHat className="w-4 h-4" />
-        <span className="text-[11px] font-mono tracking-[0.25em] uppercase">Site Access Portal</span>
-      </div>
+    <div className="min-h-screen flex bg-[#0a0f1a]">
 
-      <div className="flex items-center gap-6 mb-8 bg-white/[0.04] backdrop-blur-sm border border-white/10 rounded-xl px-6 py-3">
-        <Image src="/logos/safecon.png" alt="Safecon" width={80} height={40} className="object-contain" />
-        <div className="w-px h-10 bg-white/20" />
-        <Image src="/logos/highcon.png" alt="Highcon" width={60} height={40} className="object-contain" />
-      </div>
+      {/* ── Left: interactive brand panel ─────────────────────────── */}
+      <div
+        ref={panelRef}
+        className="hidden lg:flex lg:w-[56%] relative overflow-hidden blueprint-grid"
+        style={{ '--mx': `${mouse.x}%`, '--my': `${mouse.y}%` } as React.CSSProperties}
+      >
+        <div className="cursor-spotlight absolute inset-0 pointer-events-none" />
 
-      <div className="w-full max-w-sm relative">
-        {/* technical corner brackets */}
-        <span className="corner-bracket -top-2 -left-2 border-t-2 border-l-2 rounded-tl-sm" />
-        <span className="corner-bracket -top-2 -right-2 border-t-2 border-r-2 rounded-tr-sm" />
-        <span className="corner-bracket -bottom-2 -left-2 border-b-2 border-l-2 rounded-bl-sm" />
-        <span className="corner-bracket -bottom-2 -right-2 border-b-2 border-r-2 rounded-br-sm" />
+        {/* floating parallax color blobs */}
+        <div
+          className="absolute -top-20 -left-10 w-96 h-96 rounded-full bg-[#0C447C]/30 blur-3xl animate-blob pointer-events-none"
+          style={{ transform: `translate(${(mouse.x - 50) * 0.15}px, ${(mouse.y - 50) * 0.1}px)` }}
+        />
+        <div
+          className="absolute bottom-0 right-0 w-80 h-80 rounded-full bg-amber-400/10 blur-3xl animate-blob pointer-events-none"
+          style={{ animationDelay: '-7s', transform: `translate(${(mouse.x - 50) * -0.1}px, ${(mouse.y - 50) * -0.08}px)` }}
+        />
 
-        <div className="card p-8 relative overflow-hidden">
-          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#0C447C] via-amber-400 to-[#CC1F1A]" />
+        <BlueprintArt
+          className="absolute inset-0 w-full h-full opacity-70 pointer-events-none"
+        />
 
-          <div className="text-center mb-6">
-            <h1 className="text-xl font-semibold text-gray-900">HiSafe-CON WorkSpace</h1>
-            <p className="text-sm text-gray-500 mt-1">เข้าสู่ระบบเพื่อใช้งาน</p>
+        <div className="relative z-10 flex flex-col justify-between h-full w-full p-12 xl:p-16">
+          <div className="flex items-center gap-2 text-amber-400 animate-fade-in-up">
+            <HardHat className="w-4 h-4" />
+            <span className="text-[11px] font-mono tracking-[0.3em] uppercase">Site Access Portal</span>
           </div>
 
-          {error && (
-            <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">{error}</div>
-          )}
+          <div className="animate-fade-in-up" style={{ animationDelay: '.1s' }}>
+            <h1 className="text-4xl xl:text-5xl font-bold text-white leading-[1.15] tracking-tight">
+              มาตรฐานความปลอดภัย<br />
+              ที่ไว้ใจได้ในทุกไซต์งาน
+            </h1>
+            <p className="text-slate-400 mt-5 max-w-md text-sm leading-relaxed">
+              ระบบบริหารงานบุคคล การลา และ Timesheet สำหรับทีมงานก่อสร้าง
+              เซฟคอนและไฮคอน — เชื่อมทุกไซต์งานไว้ในที่เดียว
+            </p>
+          </div>
 
-          <div className="space-y-3 mb-5">
-            <button onClick={handleGoogle} disabled={!!loading}
-              className="w-full flex items-center justify-center gap-3 rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60 shadow-sm transition-colors">
+          <div
+            className="flex items-center gap-6 bg-white/[0.04] backdrop-blur-sm border border-white/10 rounded-xl px-6 py-4 w-fit animate-fade-in-up"
+            style={{ animationDelay: '.2s' }}
+          >
+            <Image src="/logos/safecon.png" alt="Safecon" width={80} height={40} className="object-contain" />
+            <div className="w-px h-10 bg-white/20" />
+            <Image src="/logos/highcon.png" alt="Highcon" width={60} height={40} className="object-contain" />
+          </div>
+        </div>
+      </div>
+
+      {/* ── Right: form panel ──────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col bg-white relative">
+        <div className="h-1.5 bg-gradient-to-r from-[#0C447C] via-amber-400 to-[#CC1F1A] shrink-0" />
+
+        {/* Mobile-only compact header */}
+        <div className="lg:hidden blueprint-grid px-6 py-6 flex flex-col items-center gap-3">
+          <div className="flex items-center gap-1.5 text-amber-400">
+            <HardHat className="w-3.5 h-3.5" />
+            <span className="text-[10px] font-mono tracking-[0.25em] uppercase">Site Access Portal</span>
+          </div>
+          <div className="flex items-center gap-4 bg-white/[0.04] border border-white/10 rounded-lg px-4 py-2.5">
+            <Image src="/logos/safecon.png" alt="Safecon" width={60} height={30} className="object-contain" />
+            <div className="w-px h-7 bg-white/20" />
+            <Image src="/logos/highcon.png" alt="Highcon" width={45} height={30} className="object-contain" />
+          </div>
+        </div>
+
+        <div className="flex-1 flex items-center justify-center px-6 py-10 sm:px-10">
+          <div className="w-full max-w-sm animate-fade-in-up" style={{ animationDelay: '.15s' }}>
+            <div className="mb-7">
+              <div className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-700 mb-2">
+                <ShieldCheck className="w-3.5 h-3.5" />
+                HiSafe-CON WorkSpace
+              </div>
+              <h2 className="text-2xl font-semibold text-gray-900">เข้าสู่ระบบ</h2>
+              <p className="text-sm text-gray-500 mt-1">กรอกข้อมูลเพื่อเข้าใช้งานระบบ</p>
+            </div>
+
+            {error && (
+              <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700 animate-fade-in-up">
+                {error}
+              </div>
+            )}
+
+            <button
+              onClick={handleGoogle}
+              disabled={!!loading}
+              className="btn-lift w-full flex items-center justify-center gap-3 rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60 shadow-sm mb-5"
+            >
               {loading === 'google' ? <Loader2 className="w-4 h-4 animate-spin" /> : <GoogleIcon />}
               เข้าสู่ระบบด้วย Google
             </button>
-            <button onClick={handleLINE} disabled={!!loading}
-              className="w-full flex items-center justify-center gap-3 rounded-xl bg-[#00B900] px-4 py-3 text-sm font-medium text-white hover:bg-[#009900] disabled:opacity-60 shadow-sm transition-colors">
-              {loading === 'line' ? <Loader2 className="w-4 h-4 animate-spin" /> : <LINEIcon />}
-              เข้าสู่ระบบด้วย LINE
-            </button>
-          </div>
 
-          <div className="relative mb-5">
-            <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200" /></div>
-            <div className="relative flex justify-center"><span className="bg-white px-3 text-xs text-gray-400 font-mono tracking-widest">OR</span></div>
-          </div>
+            <div className="relative mb-5">
+              <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200" /></div>
+              <div className="relative flex justify-center"><span className="bg-white px-3 text-xs text-gray-400 font-mono tracking-widest">OR</span></div>
+            </div>
 
-          <form onSubmit={handleEmailLogin} className="space-y-4">
-            <div>
-              <label className="form-label">อีเมล</label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <input type="email" required autoComplete="email" value={email}
-                  onChange={e => setEmail(e.target.value)} className="form-input pl-9" placeholder="your@email.com" />
+            <form onSubmit={handleEmailLogin} className="space-y-4">
+              <div>
+                <label className="form-label">อีเมล</label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <input type="email" required autoComplete="email" value={email}
+                    onChange={e => setEmail(e.target.value)} className="auth-input pl-9" placeholder="your@email.com" />
+                </div>
               </div>
-            </div>
-            <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="form-label mb-0">รหัสผ่าน</label>
-                <Link href="/forgot-password" className="text-xs text-blue-600 hover:underline">ลืมรหัสผ่าน?</Link>
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="form-label mb-0">รหัสผ่าน</label>
+                  <Link href="/forgot-password" className="text-xs text-blue-600 hover:underline">ลืมรหัสผ่าน?</Link>
+                </div>
+                <div className="relative">
+                  <input type={showPwd ? 'text' : 'password'} required autoComplete="current-password"
+                    value={password} onChange={e => setPassword(e.target.value)}
+                    className="auth-input pr-10" placeholder="••••••••" />
+                  <button type="button" onClick={() => setShowPwd(s => !s)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors">
+                    {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
-              <div className="relative">
-                <input type={showPwd ? 'text' : 'password'} required autoComplete="current-password"
-                  value={password} onChange={e => setPassword(e.target.value)}
-                  className="form-input pr-10" placeholder="••••••••" />
-                <button type="button" onClick={() => setShowPwd(s => !s)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-                  {showPwd ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-            <label className="flex items-center gap-2 cursor-pointer select-none">
-              <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)}
-                className="h-4 w-4 rounded border-gray-300 text-blue-600" />
-              <span className="text-sm text-gray-600">จดจำการเข้าสู่ระบบ</span>
-            </label>
-            <button type="submit" disabled={!!loading}
-              className="w-full flex items-center justify-center gap-2 rounded-xl bg-[#0C447C] px-4 py-3 text-sm font-semibold text-white hover:bg-[#0a3865] disabled:opacity-60 transition-colors">
-              {loading === 'email' && <Loader2 className="w-4 h-4 animate-spin" />}
-              เข้าสู่ระบบ
-            </button>
-          </form>
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input type="checkbox" checked={remember} onChange={e => setRemember(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-blue-600" />
+                <span className="text-sm text-gray-600">จดจำการเข้าสู่ระบบ</span>
+              </label>
+              <button type="submit" disabled={!!loading}
+                className="btn-lift w-full flex items-center justify-center gap-2 rounded-xl bg-[#0C447C] px-4 py-3 text-sm font-semibold text-white hover:bg-[#0a3865] disabled:opacity-60">
+                {loading === 'email' && <Loader2 className="w-4 h-4 animate-spin" />}
+                เข้าสู่ระบบ
+              </button>
+            </form>
+
+            <p className="text-center text-[11px] text-gray-400 mt-8 font-mono tracking-widest uppercase">
+              HiSafe-CON // WorkSpace &middot; Safecon &amp; Highcon
+            </p>
+          </div>
         </div>
-
-        <p className="text-center text-[11px] text-slate-400 mt-5 font-mono tracking-widest uppercase">
-          HiSafe-CON // WorkSpace &middot; Safecon &amp; Highcon
-        </p>
       </div>
     </div>
   )
