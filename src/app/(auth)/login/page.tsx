@@ -7,7 +7,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import Image from 'next/image'
 import Link from 'next/link'
-import { Eye, EyeOff, Loader2, Mail } from 'lucide-react'
+import { Eye, EyeOff, Loader2, Mail, HardHat } from 'lucide-react'
 
 function GoogleIcon() {
   return (
@@ -80,15 +80,29 @@ function LoginForm() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-slate-50 via-blue-50 to-slate-100 px-4 py-8">
-      <div className="flex items-center gap-6 mb-8">
+    <div className="min-h-screen flex flex-col items-center justify-center blueprint-grid px-4 py-10 relative">
+      {/* eyebrow */}
+      <div className="flex items-center gap-2 mb-5 text-amber-400">
+        <HardHat className="w-4 h-4" />
+        <span className="text-[11px] font-mono tracking-[0.25em] uppercase">Site Access Portal</span>
+      </div>
+
+      <div className="flex items-center gap-6 mb-8 bg-white/[0.04] backdrop-blur-sm border border-white/10 rounded-xl px-6 py-3">
         <Image src="/logos/safecon.png" alt="Safecon" width={80} height={40} className="object-contain" />
-        <div className="w-px h-10 bg-gray-300" />
+        <div className="w-px h-10 bg-white/20" />
         <Image src="/logos/highcon.png" alt="Highcon" width={60} height={40} className="object-contain" />
       </div>
 
-      <div className="w-full max-w-sm">
-        <div className="card p-8">
+      <div className="w-full max-w-sm relative">
+        {/* technical corner brackets */}
+        <span className="corner-bracket -top-2 -left-2 border-t-2 border-l-2 rounded-tl-sm" />
+        <span className="corner-bracket -top-2 -right-2 border-t-2 border-r-2 rounded-tr-sm" />
+        <span className="corner-bracket -bottom-2 -left-2 border-b-2 border-l-2 rounded-bl-sm" />
+        <span className="corner-bracket -bottom-2 -right-2 border-b-2 border-r-2 rounded-br-sm" />
+
+        <div className="card p-8 relative overflow-hidden">
+          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#0C447C] via-amber-400 to-[#CC1F1A]" />
+
           <div className="text-center mb-6">
             <h1 className="text-xl font-semibold text-gray-900">HiSafe-CON WorkSpace</h1>
             <p className="text-sm text-gray-500 mt-1">เข้าสู่ระบบเพื่อใช้งาน</p>
@@ -113,7 +127,7 @@ function LoginForm() {
 
           <div className="relative mb-5">
             <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200" /></div>
-            <div className="relative flex justify-center"><span className="bg-white px-3 text-xs text-gray-400">หรือ</span></div>
+            <div className="relative flex justify-center"><span className="bg-white px-3 text-xs text-gray-400 font-mono tracking-widest">OR</span></div>
           </div>
 
           <form onSubmit={handleEmailLogin} className="space-y-4">
@@ -146,13 +160,16 @@ function LoginForm() {
               <span className="text-sm text-gray-600">จดจำการเข้าสู่ระบบ</span>
             </label>
             <button type="submit" disabled={!!loading}
-              className="w-full flex items-center justify-center gap-2 rounded-xl bg-blue-700 px-4 py-3 text-sm font-semibold text-white hover:bg-blue-800 disabled:opacity-60 transition-colors">
+              className="w-full flex items-center justify-center gap-2 rounded-xl bg-[#0C447C] px-4 py-3 text-sm font-semibold text-white hover:bg-[#0a3865] disabled:opacity-60 transition-colors">
               {loading === 'email' && <Loader2 className="w-4 h-4 animate-spin" />}
               เข้าสู่ระบบ
             </button>
           </form>
         </div>
-        <p className="text-center text-xs text-gray-400 mt-4">HiSafe-CON WorkSpace · Safecon & Highcon</p>
+
+        <p className="text-center text-[11px] text-slate-400 mt-5 font-mono tracking-widest uppercase">
+          HiSafe-CON // WorkSpace &middot; Safecon &amp; Highcon
+        </p>
       </div>
     </div>
   )

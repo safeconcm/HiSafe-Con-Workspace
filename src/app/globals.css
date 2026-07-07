@@ -35,3 +35,19 @@
 ::-webkit-scrollbar-thumb { @apply bg-gray-300 rounded-full; }
 
 @media print { .no-print { display: none !important; } }
+
+/* ── Blueprint / site-plan background used on auth screens ────────── */
+.blueprint-grid {
+  background-color: #0a0f1a;
+  background-image:
+    radial-gradient(circle at 50% 0%, rgba(12, 68, 124, 0.45), transparent 55%),
+    linear-gradient(rgba(148, 163, 184, 0.12) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.12) 1px, transparent 1px),
+    linear-gradient(rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
+  background-size: 100% 100%, 80px 80px, 80px 80px, 16px 16px, 16px 16px;
+  background-position: center;
+}
+
+.corner-bracket { @apply absolute w-4 h-4 border-amber-400/70; }
+
