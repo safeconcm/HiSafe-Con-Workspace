@@ -187,10 +187,13 @@ function LoginForm() {
 
         {/* Brand block */}
         <div className="w-full max-w-md text-center lg:text-left animate-fade-in-up">
-          <div className="flex items-center justify-center lg:justify-start gap-4 bg-white/[0.05] backdrop-blur-sm border border-white/10 rounded-xl px-5 py-3 w-fit mx-auto lg:mx-0 mb-6">
-            <Image src="/logos/safecon.png" alt="Safecon" width={68} height={34} className="object-contain" />
-            <div className="w-px h-8 bg-white/20" />
-            <Image src="/logos/highcon.png" alt="Highcon" width={52} height={34} className="object-contain" />
+          <div className="flex items-center justify-center lg:justify-start gap-3 mx-auto lg:mx-0 mb-6 w-fit">
+            <div className="flex items-center justify-center bg-white rounded-lg h-11 px-4 shadow-lg shadow-black/20">
+              <Image src="/logos/safecon.png" alt="Safecon" width={120} height={48} className="object-contain h-5 w-auto" />
+            </div>
+            <div className="flex items-center justify-center bg-white rounded-lg h-11 px-4 shadow-lg shadow-black/20">
+              <Image src="/logos/highcon.png" alt="Highcon" width={80} height={80} className="object-contain h-8 w-auto" />
+            </div>
           </div>
 
           <h1 className="text-3xl sm:text-4xl xl:text-5xl font-bold text-white leading-tight tracking-tight">
