@@ -29,8 +29,7 @@ export default async function DashboardLayout({
       authUserId: authUser.id,
       error: userRowError,
     })
-    const debug = userRowError ? `${userRowError.code ?? ''}:${userRowError.message ?? ''}` : 'no_error_no_data'
-    redirect(`/login?error=no_profile&debug=${encodeURIComponent(debug)}`)
+    redirect('/login?error=no_profile')
   }
 
   const { data: companyRow } = await admin

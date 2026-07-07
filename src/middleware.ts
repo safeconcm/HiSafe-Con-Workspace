@@ -88,11 +88,7 @@ export async function middleware(request: NextRequest) {
         error: userRowError,
       })
       await supabase.auth.signOut()
-      const debugUrl = new URL('/login?error=no_profile', request.url)
-      if (userRowError) {
-        debugUrl.searchParams.set('debug', `${userRowError.code ?? ''}:${userRowError.message ?? ''}`)
-      }
-      return NextResponse.redirect(debugUrl)
+      return NextResponse.redirect(new URL('/login?error=no_profile', request.url))
     }
 
     // Fetch company code

@@ -54,6 +54,25 @@ function LoginForm() {
     if (saved) setEmail(saved)
   }, [])
 
+  useEffect(() => {
+    const code = searchParams.get('error')
+    if (!code) return
+    const messages: Record<string, string> = {
+      no_profile:            'ไม่พบบัญชีผู้ใช้งานนี้ในระบบ กรุณาติดต่อผู้ดูแลระบบ',
+      callback:              'เกิดข้อผิดพลาดระหว่างเข้าสู่ระบบ กรุณาลองใหม่อีกครั้ง',
+      line_not_configured:   'ยังไม่ได้เปิดใช้งานการเข้าสู่ระบบด้วย LINE',
+      line_no_code:          'เข้าสู่ระบบด้วย LINE ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
+      line_token_failed:     'เข้าสู่ระบบด้วย LINE ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง',
+      line_profile_failed:   'ไม่สามารถดึงข้อมูลโปรไฟล์ LINE ได้',
+      line_not_linked:       'บัญชี LINE นี้ยังไม่ได้เชื่อมกับผู้ใช้งานในระบบ',
+      account_inactive:      'บัญชีนี้ถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบ',
+      no_auth_user:          'ไม่พบบัญชีสำหรับเข้าสู่ระบบ กรุณาติดต่อผู้ดูแลระบบ',
+      session_failed:        'ไม่สามารถสร้างเซสชันการเข้าสู่ระบบได้ กรุณาลองใหม่อีกครั้ง',
+      line_unknown:          'เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ กรุณาลองใหม่อีกครั้ง',
+    }
+    setError(messages[code] ?? 'เกิดข้อผิดพลาดระหว่างเข้าสู่ระบบ กรุณาลองใหม่อีกครั้ง')
+  }, [searchParams])
+
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading('email'); setError('')
