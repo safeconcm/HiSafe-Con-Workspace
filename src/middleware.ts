@@ -7,6 +7,7 @@
 
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { pickActiveRow, ACTIVE_COMPANY_COOKIE } from '@/lib/company-context'
 
 // Routes that don't require authentication
 const PUBLIC_ROUTES = ['/login', '/forgot-password', '/reset-password', '/api/auth/callback', '/api/auth/logout', '/api/auth/line', '/manifest.json', '/sw.js']
@@ -67,19 +68,27 @@ export async function middleware(request: NextRequest) {
   // ── Fetch user profile from DB (cached in cookie for perf) ──
   // We store a lightweight session payload in a signed cookie
   // to avoid a DB query on every request
+  const activeCompanyId = request.cookies.get(ACTIVE_COMPANY_COOKIE)?.value
   const sessionCookie = request.cookies.get('hsc_session')?.value
   let sessionUser = sessionCookie ? safeParseSession(sessionCookie) : null
 
-  if (!sessionUser || sessionUser.auth_user_id !== authUser.id) {
-    // Fetch fresh from DB
-    const { data: userRow, error: userRowError } = await supabase
+  const cacheStale =
+    !sessionUser ||
+    sessionUser.auth_user_id !== authUser.id ||
+    (!!activeCompanyId && sessionUser.company_id !== activeCompanyId)
+
+  if (cacheStale) {
+    // Fetch all active profile rows for this auth user — an admin may be
+    // linked to more than one company (see src/lib/company-context.ts)
+    const { data: userRows, error: userRowError } = await supabase
       .from('users')
       .select(
         'id, company_id, employee_code, email, first_name_th, last_name_th, role, avatar_url'
       )
       .eq('auth_user_id', authUser.id)
       .eq('status', 'active')
-      .single()
+
+    const userRow = pickActiveRow(userRows, activeCompanyId)
 
     if (!userRow) {
       // Auth user exists but no profile — deactivated or not set up
@@ -91,24 +100,27 @@ export async function middleware(request: NextRequest) {
       return NextResponse.redirect(new URL('/login?error=no_profile', request.url), 303)
     }
 
-    // Fetch company code
-    const { data: companyRow } = await supabase
+    // Fetch company info for every linked company (switcher) + active one's code
+    const companyIds = Array.from(new Set((userRows ?? []).map(r => r.company_id)))
+    const { data: companyRows } = await supabase
       .from('companies')
-      .select('code')
-      .eq('id', userRow.company_id)
-      .single()
+      .select('id, code, name_th, logo_url')
+      .in('id', companyIds)
+
+    const activeCompany = companyRows?.find(c => c.id === userRow.company_id)
 
     sessionUser = {
       id: userRow.id,
       auth_user_id: authUser.id,
       company_id: userRow.company_id,
-      company_code: companyRow?.code ?? '',
+      company_code: activeCompany?.code ?? '',
       employee_code: userRow.employee_code,
       email: userRow.email,
       first_name_th: userRow.first_name_th,
       last_name_th: userRow.last_name_th,
       role: userRow.role,
       avatar_url: userRow.avatar_url,
+      available_companies: companyRows ?? [],
     }
 
     // Store in cookie (7 day TTL, HttpOnly, Secure in prod)

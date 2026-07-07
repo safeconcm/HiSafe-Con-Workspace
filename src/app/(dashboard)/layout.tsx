@@ -4,6 +4,8 @@ import { Topbar }  from '@/components/layout/Topbar'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
+import { pickActiveRow, ACTIVE_COMPANY_COOKIE } from '@/lib/company-context'
 import type { SessionUser } from '@/types/database'
 
 export default async function DashboardLayout({
@@ -17,12 +19,17 @@ export default async function DashboardLayout({
   if (!authUser) redirect('/login')
 
   const admin = createAdminClient()
-  const { data: userRow, error: userRowError } = await admin
+  const cookieStore = await cookies()
+  const activeCompanyId = cookieStore.get(ACTIVE_COMPANY_COOKIE)?.value
+
+  // An admin may be linked to more than one company (see company-context.ts)
+  const { data: userRows, error: userRowError } = await admin
     .from('users')
     .select('id, company_id, employee_code, email, first_name_th, last_name_th, role, avatar_url')
     .eq('auth_user_id', authUser.id)
     .eq('status', 'active')
-    .single()
+
+  const userRow = pickActiveRow(userRows, activeCompanyId)
 
   if (!userRow) {
     console.error('[dashboard layout] no_profile lookup failed', {
@@ -32,11 +39,13 @@ export default async function DashboardLayout({
     redirect('/login?error=no_profile')
   }
 
-  const { data: companyRow } = await admin
+  const companyIds = Array.from(new Set((userRows ?? []).map(r => r.company_id)))
+  const { data: companyRows } = await admin
     .from('companies')
-    .select('code, name_th, logo_url')
-    .eq('id', userRow.company_id)
-    .single()
+    .select('id, code, name_th, logo_url')
+    .in('id', companyIds)
+
+  const companyRow = companyRows?.find(c => c.id === userRow.company_id) ?? null
 
   const sessionUser: SessionUser = {
     id:            userRow.id,
@@ -49,6 +58,7 @@ export default async function DashboardLayout({
     last_name_th:  userRow.last_name_th,
     role:          userRow.role,
     avatar_url:    userRow.avatar_url,
+    available_companies: companyRows ?? [],
   }
 
   return (

@@ -295,4 +295,7 @@ export interface SessionUser {
   last_name_th: string
   role: UserRole
   avatar_url: string | null
+  // Companies this auth user has an active profile in (for admins linked
+  // to more than one company). Length 1 for normal single-company users.
+  available_companies?: { id: string; code: string; name_th: string; logo_url: string | null }[]
 }

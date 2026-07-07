@@ -2,6 +2,8 @@
 import type { Metadata } from 'next'
 import { createAdminClient, createServerSupabaseClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
+import { pickActiveRow, ACTIVE_COMPANY_COOKIE } from '@/lib/company-context'
 import { formatDateTH, LEAVE_TYPE_LABEL, LEAVE_STATUS_COLOR, LEAVE_STATUS_LABEL } from '@/utils'
 import { CalendarDays, Clock, ClipboardList, TrendingUp } from 'lucide-react'
 import Link from 'next/link'
@@ -14,13 +16,18 @@ export default async function DashboardPage() {
   if (!authUser) redirect('/login')
 
   const admin = createAdminClient()
+  const cookieStore = await cookies()
+  const activeCompanyId = cookieStore.get(ACTIVE_COMPANY_COOKIE)?.value
 
-  // Get user profile
-  const { data: me } = await admin
+  // Get user profile — an admin may have a profile row in more than one
+  // company, so resolve the currently active one (see company-context.ts)
+  const { data: meRows } = await admin
     .from('users')
     .select('id, company_id, role, first_name_th')
     .eq('auth_user_id', authUser.id)
-    .single()
+    .eq('status', 'active')
+
+  const me = pickActiveRow(meRows, activeCompanyId)
 
   if (!me) redirect('/login?error=no_profile')
 

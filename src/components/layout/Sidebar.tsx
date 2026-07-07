@@ -11,6 +11,99 @@ import { cn, fullNameTH } from '@/utils'
 import type { SessionUser } from '@/types/database'
 import { useState } from 'react'
 
+type CompanyInfo = { id?: string; code: string; name_th: string; logo_url: string | null }
+
+function companyBadgeClass(code?: string) {
+  return code === 'HIGHCON' ? 'bg-[#0C447C]' : 'bg-[#3B6D11]'
+}
+
+function companyInitials(code?: string) {
+  return code === 'HIGHCON' ? 'HC' : 'SC'
+}
+
+function CompanySwitcher({
+  current,
+  companies,
+}: {
+  current: CompanyInfo | null
+  companies: { id: string; code: string; name_th: string; logo_url: string | null }[]
+}) {
+  const [open, setOpen] = useState(false)
+  const [switching, setSwitching] = useState(false)
+
+  const switchTo = async (companyId: string) => {
+    if (switching) return
+    setOpen(false)
+    setSwitching(true)
+    try {
+      await fetch('/api/auth/switch-company', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company_id: companyId }),
+      })
+    } finally {
+      window.location.href = '/dashboard'
+    }
+  }
+
+  if (companies.length <= 1) {
+    return (
+      <div className="flex items-center gap-3 px-4 py-4 border-b border-gray-100">
+        <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center text-white text-xs font-bold shrink-0', companyBadgeClass(current?.code))}>
+          {companyInitials(current?.code)}
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-gray-900 truncate">
+            {current?.name_th ?? 'HiSafe-CON'}
+          </p>
+          <p className="text-xs text-gray-400">WorkSpace</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="relative px-4 py-4 border-b border-gray-100">
+      <button
+        onClick={() => setOpen(o => !o)}
+        disabled={switching}
+        className="flex items-center gap-3 w-full text-left disabled:opacity-60"
+      >
+        <div className={cn('w-9 h-9 rounded-lg flex items-center justify-center text-white text-xs font-bold shrink-0', companyBadgeClass(current?.code))}>
+          {companyInitials(current?.code)}
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-gray-900 truncate">
+            {switching ? 'กำลังสลับ...' : (current?.name_th ?? 'HiSafe-CON')}
+          </p>
+          <p className="text-xs text-gray-400">แตะเพื่อสลับบริษัท</p>
+        </div>
+        <ChevronDown className={cn('w-4 h-4 text-gray-400 transition-transform shrink-0', open && 'rotate-180')} />
+      </button>
+
+      {open && (
+        <div className="absolute left-4 right-4 top-full mt-1 rounded-lg border border-gray-200 bg-white shadow-lg z-20 overflow-hidden">
+          {companies.map(c => (
+            <button
+              key={c.id}
+              onClick={() => switchTo(c.id)}
+              className={cn(
+                'flex items-center gap-2.5 w-full px-3 py-2.5 text-sm text-left hover:bg-gray-50',
+                c.code === current?.code && 'bg-blue-50 text-blue-700 font-medium'
+              )}
+            >
+              <div className={cn('w-6 h-6 rounded flex items-center justify-center text-white text-[10px] font-bold shrink-0', companyBadgeClass(c.code))}>
+                {companyInitials(c.code)}
+              </div>
+              {c.name_th}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 interface NavItem {
   label: string
   href: string
@@ -120,23 +213,8 @@ export function Sidebar({ session, company }: SidebarProps) {
   return (
     <aside className="hidden lg:flex flex-col w-64 border-r border-gray-200 bg-white h-screen overflow-y-auto shrink-0">
 
-      {/* Company logo */}
-      <div className="flex items-center gap-3 px-4 py-4 border-b border-gray-100">
-        <div
-          className={cn(
-            'w-9 h-9 rounded-lg flex items-center justify-center text-white text-xs font-bold shrink-0',
-            company?.code === 'HIGHCON' ? 'bg-[#0C447C]' : 'bg-[#3B6D11]'
-          )}
-        >
-          {company?.code === 'HIGHCON' ? 'HC' : 'SC'}
-        </div>
-        <div className="min-w-0">
-          <p className="text-sm font-semibold text-gray-900 truncate">
-            {company?.name_th ?? 'HiSafe-CON'}
-          </p>
-          <p className="text-xs text-gray-400">WorkSpace</p>
-        </div>
-      </div>
+      {/* Company logo / switcher */}
+      <CompanySwitcher current={company} companies={session.available_companies ?? []} />
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-0.5">
