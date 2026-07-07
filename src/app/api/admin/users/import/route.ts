@@ -10,6 +10,7 @@ import {
 } from '@/lib/api-helpers'
 
 interface ImportRow {
+  company_code?:          string
   employee_code:          string
   email:                  string
   first_name_th:          string
@@ -43,6 +44,21 @@ export async function POST(req: NextRequest) {
   const supabase    = createAdminSupabaseClient()
   const currentYear = new Date().getFullYear()
 
+  // ── Resolve company_code → company_id ────────────────────────
+  // An admin may be linked to more than one company (see company-context.ts).
+  // Each row can target a different company via its company_code column;
+  // rows with no company_code fall back to the admin's current active company.
+  const linkedCompanyIds = (session.available_companies?.length
+    ? session.available_companies.map(c => c.id)
+    : [session.company_id])
+
+  const { data: companyRows } = await supabase
+    .from('companies')
+    .select('id, code')
+    .in('id', linkedCompanyIds)
+
+  const companyByCode = new Map((companyRows ?? []).map(c => [c.code.toUpperCase(), c.id]))
+
   // Pre-validate all rows first
   const validationErrors: { row: number; error: string }[] = []
   const emailSet = new Set<string>()
@@ -58,6 +74,13 @@ export async function POST(req: NextRequest) {
     if (!r.last_name_th?.trim())  validationErrors.push({ row: idx, error: 'last_name_th ว่าง' })
     if (!r.hire_date?.trim())     validationErrors.push({ row: idx, error: 'hire_date ว่าง' })
 
+    const companyCode = r.company_code?.trim().toUpperCase()
+    if (!companyCode) {
+      validationErrors.push({ row: idx, error: 'company_code ว่าง' })
+    } else if (!companyByCode.has(companyCode)) {
+      validationErrors.push({ row: idx, error: `company_code "${r.company_code}" ไม่ถูกต้อง (ต้องเป็น ${[...companyByCode.keys()].join(' หรือ ')})` })
+    }
+
     if (r.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r.email)) {
       validationErrors.push({ row: idx, error: `email "${r.email}" ไม่ถูกต้อง` })
     }
@@ -68,11 +91,11 @@ export async function POST(req: NextRequest) {
       validationErrors.push({ row: idx, error: `role "${r.role}" ไม่ถูกต้อง` })
     }
 
-    // Duplicate check within file
+    // Duplicate check within file (employee_code is unique per company)
     const emailKey = r.email?.toLowerCase()
-    const codeKey  = `${session.company_id}:${r.employee_code?.toUpperCase()}`
+    const codeKey  = `${companyCode}:${r.employee_code?.toUpperCase()}`
     if (emailKey && emailSet.has(emailKey)) validationErrors.push({ row: idx, error: `email "${r.email}" ซ้ำในไฟล์` })
-    if (codeKey  && codeSet.has(codeKey))  validationErrors.push({ row: idx, error: `employee_code "${r.employee_code}" ซ้ำในไฟล์` })
+    if (codeKey  && codeSet.has(codeKey))  validationErrors.push({ row: idx, error: `employee_code "${r.employee_code}" ซ้ำในไฟล์ (บริษัทเดียวกัน)` })
     if (emailKey) emailSet.add(emailKey)
     if (codeKey)  codeSet.add(codeKey)
   }
@@ -90,7 +113,13 @@ export async function POST(req: NextRequest) {
   }
 
   if (validationErrors.length > 0) {
-    return ok({ success: false, errors: validationErrors, created: 0 })
+    return ok({
+      success: false,
+      created: 0,
+      failed:  rows.length,
+      total:   rows.length,
+      errors:  validationErrors,
+    })
   }
 
   // ── Bulk create ──────────────────────────────────────────────
@@ -98,8 +127,9 @@ export async function POST(req: NextRequest) {
   let successCount = 0
 
   for (let i = 0; i < rows.length; i++) {
-    const r   = rows[i]
-    const idx = i + 2
+    const r          = rows[i]
+    const idx        = i + 2
+    const companyId  = companyByCode.get(r.company_code!.trim().toUpperCase())!
 
     try {
       // Create auth user
@@ -115,7 +145,7 @@ export async function POST(req: NextRequest) {
       const { data: user, error: userErr } = await supabase
         .from('users')
         .insert({
-          company_id:    session.company_id,
+          company_id:    companyId,
           employee_code: r.employee_code.trim().toUpperCase(),
           auth_user_id:  authData.user.id,
           email:         r.email.trim().toLowerCase(),
@@ -142,7 +172,7 @@ export async function POST(req: NextRequest) {
       // Init leave balances
       await supabase.rpc('init_leave_balances', {
         p_user_id:    user.id,
-        p_company_id: session.company_id,
+        p_company_id: companyId,
         p_hire_date:  r.hire_date,
         p_year:       currentYear,
       }).then(() => {}, () => {})
@@ -158,7 +188,7 @@ export async function POST(req: NextRequest) {
 
       for (const b of balanceOverrides) {
         await supabase.from('leave_balances').upsert({
-          company_id:  session.company_id,
+          company_id:  companyId,
           user_id:     user.id,
           leave_type:  b.leave_type,
           year:        currentYear,

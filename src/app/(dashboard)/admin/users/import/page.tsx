@@ -6,6 +6,7 @@ import { useState, useRef } from 'react'
 import { useRouter }        from 'next/navigation'
 import { useImportUsers }   from '@/hooks/useAdmin'
 import { cn }               from '@/utils'
+import * as XLSX            from 'xlsx'
 import {
   Upload, FileText, CheckCircle2, XCircle,
   AlertCircle, ArrowLeft, Loader2, Download,
@@ -44,6 +45,41 @@ function parseCSV(text: string): { headers: string[]; rows: Record<string, strin
   return { headers, rows }
 }
 
+/** Format a JS Date as YYYY-MM-DD regardless of the workbook's locale/display format. */
+function formatDateYMD(d: Date): string {
+  const y   = d.getFullYear()
+  const m   = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+/** Parse an .xlsx / .xls workbook (first sheet) into the same row shape as parseCSV. */
+function parseExcel(buffer: ArrayBuffer): { headers: string[]; rows: Record<string, string>[] } {
+  const wb    = XLSX.read(buffer, { type: 'array', cellDates: true })
+  const sheet = wb.Sheets[wb.SheetNames[0]]
+  if (!sheet) return { headers: [], rows: [] }
+
+  const raw: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' })
+  if (!raw.length) return { headers: [], rows: [] }
+
+  const headers = (raw[0] as any[]).map(h => String(h ?? '').trim().toLowerCase())
+
+  const rows = raw.slice(1)
+    .filter(r => Array.isArray(r) && r.some(cell => String(cell ?? '').trim() !== ''))
+    .map(r => {
+      const obj: Record<string, string> = {}
+      headers.forEach((h, i) => {
+        const cell = r[i]
+        if (cell instanceof Date)       obj[h] = formatDateYMD(cell)
+        else if (cell === undefined || cell === null) obj[h] = ''
+        else                             obj[h] = String(cell).trim()
+      })
+      return obj
+    })
+
+  return { headers, rows }
+}
+
 type ImportResult = {
   success: boolean
   created: number
@@ -65,10 +101,14 @@ export default function ImportUsersPage() {
   const [result,  setResult]  = useState<ImportResult | null>(null)
 
   const handleFile = (file: File) => {
-    const reader = new FileReader()
+    const isExcel = /\.(xlsx|xls)$/i.test(file.name)
+    const reader   = new FileReader()
+
     reader.onload = e => {
-      const text = e.target?.result as string
-      const { headers: h, rows: r } = parseCSV(text)
+      const { headers: h, rows: r } = isExcel
+        ? parseExcel(e.target?.result as ArrayBuffer)
+        : parseCSV(e.target?.result as string)
+
       setHeaders(h)
       setRows(r)
 
@@ -76,13 +116,15 @@ export default function ImportUsersPage() {
       setColErrs(missing.length ? [`คอลัมน์ที่ขาด: ${missing.join(', ')}`] : [])
       setStep('preview')
     }
-    reader.readAsText(file, 'utf-8')
+
+    if (isExcel) reader.readAsArrayBuffer(file)
+    else         reader.readAsText(file, 'utf-8')
   }
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     const file = e.dataTransfer.files[0]
-    if (file?.name.endsWith('.csv')) handleFile(file)
+    if (file && /\.(csv|xlsx|xls)$/i.test(file.name)) handleFile(file)
   }
 
   const handleConfirm = async () => {
@@ -95,6 +137,7 @@ export default function ImportUsersPage() {
     const BOM = '\uFEFF'
     const csv = BOM + [ALL_COLS.join(','),
       'SAFECON,SC-001,somchai@safecon.co.th,สมชาย,ใจดี,Somchai,Jaidee,วิศวกร,Engineer,Engineering,employee,2022-01-01,0812345678,8,28,4',
+      'HIGHCON,HC-001,somsri@highcon.co.th,สมศรี,มีสุข,Somsri,Meesuk,ธุรการ,Admin,Administration,employee,2023-03-15,0898765432,8,28,4',
     ].join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
     const url  = URL.createObjectURL(blob)
@@ -125,9 +168,10 @@ export default function ImportUsersPage() {
               </button>
             </div>
             <ol className="text-sm text-gray-600 space-y-1 list-decimal pl-4">
-              <li>ดาวน์โหลด Template CSV และกรอกข้อมูลพนักงาน</li>
+              <li>ดาวน์โหลด Template แล้วกรอกข้อมูลพนักงาน (แก้ไขเป็นไฟล์ Excel แล้วอัปโหลด .xlsx ได้เลย ไม่ต้องแปลงกลับเป็น CSV)</li>
               <li>คอลัมน์บังคับ: <code className="text-xs bg-gray-100 px-1 rounded">{REQUIRED_COLS.join(', ')}</code></li>
-              <li>วันที่ใช้รูปแบบ YYYY-MM-DD เช่น 2022-01-15</li>
+              <li>company_code: SAFECON หรือ HIGHCON — ใส่ต่อแถวได้ นำเข้าทั้ง 2 บริษัทพร้อมกันในไฟล์เดียวได้</li>
+              <li>วันที่ใช้รูปแบบ YYYY-MM-DD เช่น 2022-01-15 (ถ้าอัปโหลดจาก Excel และคอลัมน์เป็นชนิดวันที่ ระบบแปลงให้อัตโนมัติ)</li>
               <li>role: employee / supervisor / hr / admin</li>
               <li>นำเข้าได้สูงสุด 500 รายการต่อครั้ง</li>
             </ol>
@@ -141,12 +185,12 @@ export default function ImportUsersPage() {
             className="border-2 border-dashed border-gray-300 rounded-xl p-10 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors"
           >
             <Upload className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-            <p className="text-sm font-medium text-gray-700">คลิกหรือลากไฟล์ CSV มาวางที่นี่</p>
-            <p className="text-xs text-gray-400 mt-1">รองรับ .csv เท่านั้น</p>
+            <p className="text-sm font-medium text-gray-700">คลิกหรือลากไฟล์ CSV หรือ Excel มาวางที่นี่</p>
+            <p className="text-xs text-gray-400 mt-1">รองรับ .csv, .xlsx, .xls</p>
             <input
               ref={fileRef}
               type="file"
-              accept=".csv"
+              accept=".csv,.xlsx,.xls"
               className="hidden"
               onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f) }}
             />
@@ -224,18 +268,36 @@ export default function ImportUsersPage() {
         <div className="space-y-4">
           <div className={cn(
             'card card-body',
-            result.created === result.total ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'
+            result.created > 0 && result.created === result.total ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'
           )}>
             <div className="flex items-center gap-3 mb-3">
-              {result.created === result.total
+              {result.created > 0 && result.created === result.total
                 ? <CheckCircle2 className="w-6 h-6 text-green-600" />
                 : <AlertCircle className="w-6 h-6 text-amber-600" />
               }
               <h3 className="text-sm font-semibold text-gray-900">
-                นำเข้าเสร็จสิ้น — สำเร็จ {result.created} / {result.total} รายการ
+                นำเข้าเสร็จสิ้น — สำเร็จ {result.created} / {result.total ?? rows.length} รายการ
               </h3>
             </div>
-            {result.failed > 0 && (
+
+            {/* Validation errors — file rejected before any row was created */}
+            {!!result.errors?.length && (
+              <div className="mt-1 space-y-1">
+                <p className="text-xs font-medium text-red-700">
+                  ไฟล์ไม่ผ่านการตรวจสอบ ({result.errors.length} รายการ) — ยังไม่มีการนำเข้าข้อมูลใดๆ กรุณาแก้ไขแล้วลองใหม่:
+                </p>
+                <div className="max-h-64 overflow-y-auto space-y-0.5">
+                  {result.errors.map((e, i) => (
+                    <p key={i} className="text-xs text-red-600">
+                      • แถว {e.row}: {e.error}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Per-row creation errors — file passed validation but some rows failed at create time */}
+            {!result.errors?.length && (result.failed ?? 0) > 0 && (
               <div className="mt-3 space-y-1">
                 <p className="text-xs font-medium text-red-700">รายการที่ล้มเหลว:</p>
                 {result.results?.filter(r => !r.success).map((r, i) => (
