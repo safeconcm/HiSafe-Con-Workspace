@@ -119,12 +119,17 @@ function LoginForm() {
       <div className="cursor-spotlight absolute inset-0 pointer-events-none" />
       <div className="hero-horizon-glow absolute inset-0 pointer-events-none" />
 
-      {/* Single soft accent glow — one color (amber), replacing the old
-          two-tone navy+amber blob pair for a calmer, less "product landing
-          page" feel. */}
+      {/* Two brand-color glows — Highcon blue (top-left) and Safecon green
+          (bottom-right) — so the background reads as "both companies," not
+          a generic amber accent unrelated to either brand. Amber is kept
+          only as a small highlight (crane lights, badge) elsewhere. */}
       <div
-        className="absolute -bottom-16 -right-10 w-[32rem] h-[32rem] rounded-full bg-amber-400/8 blur-3xl animate-blob pointer-events-none"
-        style={{ transform: `translate(${(mouse.x - 50) * -0.1}px, ${(mouse.y - 50) * -0.08}px)` }}
+        className="absolute -top-24 -left-16 w-[28rem] h-[28rem] rounded-full bg-[#0C447C]/25 blur-3xl animate-blob pointer-events-none"
+        style={{ transform: `translate(${(mouse.x - 50) * 0.15}px, ${(mouse.y - 50) * 0.1}px)` }}
+      />
+      <div
+        className="absolute -bottom-16 -right-10 w-[28rem] h-[28rem] rounded-full bg-[#3B6D11]/20 blur-3xl animate-blob pointer-events-none"
+        style={{ animationDelay: '-7s', transform: `translate(${(mouse.x - 50) * -0.1}px, ${(mouse.y - 50) * -0.08}px)` }}
       />
 
       <CitySkyline className="absolute bottom-0 inset-x-0 w-full h-[38%] sm:h-[42%] lg:h-[46%] opacity-90 pointer-events-none" />
@@ -135,11 +140,11 @@ function LoginForm() {
         {/* Brand block */}
         <div className="w-full max-w-md text-center lg:text-left animate-fade-in-up">
           <div className="flex items-center justify-center lg:justify-start gap-3 mx-auto lg:mx-0 mb-6 w-fit">
-            <div className="flex items-center justify-center bg-white rounded-lg h-11 px-4 shadow-lg shadow-black/20">
-              <Image src="/logos/safecon.png" alt="Safecon" width={120} height={48} className="object-contain h-5 w-auto" />
+            <div className="flex items-center justify-center bg-white rounded-xl h-16 px-5 shadow-lg shadow-black/20">
+              <Image src="/logos/safecon.png" alt="Safecon" width={120} height={48} className="object-contain h-8 w-auto" />
             </div>
-            <div className="flex items-center justify-center bg-white rounded-lg h-11 px-4 shadow-lg shadow-black/20">
-              <Image src="/logos/highcon.png" alt="Highcon" width={80} height={80} className="object-contain h-8 w-auto" />
+            <div className="flex items-center justify-center bg-white rounded-xl h-16 px-5 shadow-lg shadow-black/20">
+              <Image src="/logos/highcon.png" alt="Highcon" width={80} height={80} className="object-contain h-11 w-auto" />
             </div>
           </div>
 
