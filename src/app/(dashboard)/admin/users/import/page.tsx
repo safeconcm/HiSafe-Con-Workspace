@@ -18,6 +18,7 @@ const ALL_COLS = [
   'company_code','employee_code','email','first_name_th','last_name_th',
   'first_name_en','last_name_en','position_th','position_en','department',
   'role','hire_date','phone','annual_leave_balance','sick_leave_balance','personal_leave_balance',
+  'employment_status','probation_days','base_salary',
 ]
 
 function parseCSV(text: string): { headers: string[]; rows: Record<string, string>[] } {
@@ -136,8 +137,8 @@ export default function ImportUsersPage() {
   const downloadTemplate = () => {
     const BOM = '\uFEFF'
     const csv = BOM + [ALL_COLS.join(','),
-      'SAFECON,SC-001,somchai@safecon.co.th,สมชาย,ใจดี,Somchai,Jaidee,วิศวกร,Engineer,Engineering,employee,2022-01-01,0812345678,8,28,4',
-      'HIGHCON,HC-001,somsri@highcon.co.th,สมศรี,มีสุข,Somsri,Meesuk,ธุรการ,Admin,Administration,employee,2023-03-15,0898765432,8,28,4',
+      'SAFECON,SC-001,somchai@safecon.co.th,สมชาย,ใจดี,Somchai,Jaidee,วิศวกร,Engineer,Engineering,employee,2022-01-01,0812345678,8,28,4,ประจำ,,25000',
+      'HIGHCON,HC-001,somsri@highcon.co.th,สมศรี,มีสุข,Somsri,Meesuk,ธุรการ,Admin,Administration,employee,2023-03-15,0898765432,8,28,4,ทดลองงาน,120,18000',
     ].join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
     const url  = URL.createObjectURL(blob)
@@ -173,6 +174,9 @@ export default function ImportUsersPage() {
               <li>company_code: SAFECON หรือ HIGHCON — ใส่ต่อแถวได้ นำเข้าทั้ง 2 บริษัทพร้อมกันในไฟล์เดียวได้</li>
               <li>วันที่ใช้รูปแบบ YYYY-MM-DD เช่น 2022-01-15 (รองรับ D/M/YYYY เช่น 26/6/2026 ด้วย — ถ้าอัปโหลดจาก Excel และคอลัมน์เป็นชนิดวันที่ ระบบแปลงให้อัตโนมัติ)</li>
               <li>role: employee/พนักงาน, supervisor/หัวหน้างาน, hr/ฝ่ายบุคคล, admin/ผู้ดูแลระบบ (พิมพ์ไทยหรืออังกฤษก็ได้ ไม่กรอก = employee)</li>
+              <li>employment_status: ประจำ/พนักงานประจำ หรือ ทดลองงาน (ไม่กรอก = ประจำ) — ถ้าใส่ &quot;ทดลองงาน&quot; ระบบจะสร้างสัญญาทดลองงานให้อัตโนมัติ และไปโผล่ในแท็บ &quot;ทดลองงาน&quot; ทันที ไม่ต้องกรอกซ้ำ</li>
+              <li>probation_days: จำนวนวันทดลองงาน (ไม่กรอก = 120 วัน) — ใช้เมื่อ employment_status เป็นทดลองงานเท่านั้น</li>
+              <li>base_salary: เงินเดือนเริ่มต้น ตัวเลขล้วน เช่น 18000 (ไม่กรอก = 0 แก้ทีหลังได้ที่หน้าสัญญา/เงินเดือน)</li>
               <li>นำเข้าได้สูงสุด 500 รายการต่อครั้ง</li>
             </ol>
           </div>

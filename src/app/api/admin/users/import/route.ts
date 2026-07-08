@@ -25,6 +25,9 @@ interface ImportRow {
   annual_leave_balance?:  string | number
   sick_leave_balance?:    string | number
   personal_leave_balance?: string | number
+  employment_status?:    string   // 'permanent' | 'probation' (accepts Thai labels)
+  probation_days?:       string | number
+  base_salary?:          string | number
 }
 
 const VALID_ROLES = ['employee', 'supervisor', 'hr', 'admin']
@@ -44,6 +47,20 @@ function normalizeRole(raw?: string): string {
   const key = (raw ?? '').trim()
   if (!key) return 'employee'
   return ROLE_ALIASES[key.toLowerCase()] ?? ROLE_ALIASES[key] ?? key
+}
+
+// employment_status column — lets HR mark each imported row as a regular
+// employee or a probation employee. 'probation' rows get a contracts row
+// auto-created (status='active', probation_status='pending') so they show
+// up in /hr/probation immediately, without a separate manual step.
+const EMPLOYMENT_STATUS_ALIASES: Record<string, string> = {
+  permanent: 'permanent', regular: 'permanent', 'พนักงานประจำ': 'permanent', 'ประจำ': 'permanent',
+  probation: 'probation', 'probation period': 'probation', 'ทดลองงาน': 'probation', 'ทดลอง': 'probation',
+}
+function normalizeEmploymentStatus(raw?: string): string {
+  const key = (raw ?? '').trim()
+  if (!key) return 'permanent'
+  return EMPLOYMENT_STATUS_ALIASES[key.toLowerCase()] ?? EMPLOYMENT_STATUS_ALIASES[key] ?? key
 }
 
 /**
@@ -152,6 +169,22 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Normalize employment_status in place (accepts พนักงานประจำ/ทดลองงาน)
+    if (r.employment_status) {
+      const normalizedStatus = normalizeEmploymentStatus(r.employment_status)
+      if (!['permanent', 'probation'].includes(normalizedStatus)) {
+        validationErrors.push({ row: idx, error: `employment_status "${r.employment_status}" ไม่ถูกต้อง (รองรับ: พนักงานประจำ/ประจำ, ทดลองงาน)` })
+      } else {
+        r.employment_status = normalizedStatus
+      }
+    }
+    if (r.probation_days !== undefined && r.probation_days !== '' && isNaN(Number(r.probation_days))) {
+      validationErrors.push({ row: idx, error: `probation_days "${r.probation_days}" ต้องเป็นตัวเลข` })
+    }
+    if (r.base_salary !== undefined && r.base_salary !== '' && isNaN(Number(r.base_salary))) {
+      validationErrors.push({ row: idx, error: `base_salary "${r.base_salary}" ต้องเป็นตัวเลข` })
+    }
+
     // Duplicate check within file (employee_code is unique per company)
     const emailKey = r.email?.toLowerCase()
     const codeKey  = `${companyCode}:${r.employee_code?.toUpperCase()}`
@@ -186,6 +219,22 @@ export async function POST(req: NextRequest) {
   // ── Bulk create ──────────────────────────────────────────────
   const results: { row: number; employee_code: string; success: boolean; error?: string }[] = []
   let successCount = 0
+
+  // Pre-fetch a starting contract sequence number per company (for rows
+  // marked employment_status='probation') so we don't run a count query
+  // per row. Mirrors the contract_no format used in /api/hr/contracts.
+  const contractYear = new Date().getFullYear()
+  const contractSeqByCompany = new Map<string, number>()
+  const companiesInFile = new Set(
+    rows.map(r => companyByCode.get(r.company_code!.trim().toUpperCase())!).filter(Boolean)
+  )
+  for (const companyId of companiesInFile) {
+    const { count } = await supabase.from('contracts')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', companyId)
+      .gte('created_at', `${contractYear}-01-01`)
+    contractSeqByCompany.set(companyId, count ?? 0)
+  }
 
   for (let i = 0; i < rows.length; i++) {
     const r          = rows[i]
@@ -255,6 +304,40 @@ export async function POST(req: NextRequest) {
           year:        currentYear,
           quota_days:  b.quota_days,
         }, { onConflict: 'user_id,leave_type,year' })
+      }
+
+      // If marked "ทดลองงาน" (probation), auto-create the contract so the
+      // employee shows up in /hr/probation immediately — no manual step
+      // needed. Failure here doesn't fail the whole user import; HR can
+      // still add the contract by hand at /hr/contracts/new if this fails.
+      if (normalizeEmploymentStatus(r.employment_status) === 'probation') {
+        const probationDays = r.probation_days !== undefined && r.probation_days !== ''
+          ? Number(r.probation_days) : 120
+        const safeProbationDays = Number.isFinite(probationDays) ? probationDays : 120
+        const probEnd = new Date(r.hire_date)
+        probEnd.setDate(probEnd.getDate() + safeProbationDays)
+
+        const seqNo = (contractSeqByCompany.get(companyId) ?? 0) + 1
+        contractSeqByCompany.set(companyId, seqNo)
+        const compCode    = companyId.slice(-4).toUpperCase()
+        const contract_no = `CT-${compCode}-${contractYear}-${String(seqNo).padStart(4, '0')}`
+
+        await supabase.from('contracts').insert({
+          company_id:        companyId,
+          user_id:           user.id,
+          contract_no,
+          contract_type:     'permanent',
+          status:            'active',
+          start_date:        r.hire_date,
+          position_th:       r.position_th?.trim() ?? null,
+          department:        r.department?.trim()  ?? null,
+          probation_days:    safeProbationDays,
+          probation_end:     probEnd.toISOString().split('T')[0],
+          probation_status:  'pending',
+          base_salary:       r.base_salary !== undefined && r.base_salary !== '' ? Number(r.base_salary) : 0,
+          salary_type:       'monthly',
+          created_by:        session.id,
+        }).then(() => {}, () => {})
       }
 
       results.push({ row: idx, employee_code: r.employee_code, success: true })
