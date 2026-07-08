@@ -1,9 +1,11 @@
 // src/app/api/payroll/route.ts
 // GET /api/payroll?year=&month= — wage breakdown per employee per job code,
-// computed from approved timesheets. Visible to supervisor/hr/admin (not
-// placed under /api/hr so it isn't blocked by the /hr middleware role gate,
-// since supervisors — e.g. an MD mapped to the supervisor role — need to
-// see it too).
+// computed from approved timesheets. Visible to hr/admin only — salary data
+// for the whole company, and there is no per-supervisor team scoping in the
+// schema (no manager_id/reports-to relation), so supervisor access was
+// removed rather than exposing every employee's pay to every supervisor.
+// If a future "my team's payroll" view is wanted, that needs a proper
+// reporting-line field first — see the 2026-07 access-control discussion.
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSessionFromHeaders, ok, badRequest, unauthorized, forbidden } from '@/lib/api-helpers'
@@ -17,7 +19,7 @@ function toCSV(rows: (string | number | null)[][]): string {
 export async function GET(req: NextRequest) {
   const session = getSessionFromHeaders(req)
   if (!session) return unauthorized()
-  if (!['supervisor', 'hr', 'admin'].includes(session.role)) return forbidden()
+  if (!['hr', 'admin'].includes(session.role)) return forbidden()
 
   const { searchParams } = new URL(req.url)
   const year   = parseInt(searchParams.get('year')  ?? String(new Date().getFullYear()))

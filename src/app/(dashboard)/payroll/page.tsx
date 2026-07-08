@@ -1,9 +1,8 @@
 'use client'
 // src/app/(dashboard)/payroll/page.tsx
 // Wage breakdown per employee per job code, computed from approved
-// timesheets (see src/lib/payroll.ts for the formula). Visible to
-// supervisor/hr/admin — placed at a top-level route (not /hr/payroll)
-// so the middleware's /hr role gate doesn't block supervisors/MD.
+// timesheets (see src/lib/payroll.ts for the formula). Visible to hr/admin
+// only (see access-control note in api/payroll/route.ts).
 
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
