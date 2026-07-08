@@ -152,8 +152,8 @@ function LoginForm() {
             HiSafe-CON <span className="text-amber-400">WorkSpace</span>
           </h1>
           <p className="text-slate-300 mt-4 text-sm sm:text-base leading-relaxed max-w-sm mx-auto lg:mx-0">
-            ระบบบริหารงานบุคคลกลาง สำหรับทีมงานเซฟคอนและไฮคอน
-            จัดการข้อมูลพนักงาน การลา และไทม์ชีท ไว้ในที่เดียว
+            HR Platform สำหรับทีม Highcon และ Safecon
+            ระบบจัดการงานบุคคล เอกสาร และการอนุมัติ
           </p>
         </div>
 
@@ -247,7 +247,7 @@ function LoginForm() {
             </form>
 
             <p className="text-center text-[11px] text-gray-400 mt-8 font-mono tracking-widest uppercase">
-              HiSafe-CON // WorkSpace &middot; Safecon &amp; Highcon
+              &copy; 2026 Highcon Co., Ltd. &amp; Safecon Co., Ltd.
             </p>
           </Card>
         </div>
