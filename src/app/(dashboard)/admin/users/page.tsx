@@ -148,9 +148,14 @@ export default function AdminUsersPage() {
                     </td>
                     <td>
                       {u.employment_status ? (
-                        <span className={cn('badge', EMPLOYMENT_COLOR[u.employment_status])}>
-                          {EMPLOYMENT_LABEL[u.employment_status]}
-                        </span>
+                        <>
+                          <span className={cn('badge', EMPLOYMENT_COLOR[u.employment_status])}>
+                            {EMPLOYMENT_LABEL[u.employment_status]}
+                          </span>
+                          {u.employment_status === 'probation' && u.probation_end && (
+                            <p className="text-xs text-gray-400 mt-1">ถึง {u.probation_end}</p>
+                          )}
+                        </>
                       ) : (
                         <span className="text-xs text-gray-400">ไม่ระบุ</span>
                       )}

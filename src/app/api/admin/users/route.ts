@@ -56,24 +56,25 @@ export async function GET(req: NextRequest) {
   // employment_status import column) show as null — the UI renders that
   // as "ไม่ระบุ" rather than assuming either status.
   const userIds = (data ?? []).map((u: any) => u.id)
-  const employmentByUser = new Map<string, string | null>()
+  const employmentByUser = new Map<string, { status: string | null; probation_end: string | null }>()
   if (userIds.length) {
     const { data: contractRows } = await supabase
       .from('contracts')
-      .select('user_id, probation_status, status, created_at')
+      .select('user_id, probation_status, probation_end, status, created_at')
       .in('user_id', userIds)
       .order('created_at', { ascending: false })
     for (const c of contractRows ?? []) {
       if (employmentByUser.has(c.user_id)) continue // keep only the latest per user
-      employmentByUser.set(
-        c.user_id,
-        c.probation_status === 'pending' ? 'probation' : 'permanent'
-      )
+      employmentByUser.set(c.user_id, {
+        status:        c.probation_status === 'pending' ? 'probation' : 'permanent',
+        probation_end: c.probation_status === 'pending' ? c.probation_end : null,
+      })
     }
   }
   const users = (data ?? []).map((u: any) => ({
     ...u,
-    employment_status: employmentByUser.get(u.id) ?? null,
+    employment_status: employmentByUser.get(u.id)?.status ?? null,
+    probation_end:      employmentByUser.get(u.id)?.probation_end ?? null,
   }))
 
   return ok({ users, total: count ?? 0, page, per_page: limit })

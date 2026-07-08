@@ -331,11 +331,14 @@ export async function POST(req: NextRequest) {
         }, { onConflict: 'user_id,leave_type,year' })
       }
 
-      // If marked "ทดลองงาน" (probation), auto-create the contract so the
-      // employee shows up in /hr/probation immediately — no manual step
-      // needed. Failure here doesn't fail the whole user import; HR can
-      // still add the contract by hand at /hr/contracts/new if this fails.
-      if (normalizeEmploymentStatus(r.employment_status) === 'probation') {
+      // Always auto-create a contract row (not just for probation rows) so
+      // /admin/users can always show a real "สถานะพนักงาน" (ประจำ/ทดลองงาน)
+      // instead of falling back to "ไม่ระบุ" for permanent hires that never
+      // get a contract otherwise. Failure here doesn't fail the whole user
+      // import; HR can still add the contract by hand at /hr/contracts/new
+      // if this fails.
+      {
+        const isProbation = normalizeEmploymentStatus(r.employment_status) === 'probation'
         const probationDays = r.probation_days !== undefined && r.probation_days !== ''
           ? Number(r.probation_days) : 120
         const safeProbationDays = Number.isFinite(probationDays) ? probationDays : 120
@@ -357,8 +360,13 @@ export async function POST(req: NextRequest) {
           position_th:       r.position_th?.trim() ?? null,
           department:        r.department?.trim()  ?? null,
           probation_days:    safeProbationDays,
+          // Permanent hires get probation_end/status filled in too (rather
+          // than left null) so the contract detail page can still show a
+          // reference date — but probation_status='passed' marks them as
+          // not actually on probation, so /admin/users and /hr/probation
+          // correctly treat them as regular employees.
           probation_end:     probEnd.toISOString().split('T')[0],
-          probation_status:  'pending',
+          probation_status:  isProbation ? 'pending' : 'passed',
           base_salary:       r.base_salary !== undefined && r.base_salary !== '' ? Number(r.base_salary) : 0,
           salary_type:       'monthly',
           created_by:        session.id,
