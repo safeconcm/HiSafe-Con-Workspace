@@ -107,6 +107,7 @@ export async function POST(req: NextRequest) {
       hire_date,
       phone:         phone          ?? null,
       status:        'active',
+      must_change_password: true,
     })
     .select()
     .single()

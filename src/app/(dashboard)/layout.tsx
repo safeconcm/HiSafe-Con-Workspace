@@ -25,7 +25,7 @@ export default async function DashboardLayout({
   // An admin may be linked to more than one company (see company-context.ts)
   const { data: userRows, error: userRowError } = await admin
     .from('users')
-    .select('id, company_id, employee_code, email, first_name_th, last_name_th, role, avatar_url')
+    .select('id, company_id, employee_code, email, first_name_th, last_name_th, role, avatar_url, must_change_password')
     .eq('auth_user_id', authUser.id)
     .eq('status', 'active')
 
@@ -38,6 +38,11 @@ export default async function DashboardLayout({
     })
     redirect('/login?error=no_profile')
   }
+
+  // Force a password change before letting a first-login (admin-created or
+  // bulk-imported) account see any dashboard page. /change-password sits
+  // outside this route group, so this redirect can't loop.
+  if (userRow.must_change_password) redirect('/change-password')
 
   const companyIds = Array.from(new Set((userRows ?? []).map(r => r.company_id)))
   const { data: companyRows } = await admin

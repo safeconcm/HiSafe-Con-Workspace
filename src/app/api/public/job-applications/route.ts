@@ -97,6 +97,24 @@ export async function POST(req: NextRequest) {
 
   const supabase = createAdminSupabaseClient()
 
+  // ── Rate limit: max 5 submissions per IP per 30 minutes ──────────────
+  // Uses the existing submitted_ip column already stored on this table —
+  // no new table or external service needed. Generous enough for a few
+  // family members applying from the same home/office connection, but
+  // stops a scripted flood of fake applications.
+  const submitterIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || null
+  if (submitterIp) {
+    const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000).toISOString()
+    const { count: recentCount } = await supabase
+      .from('job_applications')
+      .select('id', { count: 'exact', head: true })
+      .eq('submitted_ip', submitterIp)
+      .gte('created_at', thirtyMinAgo)
+    if ((recentCount ?? 0) >= 5) {
+      return badRequest('ส่งใบสมัครถี่เกินไป กรุณาลองใหม่อีกครั้งภายหลัง')
+    }
+  }
+
   const { data: company, error: companyErr } = await supabase
     .from('companies').select('id, code').eq('code', companyCode).eq('is_active', true).single()
   if (companyErr || !company) return badRequest('ไม่พบบริษัทที่สมัคร')

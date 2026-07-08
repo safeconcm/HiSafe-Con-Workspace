@@ -270,6 +270,7 @@ export async function POST(req: NextRequest) {
           phone:         r.phone?.trim()          ?? null,
           status:        'active',
           imported_at:   new Date().toISOString(),
+          must_change_password: true,
         })
         .select('id')
         .single()
