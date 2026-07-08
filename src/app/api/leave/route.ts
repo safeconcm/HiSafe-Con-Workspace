@@ -94,6 +94,25 @@ export async function POST(req: NextRequest) {
   const supabase = createAdminSupabaseClient()
   const year = new Date(start_date).getFullYear()
 
+  // 0. Probation check — no annual leave entitlement yet; sick/personal
+  // stay normal but are marked unpaid (deducted at daily rate in payroll,
+  // since there's no paid-leave bank during probation). Additive check
+  // only — doesn't touch the existing flow for non-probation employees.
+  const { data: activeContract } = await supabase
+    .from('contracts')
+    .select('id, probation_status')
+    .eq('user_id', session.id)
+    .eq('status', 'active')
+    .order('start_date', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  const onProbation = activeContract?.probation_status === 'pending'
+  if (onProbation && leave_type === 'annual') {
+    return badRequest('อยู่ระหว่างทดลองงาน ยังไม่มีสิทธิ์ลาพักร้อน')
+  }
+  const isUnpaid = onProbation && ['sick', 'personal'].includes(leave_type)
+
   // 1. Calculate working days
   const { data: totalDays, error: calcErr } = await supabase
     .rpc('calc_leave_days', {
@@ -146,6 +165,7 @@ export async function POST(req: NextRequest) {
       reason:              reason ?? null,
       attachment_url:      attachment_url ?? null,
       current_approver_id: approverId ?? null,   // NULL = CEO → auto-approve
+      is_unpaid:           isUnpaid,
     })
     .select()
     .single()

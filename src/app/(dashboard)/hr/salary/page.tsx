@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useUsers }    from '@/hooks/useAdmin'
 import { toast }       from '@/components/ui/Toaster'
 import { fullNameTH, cn } from '@/utils'
-import { DollarSign, Plus, Download, Loader2, TrendingUp } from 'lucide-react'
+import { DollarSign, Plus, Download, Loader2, TrendingUp, Printer } from 'lucide-react'
 
 export default function SalaryPage() {
   const qc       = useQueryClient()
@@ -58,12 +58,16 @@ export default function SalaryPage() {
 
   return (
     <div className="page-container space-y-5">
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="flex items-center justify-between flex-wrap gap-3 no-print">
         <div className="flex items-center gap-2">
           <DollarSign className="w-5 h-5 text-gray-500" />
           <h1>ประวัติเงินเดือน</h1>
         </div>
         <div className="flex items-center gap-2">
+          <button onClick={() => window.print()}
+            className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
+            <Printer className="w-4 h-4" />พิมพ์
+          </button>
           <button onClick={() => window.open('/api/export?type=salary&format=xlsx', '_blank')}
             className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
             <Download className="w-4 h-4" />Export
@@ -77,7 +81,7 @@ export default function SalaryPage() {
 
       {/* Add form */}
       {showForm && (
-        <div className="card card-body space-y-4">
+        <div className="card card-body space-y-4 no-print">
           <h3 className="text-sm font-medium text-gray-700">บันทึกประวัติเงินเดือน / ปรับเงินเดือน</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -126,7 +130,7 @@ export default function SalaryPage() {
       )}
 
       {/* Filter by user */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 no-print">
         <select value={userId} onChange={e => { setUserId(e.target.value); setPage(1) }} className="form-input w-auto max-w-xs">
           <option value="">— ทุกพนักงาน —</option>
           {(users as any[]).map((u: any) => (

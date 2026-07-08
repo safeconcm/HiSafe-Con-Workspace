@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, CalendarDays, Clock, Briefcase,
   Bell, Users, Building2, Settings, ChevronDown,
-  ClipboardList, BarChart3, ShieldCheck, LogOut
+  ClipboardList, BarChart3, ShieldCheck, LogOut, Wallet
 } from 'lucide-react'
 import { cn, fullNameTH } from '@/utils'
 import type { SessionUser } from '@/types/database'
@@ -169,12 +169,19 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'รายงาน',          href: '/hr/reports'         },
       { label: 'Audit Log',       href: '/hr/audit-logs'      },
       { label: 'สัญญาจ้าง',      href: '/hr/contracts'       },
+      { label: 'ทดลองงาน',       href: '/hr/probation'       },
       { label: 'ใบรับรองงาน',    href: '/hr/certificates'    },
       { label: 'การลาออก',       href: '/hr/resignation'     },
       { label: 'สมัครงาน',       href: '/hr/recruitment'     },
       { label: 'ใบสมัครออนไลน์', href: '/hr/job-applications' },
       { label: 'เงินเดือน',       href: '/hr/salary'          },
     ],
+  },
+  {
+    label: 'ค่าแรง/Payroll',
+    href:  '/payroll',
+    icon:  Wallet,
+    roles: ['supervisor', 'hr', 'admin'],
   },
   // Admin section
   {

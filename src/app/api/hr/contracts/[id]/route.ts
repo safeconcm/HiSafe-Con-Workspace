@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server'
 import {
   getSessionFromHeaders, createAdminSupabaseClient,
   ok, badRequest, unauthorized, forbidden, notFound,
-  serverError, writeAuditLog, isHROrAdmin,
+  serverError, writeAuditLog, isHROrAdmin, dispatchNotifications,
 } from '@/lib/api-helpers'
 
 type Ctx = { params: Promise<{ id: string }> }
@@ -46,6 +46,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     'base_salary','salary_type','allowances','benefits','overtime_rate',
     'notice_days','notes','end_date','probation_days','probation_end',
     'signed_by_employee','signed_by_hr','file_url',
+    'probation_status','probation_reminder_sent_at',
   ]
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
   for (const k of allowed) if (k in body) updates[k] = body[k]
@@ -66,6 +67,38 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       position_th: data.position_th ?? undefined,
       department:  data.department  ?? undefined,
     }).eq('id', data.user_id)
+  }
+
+  // Probation resolved (HR clicked confirm) → notify the employee, quoting
+  // the MD's sign-off comment if one was recorded via probation_evaluations.
+  if (typeof updates.probation_status === 'string' && updates.probation_status !== existing.probation_status) {
+    const { data: mdEval } = await supabase
+      .from('probation_evaluations')
+      .select('comments, evaluator_id, evaluator:users!probation_evaluations_evaluator_id_fkey(first_name_th, last_name_th)')
+      .eq('contract_id', params.id)
+      .eq('evaluator_role', 'md')
+      .maybeSingle()
+
+    const RESULT_LABEL: Record<string, string> = {
+      passed:   'ผ่านการทดลองงาน — บรรจุเป็นพนักงานประจำ',
+      failed:   'ไม่ผ่านการทดลองงาน',
+      extended: 'ขยายเวลาทดลองงาน',
+    }
+    const label = RESULT_LABEL[updates.probation_status as string] ?? `อัปเดตสถานะทดลองงาน: ${updates.probation_status}`
+    const mdName = (mdEval as any)?.evaluator
+      ? `${(mdEval as any).evaluator.first_name_th} ${(mdEval as any).evaluator.last_name_th}`
+      : null
+
+    await dispatchNotifications({
+      company_id:     session.company_id,
+      recipient_ids:  [data.user_id],
+      event_type:     'general',
+      title:          'ผลการประเมินทดลองงาน',
+      body:           mdName
+        ? `${label}\nลงนามโดย ${mdName} (MD)${(mdEval as any)?.comments ? `\nความเห็น: ${(mdEval as any).comments}` : ''}`
+        : label,
+      reference_id:   params.id,
+    })
   }
 
   await writeAuditLog({
