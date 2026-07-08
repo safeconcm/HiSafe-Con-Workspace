@@ -172,6 +172,7 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'ใบรับรองงาน',    href: '/hr/certificates'    },
       { label: 'การลาออก',       href: '/hr/resignation'     },
       { label: 'สมัครงาน',       href: '/hr/recruitment'     },
+      { label: 'ใบสมัครออนไลน์', href: '/hr/job-applications' },
       { label: 'เงินเดือน',       href: '/hr/salary'          },
     ],
   },
@@ -211,7 +212,7 @@ export function Sidebar({ session, company }: SidebarProps) {
   )
 
   return (
-    <aside className="hidden lg:flex flex-col w-64 border-r border-gray-200 bg-white h-screen overflow-y-auto shrink-0">
+    <aside className="no-print hidden lg:flex flex-col w-64 border-r border-gray-200 bg-white h-screen overflow-y-auto shrink-0">
 
       {/* Company logo / switcher */}
       <CompanySwitcher current={company} companies={session.available_companies ?? []} />

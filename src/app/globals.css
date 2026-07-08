@@ -74,7 +74,16 @@
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-thumb { @apply bg-gray-300 rounded-full; }
 
-@media print { .no-print { display: none !important; } }
+@media print {
+  .no-print { display: none !important; }
+  @page { size: A4; margin: 12mm; }
+  .print-page {
+    box-shadow: none !important;
+    margin: 0 !important;
+    max-width: none !important;
+    width: 100% !important;
+  }
+}
 
 /* ── Blueprint / site-plan background used on auth screens ────────── */
 .blueprint-grid {

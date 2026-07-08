@@ -10,7 +10,7 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { pickActiveRow, ACTIVE_COMPANY_COOKIE } from '@/lib/company-context'
 
 // Routes that don't require authentication
-const PUBLIC_ROUTES = ['/login', '/forgot-password', '/reset-password', '/api/auth/callback', '/api/auth/logout', '/manifest.json', '/sw.js']
+const PUBLIC_ROUTES = ['/login', '/forgot-password', '/reset-password', '/api/auth/callback', '/api/auth/logout', '/manifest.json', '/sw.js', '/apply', '/api/public']
 
 // Routes that require specific roles
 const ROLE_ROUTES: Record<string, string[]> = {
