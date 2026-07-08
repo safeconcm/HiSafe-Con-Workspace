@@ -135,7 +135,18 @@ export async function findAuthUserByEmail(
   const perPage = 200
   for (;;) {
     const { data, error } = await supabase.auth.admin.listUsers({ page, perPage })
-    if (error || !data?.users?.length) return null
+    if (error) {
+      console.error('[findAuthUserByEmail] listUsers error', { page, target, error })
+      return null
+    }
+    if (!data?.users?.length) {
+      console.error('[findAuthUserByEmail] listUsers returned no users', { page, target, data })
+      return null
+    }
+    console.error('[findAuthUserByEmail] scanning page', {
+      page, target, count: data.users.length,
+      emails: data.users.map(u => u.email),
+    })
     const found = data.users.find(u => u.email?.toLowerCase() === target)
     if (found) return { id: found.id }
     if (data.users.length < perPage) return null

@@ -255,10 +255,14 @@ export async function POST(req: NextRequest) {
 
       let authUserId: string
       if (authErr) {
+        console.error('[import] auth.admin.createUser error', {
+          email: r.email, message: authErr.message, status: (authErr as any).status, code: (authErr as any).code,
+        })
         // Already-registered auth account with no profile row (e.g. a prior
         // Google OAuth attempt) — reuse it instead of failing the row.
         if (/already.*(registered|exists)/i.test(authErr.message)) {
           const existing = await findAuthUserByEmail(supabase, r.email)
+          console.error('[import] findAuthUserByEmail result', { email: r.email, existing })
           if (!existing) throw new Error(authErr.message)
           authUserId = existing.id
           reusedExistingAuthUser = true
