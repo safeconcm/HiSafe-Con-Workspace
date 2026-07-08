@@ -6,7 +6,7 @@ import { NextRequest } from 'next/server'
 import {
   getSessionFromHeaders, createAdminSupabaseClient,
   ok, created, badRequest, unauthorized, forbidden,
-  serverError, writeAuditLog,
+  serverError, writeAuditLog, escapeForOrFilter,
 } from '@/lib/api-helpers'
 
 // ── GET ──────────────────────────────────────────────────────
@@ -40,9 +40,10 @@ export async function GET(req: NextRequest) {
   if (status) query = query.eq('status', status)
   if (role)   query = query.eq('role', role)
   if (search) {
+    const s = escapeForOrFilter(search)
     query = query.or(
-      `first_name_th.ilike.%${search}%,last_name_th.ilike.%${search}%,` +
-      `employee_code.ilike.%${search}%,email.ilike.%${search}%`
+      `first_name_th.ilike.%${s}%,last_name_th.ilike.%${s}%,` +
+      `employee_code.ilike.%${s}%,email.ilike.%${s}%`
     )
   }
 

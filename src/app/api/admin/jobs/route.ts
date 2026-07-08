@@ -6,7 +6,7 @@ import { NextRequest } from 'next/server'
 import {
   getSessionFromHeaders, createAdminSupabaseClient,
   ok, created, badRequest, unauthorized, forbidden,
-  serverError, writeAuditLog,
+  serverError, writeAuditLog, escapeForOrFilter,
 } from '@/lib/api-helpers'
 
 export async function GET(req: NextRequest) {
@@ -28,7 +28,10 @@ export async function GET(req: NextRequest) {
     .order('job_code')
 
   if (status !== 'all') query = query.eq('status', status)
-  if (search) query = query.or(`job_code.ilike.%${search}%,name_th.ilike.%${search}%`)
+  if (search) {
+    const s = escapeForOrFilter(search)
+    query = query.or(`job_code.ilike.%${s}%,name_th.ilike.%${s}%`)
+  }
 
   const { data, count, error } = await query
   if (error) return serverError(error)

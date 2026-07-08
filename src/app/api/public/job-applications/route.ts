@@ -13,6 +13,16 @@ import type { JobApplicationPayload } from '@/types/job-application'
 const MAX_FILE_BYTES = 5 * 1024 * 1024 // 5MB, matches the bucket's file_size_limit
 const ALLOWED_MIME = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf']
 
+/** Thai national ID: 13 digits + mod-11 checksum on the last digit. */
+function isValidThaiId(raw: string): boolean {
+  const id = raw.replace(/[^0-9]/g, '')
+  if (id.length !== 13) return false
+  let sum = 0
+  for (let i = 0; i < 12; i++) sum += Number(id[i]) * (13 - i)
+  const check = (11 - (sum % 11)) % 10
+  return check === Number(id[12])
+}
+
 async function uploadFile(
   supabase: ReturnType<typeof createAdminSupabaseClient>,
   file: File, companyCode: string, applicationId: string, slot: string
@@ -67,7 +77,20 @@ export async function POST(req: NextRequest) {
     if (!String(payload[key] ?? '').trim()) return badRequest(`กรุณากรอก${label}`)
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(payload.email)) return badRequest('อีเมลไม่ถูกต้อง')
+  if (!isValidThaiId(payload.id_card_no)) return badRequest('เลขบัตรประชาชนไม่ถูกต้อง (ต้องเป็นตัวเลข 13 หลัก)')
   if (!payload.consent_confirmed) return badRequest('กรุณายืนยันความถูกต้องของข้อมูลก่อนส่งใบสมัคร')
+
+  // Basic length caps — a public, unauthenticated form shouldn't accept
+  // unbounded strings into free-text fields.
+  const MAX_SHORT = 200, MAX_LONG = 4000
+  const longFields: (keyof JobApplicationPayload)[] = ['self_introduction', 'special_knowledge', 'other_ability']
+  for (const key of Object.keys(payload) as (keyof JobApplicationPayload)[]) {
+    const val = payload[key]
+    if (typeof val === 'string') {
+      const limit = longFields.includes(key) ? MAX_LONG : MAX_SHORT
+      if (val.length > limit) return badRequest(`ข้อมูล "${String(key)}" ยาวเกินไป`)
+    }
+  }
 
   const photo = form.get('photo')
   if (!(photo instanceof File) || photo.size === 0) return badRequest('กรุณาแนบรูปถ่าย')

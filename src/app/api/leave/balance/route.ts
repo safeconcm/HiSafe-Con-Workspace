@@ -4,7 +4,7 @@
 import { NextRequest } from 'next/server'
 import {
   getSessionFromHeaders, createAdminSupabaseClient,
-  ok, unauthorized, serverError,
+  ok, unauthorized, forbidden, serverError,
 } from '@/lib/api-helpers'
 
 export async function GET(req: NextRequest) {
@@ -18,8 +18,7 @@ export async function GET(req: NextRequest) {
 
   // Only HR/Admin can query other users' balances
   if (userId !== session.id && !['hr', 'admin'].includes(session.role)) {
-    const { data: unauthorized_res } = { data: null }
-    return ok({ balances: [] })
+    return forbidden()
   }
 
   const supabase = createAdminSupabaseClient()

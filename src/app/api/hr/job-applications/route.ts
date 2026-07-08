@@ -5,7 +5,7 @@
 import { NextRequest } from 'next/server'
 import {
   getSessionFromHeaders, createAdminSupabaseClient,
-  ok, unauthorized, forbidden, serverError, isHROrAdmin,
+  ok, unauthorized, forbidden, serverError, isHROrAdmin, escapeForOrFilter,
 } from '@/lib/api-helpers'
 
 export async function GET(req: NextRequest) {
@@ -33,7 +33,10 @@ export async function GET(req: NextRequest) {
     .range(from, from + limit - 1)
 
   if (status) query = query.eq('status', status)
-  if (q)      query = query.or(`full_name_th.ilike.%${q}%,email.ilike.%${q}%,mobile.ilike.%${q}%`)
+  if (q) {
+    const s = escapeForOrFilter(q)
+    query = query.or(`full_name_th.ilike.%${s}%,email.ilike.%${s}%,mobile.ilike.%${s}%`)
+  }
 
   const { data, count, error } = await query
   if (error) return serverError(error)

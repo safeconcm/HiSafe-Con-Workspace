@@ -141,13 +141,25 @@ export async function middleware(request: NextRequest) {
   }
 
   // ── Inject session into request headers for API routes ───────
-  // API route handlers read these to set PostgreSQL RLS session variables
-  response.headers.set('x-user-id',     sessionUser.id)
-  response.headers.set('x-company-id',  sessionUser.company_id)
-  response.headers.set('x-user-role',   sessionUser.role)
-  response.headers.set('x-company-code', sessionUser.company_code)
+  // API route handlers read these to set PostgreSQL RLS session variables.
+  // IMPORTANT: these must be attached via NextResponse.next({ request: { headers } })
+  // so they reach the Route Handler. Setting them on `response.headers` directly
+  // (the previous approach) only affects headers sent back to the browser, per
+  // Next.js's documented middleware semantics — it does not forward them to the
+  // destination route. This rebuilds the request headers explicitly so route
+  // handlers reliably receive x-user-id/x-company-id/x-user-role/x-company-code.
+  const forwardedHeaders = new Headers(request.headers)
+  forwardedHeaders.set('x-user-id',      sessionUser.id)
+  forwardedHeaders.set('x-company-id',   sessionUser.company_id)
+  forwardedHeaders.set('x-user-role',    sessionUser.role)
+  forwardedHeaders.set('x-company-code', sessionUser.company_code)
 
-  return response
+  const finalResponse = NextResponse.next({ request: { headers: forwardedHeaders } })
+  // Carry over any cookies queued on `response` (Supabase session refresh,
+  // and the hsc_session cache cookie set above) onto the response we return.
+  response.cookies.getAll().forEach(cookie => finalResponse.cookies.set(cookie))
+
+  return finalResponse
 }
 
 function safeParseSession(raw: string) {

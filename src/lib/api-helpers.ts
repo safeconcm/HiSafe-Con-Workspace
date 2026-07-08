@@ -110,6 +110,16 @@ export async function withRLSContext<T>(
   return fn(supabase)
 }
 
+// Escape characters that are structurally meaningful in a PostgREST filter
+// string (comma separates OR clauses, parens group them, period separates
+// column.operator.value) before interpolating user-supplied search text into
+// a `.or('col.ilike.%${q}%,...')` call, so a search string can't inject an
+// extra filter clause. The `%`/`_` ilike wildcards are left as-is since they're
+// the intended wildcard behavior for a search box, not a security boundary.
+export function escapeForOrFilter(raw: string): string {
+  return raw.replace(/[,()]/g, '')
+}
+
 // ── Response helpers ─────────────────────────────────────────
 
 export function ok<T>(data: T, status = 200): NextResponse<ApiResponse<T>> {
