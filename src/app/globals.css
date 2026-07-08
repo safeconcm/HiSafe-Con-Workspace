@@ -144,3 +144,15 @@
 
 .btn-lift { @apply transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0; }
 
+/* Respect the OS-level "reduce motion" setting on every page that uses these
+   auth-scene animations (login, forgot/reset/change-password). Additive only
+   — no visual change for users who haven't requested reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  .blueprint-grid,
+  .animate-fade-in-up,
+  .animate-blob,
+  .animate-dash {
+    animation: none !important;
+  }
+}
+
