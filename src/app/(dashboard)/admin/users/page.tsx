@@ -24,6 +24,12 @@ const ROLE_COLOR: Record<UserRole, string> = {
   hr:         'bg-amber-50 text-amber-700',
   admin:      'bg-red-50 text-red-700',
 }
+const EMPLOYMENT_LABEL: Record<string, string> = {
+  permanent: 'ประจำ', probation: 'ทดลองงาน',
+}
+const EMPLOYMENT_COLOR: Record<string, string> = {
+  permanent: 'bg-green-50 text-green-700', probation: 'bg-amber-50 text-amber-700',
+}
 
 export default function AdminUsersPage() {
   const [q,      setQ]      = useState('')
@@ -110,6 +116,7 @@ export default function AdminUsersPage() {
                   <th>รหัส</th>
                   <th>แผนก / ตำแหน่ง</th>
                   <th>Role</th>
+                  <th>สถานะพนักงาน</th>
                   <th>สถานะ</th>
                   <th>วันเริ่มงาน</th>
                   <th className="w-10"></th>
@@ -140,6 +147,15 @@ export default function AdminUsersPage() {
                       </span>
                     </td>
                     <td>
+                      {u.employment_status ? (
+                        <span className={cn('badge', EMPLOYMENT_COLOR[u.employment_status])}>
+                          {EMPLOYMENT_LABEL[u.employment_status]}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-400">ไม่ระบุ</span>
+                      )}
+                    </td>
+                    <td>
                       <span className={cn('badge', STATUS_COLOR[u.status as UserStatus])}>
                         {STATUS_LABEL[u.status as UserStatus]}
                       </span>
@@ -153,7 +169,7 @@ export default function AdminUsersPage() {
                   </tr>
                 ))}
                 {!users.length && (
-                  <tr><td colSpan={7} className="text-center py-10 text-gray-400 text-sm">ไม่พบผู้ใช้</td></tr>
+                  <tr><td colSpan={8} className="text-center py-10 text-gray-400 text-sm">ไม่พบผู้ใช้</td></tr>
                 )}
               </tbody>
             </table>
