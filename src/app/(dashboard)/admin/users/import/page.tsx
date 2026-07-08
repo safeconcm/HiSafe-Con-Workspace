@@ -171,8 +171,8 @@ export default function ImportUsersPage() {
               <li>ดาวน์โหลด Template แล้วกรอกข้อมูลพนักงาน (แก้ไขเป็นไฟล์ Excel แล้วอัปโหลด .xlsx ได้เลย ไม่ต้องแปลงกลับเป็น CSV)</li>
               <li>คอลัมน์บังคับ: <code className="text-xs bg-gray-100 px-1 rounded">{REQUIRED_COLS.join(', ')}</code></li>
               <li>company_code: SAFECON หรือ HIGHCON — ใส่ต่อแถวได้ นำเข้าทั้ง 2 บริษัทพร้อมกันในไฟล์เดียวได้</li>
-              <li>วันที่ใช้รูปแบบ YYYY-MM-DD เช่น 2022-01-15 (ถ้าอัปโหลดจาก Excel และคอลัมน์เป็นชนิดวันที่ ระบบแปลงให้อัตโนมัติ)</li>
-              <li>role: employee / supervisor / hr / admin</li>
+              <li>วันที่ใช้รูปแบบ YYYY-MM-DD เช่น 2022-01-15 (รองรับ D/M/YYYY เช่น 26/6/2026 ด้วย — ถ้าอัปโหลดจาก Excel และคอลัมน์เป็นชนิดวันที่ ระบบแปลงให้อัตโนมัติ)</li>
+              <li>role: employee/พนักงาน, supervisor/หัวหน้างาน, hr/ฝ่ายบุคคล, admin/ผู้ดูแลระบบ (พิมพ์ไทยหรืออังกฤษก็ได้ ไม่กรอก = employee)</li>
               <li>นำเข้าได้สูงสุด 500 รายการต่อครั้ง</li>
             </ol>
           </div>

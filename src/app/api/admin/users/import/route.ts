@@ -29,6 +29,52 @@ interface ImportRow {
 
 const VALID_ROLES = ['employee', 'supervisor', 'hr', 'admin']
 
+// Accept common Thai / English aliases so HR staff don't have to memorize the
+// exact enum code when typing into Excel. Keys are lowercased before lookup
+// (Thai has no case, so this only affects the English aliases).
+const ROLE_ALIASES: Record<string, string> = {
+  employee: 'employee', staff: 'employee', 'พนักงาน': 'employee', 'พนง': 'employee', 'พนง.': 'employee',
+  supervisor: 'supervisor', manager: 'supervisor', md: 'supervisor',
+  'หัวหน้างาน': 'supervisor', 'หัวหน้า': 'supervisor', 'ผู้จัดการ': 'supervisor', 'ผจก': 'supervisor', 'ผจก.': 'supervisor',
+  hr: 'hr', 'human resource': 'hr', 'ฝ่ายบุคคล': 'hr', 'บุคคล': 'hr', 'เจ้าหน้าที่บุคคล': 'hr',
+  admin: 'admin', administrator: 'admin', 'ผู้ดูแลระบบ': 'admin', 'แอดมิน': 'admin',
+}
+
+function normalizeRole(raw?: string): string {
+  const key = (raw ?? '').trim()
+  if (!key) return 'employee'
+  return ROLE_ALIASES[key.toLowerCase()] ?? ROLE_ALIASES[key] ?? key
+}
+
+/**
+ * Accepts ISO (YYYY-MM-DD), YYYY/MM/DD, and the day-first D/M/YYYY format
+ * Thai staff commonly type into Excel (e.g. "26/6/2026"). Returns null if
+ * the string can't be confidently parsed, so the caller can report an error
+ * instead of silently guessing wrong.
+ */
+function normalizeDate(raw?: string): string | null {
+  const s = (raw ?? '').trim()
+  if (!s) return null
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
+
+  let m = s.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/)
+  if (m) {
+    const [, y, mo, d] = m
+    return `${y}-${mo.padStart(2, '0')}-${d.padStart(2, '0')}`
+  }
+
+  // Day-first (Thai convention): D/M/YYYY or D-M-YYYY
+  m = s.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$/)
+  if (m) {
+    const day = Number(m[1]), month = Number(m[2]), year = Number(m[3])
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+      return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+    }
+  }
+
+  return null
+}
+
 export async function POST(req: NextRequest) {
   const session = getSessionFromHeaders(req)
   if (!session)                return unauthorized()
@@ -84,11 +130,26 @@ export async function POST(req: NextRequest) {
     if (r.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r.email)) {
       validationErrors.push({ row: idx, error: `email "${r.email}" ไม่ถูกต้อง` })
     }
-    if (r.hire_date && isNaN(Date.parse(r.hire_date))) {
-      validationErrors.push({ row: idx, error: `hire_date "${r.hire_date}" ไม่ถูกต้อง (ใช้รูปแบบ YYYY-MM-DD)` })
+
+    // Normalize hire_date in place (accepts YYYY-MM-DD, YYYY/MM/DD, D/M/YYYY)
+    // so the rest of the pipeline only ever sees ISO dates.
+    if (r.hire_date) {
+      const normalizedDate = normalizeDate(r.hire_date)
+      if (!normalizedDate) {
+        validationErrors.push({ row: idx, error: `hire_date "${r.hire_date}" ไม่ถูกต้อง (ใช้รูปแบบ YYYY-MM-DD หรือ D/M/YYYY เช่น 26/6/2026)` })
+      } else {
+        r.hire_date = normalizedDate
+      }
     }
-    if (r.role && !VALID_ROLES.includes(r.role)) {
-      validationErrors.push({ row: idx, error: `role "${r.role}" ไม่ถูกต้อง` })
+
+    // Normalize role in place (accepts Thai labels like "หัวหน้างาน", "พนักงาน")
+    if (r.role) {
+      const normalizedRole = normalizeRole(r.role)
+      if (!VALID_ROLES.includes(normalizedRole)) {
+        validationErrors.push({ row: idx, error: `role "${r.role}" ไม่ถูกต้อง (รองรับ: employee/พนักงาน, supervisor/หัวหน้างาน, hr/ฝ่ายบุคคล, admin/ผู้ดูแลระบบ)` })
+      } else {
+        r.role = normalizedRole
+      }
     }
 
     // Duplicate check within file (employee_code is unique per company)
