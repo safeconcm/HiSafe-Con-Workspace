@@ -6,7 +6,7 @@ import { NextRequest } from 'next/server'
 import {
   getSessionFromHeaders, createAdminSupabaseClient,
   ok, created, badRequest, unauthorized, forbidden,
-  serverError, writeAuditLog, escapeForOrFilter,
+  serverError, writeAuditLog, escapeForOrFilter, findAuthUserByEmail,
 } from '@/lib/api-helpers'
 
 // ── GET ──────────────────────────────────────────────────────
@@ -104,15 +104,28 @@ export async function POST(req: NextRequest) {
   const supabase   = createAdminSupabaseClient()
   const currentYear = new Date().getFullYear()
 
-  // 1. Create Supabase Auth user
+  // 1. Create Supabase Auth user. If the email already has an auth account
+  // but no `users` profile row (e.g. a prior "Login with Google" attempt
+  // before HR added them as an employee), reuse that auth id instead of
+  // failing — this is the same fix applied to the CSV/Excel import route.
+  let authUserId: string
+  let reusedExistingAuthUser = false
   const { data: authData, error: authErr } = await supabase.auth.admin.createUser({
     email,
     password: password ?? `Hsc${Math.random().toString(36).slice(2, 10)}!`,
     email_confirm: true,
   })
   if (authErr) {
-    if (authErr.message.includes('already')) return badRequest('อีเมลนี้มีในระบบแล้ว')
-    return serverError(authErr)
+    if (/already.*(registered|exists)/i.test(authErr.message)) {
+      const existing = await findAuthUserByEmail(supabase, email)
+      if (!existing) return badRequest('อีเมลนี้มีในระบบแล้ว')
+      authUserId = existing.id
+      reusedExistingAuthUser = true
+    } else {
+      return serverError(authErr)
+    }
+  } else {
+    authUserId = authData.user.id
   }
 
   // 2. Insert user profile
@@ -121,7 +134,7 @@ export async function POST(req: NextRequest) {
     .insert({
       company_id:    session.company_id,
       employee_code: employee_code.trim().toUpperCase(),
-      auth_user_id:  authData.user.id,
+      auth_user_id:  authUserId,
       email:         email.trim().toLowerCase(),
       first_name_th, last_name_th,
       first_name_en: first_name_en ?? null,
@@ -139,8 +152,10 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (userErr) {
-    // Rollback auth user
-    await supabase.auth.admin.deleteUser(authData.user.id)
+    // Rollback auth user — but only if we created it fresh this run; a
+    // reused orphaned account should be left alone (it existed before
+    // this request and doesn't belong to us to delete).
+    if (!reusedExistingAuthUser) await supabase.auth.admin.deleteUser(authUserId)
     if (userErr.message.includes('unique')) return badRequest('รหัสพนักงานนี้มีในระบบแล้ว')
     return serverError(userErr)
   }

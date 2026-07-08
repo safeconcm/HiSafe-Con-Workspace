@@ -6,7 +6,7 @@ import { NextRequest } from 'next/server'
 import {
   getSessionFromHeaders, createAdminSupabaseClient,
   ok, badRequest, unauthorized, forbidden,
-  serverError, writeAuditLog,
+  serverError, writeAuditLog, findAuthUserByEmail,
 } from '@/lib/api-helpers'
 
 interface ImportRow {
@@ -62,6 +62,8 @@ function normalizeEmploymentStatus(raw?: string): string {
   if (!key) return 'permanent'
   return EMPLOYMENT_STATUS_ALIASES[key.toLowerCase()] ?? EMPLOYMENT_STATUS_ALIASES[key] ?? key
 }
+
+// findAuthUserByEmail moved to @/lib/api-helpers (shared with admin/users/route.ts).
 
 /**
  * Accepts ISO (YYYY-MM-DD), YYYY/MM/DD, and the day-first D/M/YYYY format
@@ -241,6 +243,7 @@ export async function POST(req: NextRequest) {
     const idx        = i + 2
     const companyId  = companyByCode.get(r.company_code!.trim().toUpperCase())!
 
+    let reusedExistingAuthUser = false
     try {
       // Create auth user
       const defaultPassword = `Hsc${r.employee_code}2024!`
@@ -249,7 +252,22 @@ export async function POST(req: NextRequest) {
         password:      defaultPassword,
         email_confirm: true,
       })
-      if (authErr) throw new Error(authErr.message)
+
+      let authUserId: string
+      if (authErr) {
+        // Already-registered auth account with no profile row (e.g. a prior
+        // Google OAuth attempt) — reuse it instead of failing the row.
+        if (/already.*(registered|exists)/i.test(authErr.message)) {
+          const existing = await findAuthUserByEmail(supabase, r.email)
+          if (!existing) throw new Error(authErr.message)
+          authUserId = existing.id
+          reusedExistingAuthUser = true
+        } else {
+          throw new Error(authErr.message)
+        }
+      } else {
+        authUserId = authData.user.id
+      }
 
       // Create profile
       const { data: user, error: userErr } = await supabase
@@ -257,7 +275,7 @@ export async function POST(req: NextRequest) {
         .insert({
           company_id:    companyId,
           employee_code: r.employee_code.trim().toUpperCase(),
-          auth_user_id:  authData.user.id,
+          auth_user_id:  authUserId,
           email:         r.email.trim().toLowerCase(),
           first_name_th: r.first_name_th.trim(),
           last_name_th:  r.last_name_th.trim(),
@@ -276,7 +294,9 @@ export async function POST(req: NextRequest) {
         .single()
 
       if (userErr) {
-        await supabase.auth.admin.deleteUser(authData.user.id)
+        // Only clean up the auth account if we created it fresh this run —
+        // never delete a pre-existing auth account we merely reused.
+        if (!reusedExistingAuthUser) await supabase.auth.admin.deleteUser(authUserId)
         throw new Error(userErr.message)
       }
 

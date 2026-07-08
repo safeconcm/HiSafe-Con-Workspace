@@ -120,6 +120,29 @@ export function escapeForOrFilter(raw: string): string {
   return raw.replace(/[,()]/g, '')
 }
 
+// Looks up an existing auth.users row by email via the Admin API (paginated —
+// there's no direct getUserByEmail). Used to recover from "already registered"
+// errors on auth.admin.createUser(): this happens when someone previously
+// attempted a Google OAuth login before HR added them as an employee, leaving
+// an orphaned auth.users row with no matching public.users profile. Rather
+// than failing the create/import, callers reuse this existing auth id.
+export async function findAuthUserByEmail(
+  supabase: ReturnType<typeof createAdminSupabaseClient>,
+  email: string
+): Promise<{ id: string } | null> {
+  const target = email.trim().toLowerCase()
+  let page = 1
+  const perPage = 200
+  for (;;) {
+    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage })
+    if (error || !data?.users?.length) return null
+    const found = data.users.find(u => u.email?.toLowerCase() === target)
+    if (found) return { id: found.id }
+    if (data.users.length < perPage) return null
+    page++
+  }
+}
+
 // ── Response helpers ─────────────────────────────────────────
 
 export function ok<T>(data: T, status = 200): NextResponse<ApiResponse<T>> {
