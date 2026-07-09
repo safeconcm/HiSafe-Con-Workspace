@@ -1,10 +1,10 @@
 'use client'
 // src/app/(dashboard)/hr/certificates/page.tsx
-import { useState }  from 'react'
+import { useState, Fragment } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast }     from '@/components/ui/Toaster'
 import { cn, fullNameTH } from '@/utils'
-import { Award, Plus, Download, Loader2, Printer } from 'lucide-react'
+import { Award, Plus, Download, Loader2, Printer, Ban, RotateCcw } from 'lucide-react'
 import { useUsers }  from '@/hooks/useAdmin'
 
 const CERT_TYPE_LABEL: Record<string,string> = {
@@ -31,6 +31,49 @@ export default function CertificatesPage() {
   })
 
   const certs = data?.certificates ?? []
+
+  // Void / reissue — see src/app/api/hr/certificates/[id]/route.ts and
+  // .../reissue/route.ts. Voiding needs a reason, so it's a small inline
+  // expanding row (this codebase has no modal/dialog component yet) rather
+  // than a plain window.prompt. Reissue is a single click: it always copies
+  // the original's type/purpose/salary-opt-in as-is, so there's nothing to
+  // fill in — if different content is needed, issuing a brand new
+  // certificate via the form above is the right tool for that.
+  const [voidingId, setVoidingId] = useState<string | null>(null)
+  const [voidReason, setVoidReason] = useState('')
+
+  const voidCert = useMutation({
+    mutationFn: async (id: string) => {
+      const res  = await fetch(`/api/hr/certificates/${id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'void', reason: voidReason }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error)
+      return json.data
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['certificates'] })
+      toast.success('ยกเลิกใบรับรองแล้ว')
+      setVoidingId(null)
+      setVoidReason('')
+    },
+    onError: (e: Error) => toast.error('ยกเลิกไม่สำเร็จ', e.message),
+  })
+
+  const reissueCert = useMutation({
+    mutationFn: async (id: string) => {
+      const res  = await fetch(`/api/hr/certificates/${id}/reissue`, { method: 'POST' })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error)
+      return json.data
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ['certificates'] })
+      toast.success(`ออกใบรับรองใหม่ ${data.cert_no} แล้ว (แทนที่ฉบับเดิม)`)
+    },
+    onError: (e: Error) => toast.error('ออกใหม่ไม่สำเร็จ', e.message),
+  })
 
   const issueCert = useMutation({
     mutationFn: async (body: typeof form) => {
@@ -131,30 +174,87 @@ export default function CertificatesPage() {
             </thead>
             <tbody>
               {certs.map((c: any) => (
-                <tr key={c.id} className={c.is_voided ? 'opacity-40' : ''}>
-                  <td className="font-mono text-xs text-gray-600">{c.cert_no}</td>
-                  <td>
-                    <p className="text-sm font-medium text-gray-900">{fullNameTH(c.user)}</p>
-                    <p className="text-xs text-gray-400">{c.user?.employee_code}</p>
-                  </td>
-                  <td><span className="text-sm text-gray-700">{CERT_TYPE_LABEL[c.cert_type] ?? c.cert_type}</span></td>
-                  <td className="text-sm text-gray-600 max-w-[200px] truncate">{c.purpose ?? '—'}</td>
-                  <td className="text-sm text-gray-600 whitespace-nowrap">{c.issued_date}</td>
-                  <td className="text-sm text-gray-600">
-                    {c.include_salary && c.salary_amount
-                      ? `${Number(c.salary_amount).toLocaleString('th-TH')} ฿`
-                      : '—'}
-                  </td>
-                  <td>
-                    <button
-                      onClick={() => window.open(`/api/pdf/certificate/${c.id}`, '_blank')}
-                      className="p-1.5 text-gray-400 hover:text-blue-600 transition-colors"
-                      title="พิมพ์ใบรับรอง"
-                    >
-                      <Printer className="w-4 h-4" />
-                    </button>
-                  </td>
-                </tr>
+                <Fragment key={c.id}>
+                  <tr className={c.is_voided ? 'opacity-40' : ''}>
+                    <td className="font-mono text-xs text-gray-600">
+                      {c.cert_no}
+                      {c.is_voided && (
+                        <span className="ml-1.5 inline-block rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-medium text-red-600 align-middle">ยกเลิกแล้ว</span>
+                      )}
+                      {c.superseded_by_id && (
+                        <p className="mt-0.5 text-[10px] font-normal text-blue-600 normal-case">มีฉบับใหม่แทนที่แล้ว</p>
+                      )}
+                    </td>
+                    <td>
+                      <p className="text-sm font-medium text-gray-900">{fullNameTH(c.user)}</p>
+                      <p className="text-xs text-gray-400">{c.user?.employee_code}</p>
+                    </td>
+                    <td><span className="text-sm text-gray-700">{CERT_TYPE_LABEL[c.cert_type] ?? c.cert_type}</span></td>
+                    <td className="text-sm text-gray-600 max-w-[200px] truncate">{c.purpose ?? '—'}</td>
+                    <td className="text-sm text-gray-600 whitespace-nowrap">{c.issued_date}</td>
+                    <td className="text-sm text-gray-600">
+                      {c.include_salary && c.salary_amount
+                        ? `${Number(c.salary_amount).toLocaleString('th-TH')} ฿`
+                        : '—'}
+                    </td>
+                    <td>
+                      <div className="flex items-center gap-0.5">
+                        <button
+                          onClick={() => window.open(`/api/pdf/certificate/${c.id}`, '_blank')}
+                          className="p-1.5 text-gray-400 hover:text-blue-600 transition-colors"
+                          title="พิมพ์ใบรับรอง"
+                        >
+                          <Printer className="w-4 h-4" />
+                        </button>
+                        {!c.is_voided && (
+                          <button
+                            onClick={() => { setVoidingId(voidingId === c.id ? null : c.id); setVoidReason('') }}
+                            className="p-1.5 text-gray-400 hover:text-red-600 transition-colors"
+                            title="ยกเลิกใบรับรอง"
+                          >
+                            <Ban className="w-4 h-4" />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => reissueCert.mutate(c.id)}
+                          disabled={reissueCert.isPending}
+                          className="p-1.5 text-gray-400 hover:text-green-600 transition-colors disabled:opacity-40"
+                          title="ออกใบรับรองใหม่แทนที่ฉบับนี้"
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  {voidingId === c.id && (
+                    <tr>
+                      <td colSpan={7} className="bg-red-50 px-4 py-3">
+                        <div className="flex items-center gap-2">
+                          <input
+                            autoFocus
+                            value={voidReason}
+                            onChange={e => setVoidReason(e.target.value)}
+                            placeholder="เหตุผลที่ยกเลิก (เช่น ข้อมูลผิด, ออกซ้ำ)"
+                            className="form-input flex-1 text-sm"
+                          />
+                          <button
+                            onClick={() => voidCert.mutate(c.id)}
+                            disabled={!voidReason.trim() || voidCert.isPending}
+                            className="rounded-lg bg-red-600 px-3 py-2 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50 whitespace-nowrap"
+                          >
+                            {voidCert.isPending ? 'กำลังยกเลิก...' : 'ยืนยันยกเลิก'}
+                          </button>
+                          <button
+                            onClick={() => setVoidingId(null)}
+                            className="rounded-lg border border-gray-300 px-3 py-2 text-xs text-gray-600 hover:bg-gray-50 whitespace-nowrap"
+                          >
+                            ปิด
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
               {!certs.length && (
                 <tr><td colSpan={7} className="text-center py-10 text-gray-400 text-sm">ยังไม่มีใบรับรอง</td></tr>
