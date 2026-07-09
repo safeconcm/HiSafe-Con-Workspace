@@ -45,11 +45,15 @@ function chromiumPackUrl(): string {
 // missing the following properties from type 'URLSearchParams'..."), which
 // broke the Vercel type-check step. A plain Uint8Array is a valid BodyInit.
 export async function renderPdfFromHtml(html: string): Promise<Uint8Array> {
+  // @sparticuz/chromium-min v141's Chromium class dropped the
+  // `defaultViewport` and `headless` static getters that older versions
+  // (like the v123 we started with) exposed — confirmed by reading the
+  // published v141 source and Vercel's own current template, which now just
+  // passes `headless: true` directly. `args`/`executablePath` are unchanged.
   const browser = await puppeteer.launch({
     args: chromium.args,
-    defaultViewport: chromium.defaultViewport,
     executablePath: await chromium.executablePath(chromiumPackUrl()),
-    headless: chromium.headless,
+    headless: true,
   })
 
   try {
