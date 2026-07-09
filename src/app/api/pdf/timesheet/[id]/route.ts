@@ -1,5 +1,7 @@
 // src/app/api/pdf/timesheet/[id]/route.ts
 // GET /api/pdf/timesheet/:id
+// See src/app/api/pdf/leave/[id]/route.ts for why this renders in-process
+// instead of calling the never-configured WORKER_SERVICE_URL.
 
 import { NextRequest, NextResponse } from 'next/server'
 import {
@@ -7,6 +9,9 @@ import {
   unauthorized, forbidden, notFound,
 } from '@/lib/api-helpers'
 import { generateTimesheetHTML, type TimesheetTemplateData } from '@/lib/pdf/timesheet-template'
+import { renderPdfFromHtml } from '@/lib/pdf/render'
+
+export const maxDuration = 30
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const params = await ctx.params
@@ -68,34 +73,29 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 
   const html = generateTimesheetHTML(templateData, appUrl)
 
-  // Try worker service
-  const workerUrl = process.env.WORKER_SERVICE_URL
-  if (workerUrl) {
-    try {
-      const res = await fetch(`${workerUrl}/pdf/generate`, {
-        method:  'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key':    process.env.WORKER_API_KEY ?? '',
-        },
-        body: JSON.stringify({ html, filename: `timesheet-${params.id}.pdf` }),
-      })
-      if (res.ok) {
-        const pdf = await res.arrayBuffer()
-        return new NextResponse(pdf, {
-          status: 200,
-          headers: {
-            'Content-Type':        'application/pdf',
-            'Content-Disposition': `inline; filename="timesheet-${ts.year}-${ts.month}.pdf"`,
-          },
-        })
-      }
-    } catch { /* fallthrough */ }
-  }
+  try {
+    const pdfBuffer = await renderPdfFromHtml(html)
 
-  // HTML fallback
-  return new NextResponse(html, {
-    status: 200,
-    headers: { 'Content-Type': 'text/html; charset=utf-8', 'X-PDF-Mode': 'html-fallback' },
-  })
+    const storagePath = `timesheet/${params.id}.pdf`
+    const { error: uploadErr } = await supabase.storage
+      .from('documents')
+      .upload(storagePath, pdfBuffer, { contentType: 'application/pdf', upsert: true })
+    if (!uploadErr) {
+      await supabase.from('timesheets').update({ pdf_url: storagePath }).eq('id', params.id)
+    }
+
+    return new NextResponse(pdfBuffer, {
+      status: 200,
+      headers: {
+        'Content-Type':        'application/pdf',
+        'Content-Disposition': `inline; filename="timesheet-${ts.year}-${ts.month}.pdf"`,
+      },
+    })
+  } catch (err) {
+    console.error('[pdf/timesheet] render failed', err)
+    return new NextResponse(html, {
+      status: 200,
+      headers: { 'Content-Type': 'text/html; charset=utf-8', 'X-PDF-Mode': 'html-fallback' },
+    })
+  }
 }

@@ -1,16 +1,21 @@
 // src/app/api/pdf/leave/[id]/route.ts
 // GET /api/pdf/leave/:id
-// Generates Leave PDF using html-pdf-node (lighter than Puppeteer for edge)
-// Falls back to returning HTML if pdf generation unavailable
+// Renders a real PDF in-process (puppeteer-core + @sparticuz/chromium-min —
+// see src/lib/pdf/render.ts for why), saves it to the private "documents"
+// storage bucket so it's kept permanently and can be re-downloaded without
+// regenerating, and returns the PDF to the browser either way.
 
 import { NextRequest, NextResponse } from 'next/server'
 import {
   getSessionFromHeaders, createAdminSupabaseClient,
-  unauthorized, forbidden, notFound, serverError,
+  unauthorized, forbidden, notFound,
 } from '@/lib/api-helpers'
 import { generateLeaveHTML, type LeaveTemplateData } from '@/lib/pdf/leave-template'
+import { renderPdfFromHtml } from '@/lib/pdf/render'
 import { LEAVE_TYPE_LABEL } from '@/utils'
 import type { LeaveType } from '@/types/database'
+
+export const maxDuration = 30
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const params = await ctx.params
@@ -94,43 +99,38 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 
   const html = generateLeaveHTML(templateData, appUrl)
 
-  // Try to generate PDF via worker service if available
-  const workerUrl = process.env.WORKER_SERVICE_URL
-  if (workerUrl) {
-    try {
-      const res = await fetch(`${workerUrl}/pdf/generate`, {
-        method:  'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key':    process.env.WORKER_API_KEY ?? '',
-        },
-        body: JSON.stringify({ html, filename: `leave-${params.id}.pdf` }),
-      })
-      if (res.ok) {
-        const pdfBuffer = await res.arrayBuffer()
+  try {
+    const pdfBuffer = await renderPdfFromHtml(html)
 
-        // Save PDF URL to leave request
-        await supabase.from('leave_requests')
-          .update({ pdf_url: `${appUrl}/api/pdf/leave/${params.id}` })
-          .eq('id', params.id)
+    // Persist to the private "documents" bucket so this stays downloadable
+    // later without needing to regenerate. Overwritten on each regeneration
+    // (e.g. after a status change) so it always reflects the latest state —
+    // point-in-time freezing after voiding is a later phase's concern.
+    const storagePath = `leave/${params.id}.pdf`
+    const { error: uploadErr } = await supabase.storage
+      .from('documents')
+      .upload(storagePath, pdfBuffer, { contentType: 'application/pdf', upsert: true })
+    if (!uploadErr) {
+      await supabase.from('leave_requests').update({ pdf_url: storagePath }).eq('id', params.id)
+    }
 
-        return new NextResponse(pdfBuffer, {
-          status: 200,
-          headers: {
-            'Content-Type':        'application/pdf',
-            'Content-Disposition': `inline; filename="leave-${params.id.slice(-8)}.pdf"`,
-          },
-        })
-      }
-    } catch { /* fall through to HTML */ }
+    return new NextResponse(pdfBuffer, {
+      status: 200,
+      headers: {
+        'Content-Type':        'application/pdf',
+        'Content-Disposition': `inline; filename="leave-${params.id.slice(-8)}.pdf"`,
+      },
+    })
+  } catch (err) {
+    console.error('[pdf/leave] render failed', err)
+    // Fallback: return HTML so the page still shows something the user can
+    // print-to-PDF from their browser, rather than a hard error.
+    return new NextResponse(html, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'X-PDF-Mode':   'html-fallback',
+      },
+    })
   }
-
-  // Fallback: return HTML (user can print-to-PDF from browser)
-  return new NextResponse(html, {
-    status: 200,
-    headers: {
-      'Content-Type': 'text/html; charset=utf-8',
-      'X-PDF-Mode':   'html-fallback',
-    },
-  })
 }
