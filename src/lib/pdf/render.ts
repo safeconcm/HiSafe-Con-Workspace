@@ -23,7 +23,12 @@ import puppeteer from 'puppeteer-core'
 const CHROMIUM_PACK_URL =
   'https://github.com/Sparticuz/chromium/releases/download/v123.0.1/chromium-v123.0.1-pack.tar'
 
-export async function renderPdfFromHtml(html: string): Promise<Buffer> {
+// Returns a plain Uint8Array rather than Node's Buffer — Buffer is a
+// structurally different generic type in this Next.js/TS setup and isn't
+// accepted as a NextResponse BodyInit ("Type 'Buffer<ArrayBufferLike>' is
+// missing the following properties from type 'URLSearchParams'..."), which
+// broke the Vercel type-check step. A plain Uint8Array is a valid BodyInit.
+export async function renderPdfFromHtml(html: string): Promise<Uint8Array> {
   const browser = await puppeteer.launch({
     args: chromium.args,
     defaultViewport: chromium.defaultViewport,
@@ -39,7 +44,7 @@ export async function renderPdfFromHtml(html: string): Promise<Buffer> {
       printBackground: true,
       margin: { top: '10mm', bottom: '10mm', left: '10mm', right: '10mm' },
     })
-    return Buffer.from(pdf)
+    return new Uint8Array(pdf)
   } finally {
     // Always close, even on error — a leaked browser process on a serverless
     // instance that gets reused can exhaust memory across invocations.
