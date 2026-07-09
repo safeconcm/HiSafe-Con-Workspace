@@ -19,29 +19,53 @@ export async function GET(req: NextRequest, ctx: Ctx) {
 
   const supabase = createAdminSupabaseClient()
 
-  // NOTE: organization_nodes has TWO foreign keys pointing at users
-  // (user_id, and acting_approver_id for delegated approval). The top-level
-  // "org_node" embed below must pin the FK explicitly with
-  // "!organization_nodes_user_id_fkey" — without it, PostgREST can't tell
-  // which relationship to embed and errors out, which this route was
-  // silently mapping to a generic "not found" for every single user.
+  // NOTE: org_node / line_account used to be embedded directly in this
+  // select via PostgREST's nested-resource syntax. organization_nodes has
+  // TWO foreign keys pointing at users (user_id, and acting_approver_id for
+  // delegated approval), and a 3-level-deep self-referencing embed
+  // (org_node -> parent -> parent's user) reusing the same FK hint at two
+  // nesting depths kept returning a PostgREST 400 even with explicit FK
+  // hints — confirmed via Supabase API logs, not just a guess. Rather than
+  // keep fighting PostgREST's embed resolver, this fetches the user row on
+  // its own (so a hiccup on the org-chart lookups can never make an
+  // existing user "not found"), then fetches org_node / its parent's name /
+  // line_account as separate, best-effort queries below.
   const { data: user, error } = await supabase
     .from('users')
-    .select(`
-      *,
-      org_node:organization_nodes!organization_nodes_user_id_fkey(
-        id, parent_id, depth, acting_approver_id,
-        parent:organization_nodes!organization_nodes_parent_id_fkey(
-          user:users!organization_nodes_user_id_fkey(id, first_name_th, last_name_th)
-        )
-      ),
-      line_account:user_line_accounts(line_user_id, display_name, linked_at)
-    `)
+    .select('*')
     .eq('id', params.id)
     .eq('company_id', session.company_id)
     .single()
 
-  if (error || !user) return notFound('User')
+  if (error || !user) {
+    if (error) console.error('[admin/users/:id GET] user fetch failed', error)
+    return notFound('User')
+  }
+
+  const { data: orgNode } = await supabase
+    .from('organization_nodes')
+    .select('id, parent_id, depth, acting_approver_id')
+    .eq('user_id', params.id)
+    .maybeSingle()
+
+  let orgNodeParent: { user: { id: string; first_name_th: string; last_name_th: string } | null } | null = null
+  if (orgNode?.parent_id) {
+    const { data: parentNode } = await supabase
+      .from('organization_nodes')
+      .select('user:users!organization_nodes_user_id_fkey(id, first_name_th, last_name_th)')
+      .eq('id', orgNode.parent_id)
+      .maybeSingle()
+    if (parentNode) orgNodeParent = { user: (parentNode.user as any) ?? null }
+  }
+
+  const { data: lineAccount } = await supabase
+    .from('user_line_accounts')
+    .select('line_user_id, display_name, linked_at')
+    .eq('user_id', params.id)
+    .maybeSingle()
+
+  ;(user as any).org_node = orgNode ? { ...orgNode, parent: orgNodeParent } : null
+  ;(user as any).line_account = lineAccount ?? null
 
   // Fetch leave balances
   const { data: balances } = await supabase
