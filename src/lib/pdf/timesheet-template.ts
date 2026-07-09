@@ -1,5 +1,11 @@
 // src/lib/pdf/timesheet-template.ts
 // HTML template for Monthly Timesheet PDF
+//
+// Redesigned as a matrix (per user request): jobs run down the left
+// (vertical axis), dates run across the top (horizontal axis) — the
+// standard construction-site timesheet layout, and compact enough to fit
+// on a single A4 page instead of the previous one-row-per-day list, which
+// ran to multiple pages for a full month.
 
 const TH_MONTHS = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน',
   'กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม']
@@ -37,13 +43,10 @@ export function generateTimesheetHTML(data: TimesheetTemplateData, appUrl: strin
   const monthName = TH_MONTHS[data.timesheet.month - 1]
   const thaiYear  = data.timesheet.year + 543
 
-  // Build a map of date → line
-  const lineMap = new Map<string, typeof data.lines[0]>()
-  data.lines.forEach(l => lineMap.set(l.work_date, l))
   const holidayMap = new Map<string, string>()
   data.holidays.forEach(h => holidayMap.set(h.holiday_date, h.name_th))
 
-  // Generate all days in month
+  // All calendar days in the month — these become the column headers.
   const daysInMonth: Date[] = []
   const start = new Date(data.timesheet.year, data.timesheet.month - 1, 1)
   const end   = new Date(data.timesheet.year, data.timesheet.month, 0)
@@ -54,25 +57,91 @@ export function generateTimesheetHTML(data: TimesheetTemplateData, appUrl: strin
   const workLines  = data.lines.filter(l => l.line_type === 'work')
   const leaveLines = data.lines.filter(l => l.line_type === 'leave')
 
-  // Group work hours by job
-  const jobSummary = new Map<string, { code: string; name: string; hours: number }>()
+  // Row per job: job code/name -> (day-of-month -> hours) + running total.
+  const jobRows = new Map<string, { code: string; name: string; hoursByDay: Map<number, number>; total: number }>()
   workLines.forEach(l => {
     if (!l.job) return
     const key = l.job.job_code
-    const cur = jobSummary.get(key) ?? { code: l.job.job_code, name: l.job.name_th, hours: 0 }
-    cur.hours += l.hours
-    jobSummary.set(key, cur)
+    const row = jobRows.get(key) ?? { code: l.job.job_code, name: l.job.name_th, hoursByDay: new Map(), total: 0 }
+    const day = new Date(l.work_date).getDate()
+    row.hoursByDay.set(day, (row.hoursByDay.get(day) ?? 0) + l.hours)
+    row.total += l.hours
+    jobRows.set(key, row)
   })
 
-  const rows = daysInMonth.map(day => {
-    const dateStr  = day.toISOString().split('T')[0]
-    const dow      = day.getDay()
-    const isWeekend = dow === 0 || dow === 6
-    const holiday  = holidayMap.get(dateStr)
-    const line     = lineMap.get(dateStr)
-    const isLeave  = line?.line_type === 'leave'
-    return { day, dateStr, dow, isWeekend, holiday, line, isLeave }
+  // Leave row: day-of-month -> hours taken as leave.
+  const leaveByDay = new Map<number, number>()
+  let leaveTotal = 0
+  leaveLines.forEach(l => {
+    const day = new Date(l.work_date).getDate()
+    leaveByDay.set(day, (leaveByDay.get(day) ?? 0) + l.hours)
+    leaveTotal += l.hours
   })
+
+  // Column totals (all jobs + leave, per day) for the footer row.
+  const dayTotals = new Map<number, number>()
+  jobRows.forEach(row => row.hoursByDay.forEach((h, day) => dayTotals.set(day, (dayTotals.get(day) ?? 0) + h)))
+  leaveByDay.forEach((h, day) => dayTotals.set(day, (dayTotals.get(day) ?? 0) + h))
+
+  const sortedJobs = Array.from(jobRows.values()).sort((a, b) => a.code.localeCompare(b.code))
+
+  const dayHeaderCells = daysInMonth.map(day => {
+    const dow = day.getDay()
+    const isWeekend = dow === 0 || dow === 6
+    const dateStr = day.toISOString().split('T')[0]
+    const isHoliday = holidayMap.has(dateStr)
+    const cls = isHoliday ? 'col-holiday' : isWeekend ? 'col-weekend' : ''
+    return `<th class="day-col ${cls}"><div class="dow">${TH_DAYS[dow]}</div><div class="dnum">${day.getDate()}</div></th>`
+  }).join('')
+
+  const jobRowsHtml = sortedJobs.map(row => {
+    const cells = daysInMonth.map(day => {
+      const dow = day.getDay()
+      const isWeekend = dow === 0 || dow === 6
+      const dateStr = day.toISOString().split('T')[0]
+      const isHoliday = holidayMap.has(dateStr)
+      const cls = isHoliday ? 'col-holiday' : isWeekend ? 'col-weekend' : ''
+      const h = row.hoursByDay.get(day.getDate())
+      return `<td class="day-col ${cls}">${h ? h : ''}</td>`
+    }).join('')
+    return `<tr>
+      <td class="job-col"><span class="job-code">${row.code}</span><span class="job-name">${row.name}</span></td>
+      ${cells}
+      <td class="total-col">${row.total}</td>
+    </tr>`
+  }).join('')
+
+  const leaveRowHtml = leaveLines.length > 0 ? `<tr class="leave-row">
+    <td class="job-col"><span class="job-name">ลา</span></td>
+    ${daysInMonth.map(day => {
+      const dow = day.getDay()
+      const isWeekend = dow === 0 || dow === 6
+      const dateStr = day.toISOString().split('T')[0]
+      const isHoliday = holidayMap.has(dateStr)
+      const cls = isHoliday ? 'col-holiday' : isWeekend ? 'col-weekend' : ''
+      const h = leaveByDay.get(day.getDate())
+      return `<td class="day-col ${cls}">${h ? h : ''}</td>`
+    }).join('')}
+    <td class="total-col">${leaveTotal}</td>
+  </tr>` : ''
+
+  const totalRowHtml = `<tr class="total-row">
+    <td class="job-col">รวมชั่วโมง/วัน</td>
+    ${daysInMonth.map(day => {
+      const dow = day.getDay()
+      const isWeekend = dow === 0 || dow === 6
+      const dateStr = day.toISOString().split('T')[0]
+      const isHoliday = holidayMap.has(dateStr)
+      const cls = isHoliday ? 'col-holiday' : isWeekend ? 'col-weekend' : ''
+      const h = dayTotals.get(day.getDate())
+      return `<td class="day-col ${cls}">${h ? h : ''}</td>`
+    }).join('')}
+    <td class="total-col">${data.timesheet.total_hours}</td>
+  </tr>`
+
+  const holidayFootnotes = data.holidays
+    .filter(h => h.holiday_date >= start.toISOString().split('T')[0] && h.holiday_date <= end.toISOString().split('T')[0])
+    .map(h => `${new Date(h.holiday_date).getDate()} ${h.name_th}`)
 
   return `<!DOCTYPE html>
 <html lang="th">
@@ -82,72 +151,77 @@ export function generateTimesheetHTML(data: TimesheetTemplateData, appUrl: strin
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap');
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Sarabun', sans-serif; font-size: 13px; color: #1a1a1a; background: #fff; }
-  .page { width: 210mm; padding: 15mm 15mm; margin: 0 auto; background: #fff; }
+  body { font-family: 'Sarabun', sans-serif; font-size: 12px; color: #1a1a1a; background: #fff; }
+  .page { width: 210mm; height: 297mm; padding: 10mm; margin: 0 auto; background: #fff; overflow: hidden; }
   .header {
     display: flex; align-items: center; justify-content: space-between;
-    border-bottom: 3px solid #1e3a8a; padding-bottom: 12px; margin-bottom: 16px;
+    border-bottom: 2px solid #1e3a8a; padding-bottom: 8px; margin-bottom: 8px;
   }
-  .header-logo { height: 56px; object-fit: contain; }
+  .header-logo { height: 38px; object-fit: contain; }
   .header-center { text-align: center; flex: 1; }
-  .header-center h1 { font-size: 18px; font-weight: 700; color: #1e3a8a; }
-  .header-center p { font-size: 12px; color: #555; }
-  .doc-id { font-size: 11px; color: #888; text-align: right; min-width: 140px; }
+  .header-center h1 { font-size: 15px; font-weight: 700; color: #1e3a8a; }
+  .header-center p { font-size: 10px; color: #555; }
+  .doc-id { font-size: 9px; color: #888; text-align: right; min-width: 120px; }
   .doc-title {
-    text-align: center; font-size: 17px; font-weight: 700; color: #1e3a8a;
-    margin-bottom: 16px; padding: 8px 0;
-    border-top: 1px solid #e5e7eb; border-bottom: 1px solid #e5e7eb;
+    text-align: center; font-size: 14px; font-weight: 700; color: #1e3a8a;
+    margin-bottom: 8px; padding: 5px 0;
+    border-bottom: 1px solid #e5e7eb;
   }
-  .info-row { display: flex; gap: 8px; align-items: baseline; margin-bottom: 6px; }
-  .info-label { font-size: 12px; color: #666; min-width: 100px; }
-  .info-value { font-size: 13px; font-weight: 500; color: #111; }
-  .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px; margin-bottom: 16px; padding: 10px 14px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; }
-  /* Table */
-  .ts-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
-  .ts-table th {
-    background: #1e3a8a; color: #fff; padding: 7px 8px;
-    font-size: 12px; font-weight: 600; text-align: center;
+  .info-bar {
+    display: flex; flex-wrap: wrap; gap: 4px 20px; align-items: baseline;
+    margin-bottom: 10px; padding: 7px 12px; background: #f8fafc;
+    border-radius: 6px; border: 1px solid #e2e8f0; font-size: 11px;
   }
-  .ts-table td { padding: 5px 7px; border-bottom: 1px solid #e5e7eb; font-size: 12px; }
-  .ts-table tr:nth-child(even) td { background: #f9fafb; }
-  .ts-table tr.weekend td { background: #f3f4f6; color: #9ca3af; }
-  .ts-table tr.holiday td { background: #fef2f2; color: #dc2626; }
-  .ts-table tr.leave-day td { background: #f0fdf4; color: #16a34a; }
-  .ts-table .hours-col { text-align: center; font-weight: 600; color: #1e3a8a; }
-  .ts-table .total-row td { background: #eff6ff; font-weight: 700; border-top: 2px solid #1e3a8a; }
-  /* Summary */
-  .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
-  .summary-card {
-    border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 16px;
-    text-align: center;
-  }
-  .summary-value { font-size: 24px; font-weight: 700; color: #1e3a8a; }
-  .summary-label { font-size: 11px; color: #888; margin-top: 2px; }
-  /* Job summary table */
-  .job-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
-  .job-table th { background: #f1f5f9; color: #374151; padding: 6px 10px; font-size: 12px; text-align: left; }
-  .job-table td { padding: 5px 10px; border-bottom: 1px solid #f1f5f9; font-size: 12px; }
-  /* Signature */
-  .sig-section {
-    display: grid; grid-template-columns: 1fr 1fr 1fr;
-    gap: 20px; margin-top: 24px; padding-top: 16px; border-top: 1px solid #e5e7eb;
-  }
-  .sig-box { text-align: center; }
-  .sig-line { border-bottom: 1px solid #aaa; height: 40px; margin: 0 16px 6px; }
-  .sig-label { font-size: 11px; color: #666; }
-  .sig-name { font-size: 12px; font-weight: 600; margin-top: 2px; }
-  .sig-date { font-size: 10px; color: #888; margin-top: 2px; }
-  .footer {
-    margin-top: 20px; padding-top: 10px; border-top: 1px solid #e5e7eb;
-    font-size: 10px; color: #aaa; display: flex; justify-content: space-between;
-  }
+  .info-bar b { color: #111; font-weight: 600; }
   .status-badge {
-    display: inline-block; padding: 2px 10px; border-radius: 10px;
-    font-size: 12px; font-weight: 600;
+    display: inline-block; padding: 1px 8px; border-radius: 9px;
+    font-size: 10px; font-weight: 600;
   }
   .status-approved { background: #dcfce7; color: #16a34a; }
   .status-submitted { background: #fef3c7; color: #d97706; }
   .status-draft { background: #f3f4f6; color: #6b7280; }
+  /* Matrix table: jobs down the left, dates across the top */
+  .matrix { width: 100%; border-collapse: collapse; table-layout: fixed; margin-bottom: 6px; }
+  .matrix th, .matrix td { border: 0.5px solid #d1d5db; text-align: center; }
+  .job-col { width: 30mm; text-align: left; padding: 2px 4px; font-size: 8px; }
+  .job-col .job-code { font-family: monospace; color: #1e3a8a; font-weight: 700; display: block; }
+  .job-col .job-name { color: #444; display: block; }
+  .day-col { width: 4.4mm; font-size: 7px; padding: 1px 0; }
+  .total-col { width: 11mm; font-size: 8px; font-weight: 700; color: #1e3a8a; }
+  thead .day-col { background: #1e3a8a; color: #fff; padding: 2px 0; }
+  thead .day-col .dow { font-size: 5.5px; opacity: .8; }
+  thead .day-col .dnum { font-size: 7.5px; font-weight: 700; }
+  thead .total-col { background: #1e3a8a; color: #fff; font-size: 7px; }
+  thead .job-col { background: #1e3a8a; color: #fff; font-size: 8px; }
+  .col-weekend { background: #f3f4f6; color: #9ca3af; }
+  .col-holiday { background: #fef2f2; color: #dc2626; }
+  thead .col-weekend { background: #33448a; }
+  thead .col-holiday { background: #7a2020; }
+  .leave-row td { background: #f0fdf4; color: #16a34a; font-weight: 600; }
+  .leave-row .job-col .job-name { color: #16a34a; font-weight: 700; }
+  .total-row td { background: #eff6ff; font-weight: 700; border-top: 1.5px solid #1e3a8a; }
+  .holiday-note { font-size: 8px; color: #888; margin-bottom: 8px; }
+  /* Summary strip */
+  .summary-strip { display: flex; gap: 10px; margin-bottom: 10px; }
+  .summary-chip {
+    flex: 1; text-align: center; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 4px;
+  }
+  .summary-chip .v { font-size: 16px; font-weight: 700; color: #1e3a8a; }
+  .summary-chip .l { font-size: 9px; color: #888; }
+  /* Signature */
+  .sig-section {
+    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px; margin-top: 14px; padding-top: 10px; border-top: 1px solid #e5e7eb;
+  }
+  .sig-box { text-align: center; }
+  .sig-line { border-bottom: 1px solid #aaa; height: 28px; margin: 0 12px 4px; }
+  .sig-label { font-size: 9px; color: #666; }
+  .sig-name { font-size: 10px; font-weight: 600; margin-top: 2px; }
+  .sig-date { font-size: 8px; color: #888; margin-top: 2px; }
+  .footer {
+    margin-top: 10px; padding-top: 6px; border-top: 1px solid #e5e7eb;
+    font-size: 8px; color: #aaa; display: flex; justify-content: space-between;
+  }
 </style>
 </head>
 <body>
@@ -162,7 +236,7 @@ export function generateTimesheetHTML(data: TimesheetTemplateData, appUrl: strin
     </div>
     <div class="doc-id">
       <div>เลขที่: TS-${data.timesheet.id.slice(-8).toUpperCase()}</div>
-      <div style="margin-top:4px">พิมพ์: ${new Date().toLocaleDateString('th-TH')}</div>
+      <div style="margin-top:2px">พิมพ์: ${new Date().toLocaleDateString('th-TH')}</div>
     </div>
   </div>
 
@@ -170,105 +244,41 @@ export function generateTimesheetHTML(data: TimesheetTemplateData, appUrl: strin
   <div class="doc-title">Timesheet รายเดือน — ${monthName} ${thaiYear}</div>
 
   <!-- Employee Info -->
-  <div class="info-grid">
-    <div class="info-row">
-      <span class="info-label">รหัสพนักงาน</span>
-      <span class="info-value">${data.employee.employee_code}</span>
-    </div>
-    <div class="info-row">
-      <span class="info-label">สถานะ</span>
-      <span class="info-value">
-        <span class="status-badge status-${data.timesheet.status}">
-          ${data.timesheet.status === 'approved' ? 'อนุมัติแล้ว'
-            : data.timesheet.status === 'submitted' ? 'รออนุมัติ' : 'ร่าง'}
-        </span>
-      </span>
-    </div>
-    <div class="info-row">
-      <span class="info-label">ชื่อ-นามสกุล</span>
-      <span class="info-value">${data.employee.first_name_th} ${data.employee.last_name_th}</span>
-    </div>
-    <div class="info-row">
-      <span class="info-label">ตำแหน่ง</span>
-      <span class="info-value">${data.employee.position_th ?? '—'}</span>
-    </div>
-    <div class="info-row">
-      <span class="info-label">แผนก</span>
-      <span class="info-value">${data.employee.department ?? '—'}</span>
-    </div>
-    <div class="info-row">
-      <span class="info-label">รวมชั่วโมง</span>
-      <span class="info-value" style="font-size:16px;color:#1e3a8a;font-weight:700;">${data.timesheet.total_hours} ชั่วโมง</span>
-    </div>
+  <div class="info-bar">
+    <span>รหัสพนักงาน: <b>${data.employee.employee_code}</b></span>
+    <span>ชื่อ-นามสกุล: <b>${data.employee.first_name_th} ${data.employee.last_name_th}</b></span>
+    <span>ตำแหน่ง: <b>${data.employee.position_th ?? '—'}</b></span>
+    <span>แผนก: <b>${data.employee.department ?? '—'}</b></span>
+    <span class="status-badge status-${data.timesheet.status}">
+      ${data.timesheet.status === 'approved' ? 'อนุมัติแล้ว'
+        : data.timesheet.status === 'submitted' ? 'รออนุมัติ' : 'ร่าง'}
+    </span>
   </div>
 
-  <!-- Summary cards -->
-  <div class="summary-grid">
-    <div class="summary-card">
-      <div class="summary-value">${data.timesheet.total_hours}</div>
-      <div class="summary-label">ชั่วโมงงาน</div>
-    </div>
-    <div class="summary-card">
-      <div class="summary-value">${leaveLines.length}</div>
-      <div class="summary-label">วันลา</div>
-    </div>
+  <!-- Summary strip -->
+  <div class="summary-strip">
+    <div class="summary-chip"><div class="v">${data.timesheet.total_hours}</div><div class="l">ชั่วโมงงานรวม</div></div>
+    <div class="summary-chip"><div class="v">${sortedJobs.length}</div><div class="l">จำนวนงาน (Job)</div></div>
+    <div class="summary-chip"><div class="v">${leaveTotal}</div><div class="l">ชั่วโมงลา</div></div>
   </div>
 
-  <!-- Timesheet Table -->
-  <table class="ts-table">
+  <!-- Matrix: jobs (rows) x dates (columns) -->
+  <table class="matrix">
     <thead>
       <tr>
-        <th style="width:30px">ที่</th>
-        <th style="width:28px">วัน</th>
-        <th style="width:90px">วันที่</th>
-        <th>Job Code</th>
-        <th>ชื่องาน</th>
-        <th style="width:60px">ชม.</th>
-        <th>หมายเหตุ</th>
+        <th class="job-col">Job</th>
+        ${dayHeaderCells}
+        <th class="total-col">รวม</th>
       </tr>
     </thead>
     <tbody>
-      ${rows.map((r, i) => {
-        const cls = r.isWeekend ? 'weekend' : r.holiday ? 'holiday' : r.isLeave ? 'leave-day' : ''
-        const jobCode = r.line?.job?.job_code ?? (r.isLeave ? 'ลา' : r.holiday ? 'หยุด' : '')
-        const jobName = r.line?.job?.name_th  ?? (r.isLeave ? 'วันลา' : r.holiday ? r.holiday : '')
-        const hours   = r.line?.hours ?? 0
-        return `<tr class="${cls}">
-          <td style="text-align:center">${i + 1}</td>
-          <td style="text-align:center">${TH_DAYS[r.dow]}</td>
-          <td>${r.day.getDate()} ${TH_MONTHS[r.day.getMonth()].slice(0,3)} ${r.day.getFullYear()+543}</td>
-          <td style="font-family:monospace;font-size:11px">${jobCode}</td>
-          <td>${jobName}</td>
-          <td class="hours-col">${hours > 0 ? hours : r.isWeekend ? '—' : ''}</td>
-          <td style="font-size:11px;color:#888">${r.line?.remark ?? ''}</td>
-        </tr>`
-      }).join('')}
-      <tr class="total-row">
-        <td colspan="5" style="text-align:right;padding-right:12px">รวมชั่วโมงทำงาน</td>
-        <td class="hours-col" style="font-size:15px">${data.timesheet.total_hours}</td>
-        <td></td>
-      </tr>
+      ${jobRowsHtml || '<tr><td class="job-col" colspan="1">—</td></tr>'}
+      ${leaveRowHtml}
+      ${totalRowHtml}
     </tbody>
   </table>
 
-  <!-- Job Summary -->
-  ${jobSummary.size > 0 ? `
-  <div style="margin-bottom:16px;">
-    <div style="font-size:13px;font-weight:600;color:#1e3a8a;margin-bottom:8px;padding-left:4px;">สรุปชั่วโมงตาม Job</div>
-    <table class="job-table">
-      <thead><tr><th>Job Code</th><th>ชื่องาน</th><th style="text-align:right">ชั่วโมง</th></tr></thead>
-      <tbody>
-        ${Array.from(jobSummary.values()).map(j => `
-          <tr>
-            <td style="font-family:monospace">${j.code}</td>
-            <td>${j.name}</td>
-            <td style="text-align:right;font-weight:600">${j.hours}</td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
-  </div>
-  ` : ''}
+  ${holidayFootnotes.length > 0 ? `<div class="holiday-note">วันหยุด: ${holidayFootnotes.join(' · ')}</div>` : ''}
 
   <!-- Signatures -->
   <div class="sig-section">

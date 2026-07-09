@@ -69,66 +69,69 @@ export function generateCertificateHTML(data: CertificateTemplateData, appUrl: s
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: 'Sarabun', sans-serif;
-    font-size: 15px;
+    font-size: 13px;
     color: #1a1a1a;
     background: #fff;
   }
   .page {
     width: 210mm;
-    min-height: 297mm;
-    padding: 22mm 20mm;
+    height: 297mm;
+    padding: 15mm 18mm;
     margin: 0 auto;
     background: #fff;
     position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
   .header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    border-bottom: 3px solid #1e3a8a;
-    padding-bottom: 16px;
-    margin-bottom: 28px;
+    border-bottom: 2px solid #1e3a8a;
+    padding-bottom: 10px;
+    margin-bottom: 14px;
   }
-  .header-logo { height: 60px; object-fit: contain; }
+  .header-logo { height: 42px; object-fit: contain; }
   .header-center { text-align: center; flex: 1; }
-  .header-center h1 { font-size: 19px; font-weight: 700; color: #1e3a8a; }
-  .header-center p { font-size: 12px; color: #555; margin-top: 2px; }
-  .doc-id { font-size: 11px; color: #888; text-align: right; min-width: 140px; }
+  .header-center h1 { font-size: 16px; font-weight: 700; color: #1e3a8a; }
+  .header-center p { font-size: 10px; color: #555; margin-top: 2px; }
+  .doc-id { font-size: 9px; color: #888; text-align: right; min-width: 130px; }
 
   .doc-title {
     text-align: center;
-    font-size: 20px;
+    font-size: 17px;
     font-weight: 700;
     color: #1e3a8a;
-    margin-bottom: 6px;
+    margin-bottom: 4px;
     letter-spacing: 1px;
   }
-  .doc-subtitle { text-align: center; font-size: 13px; color: #888; margin-bottom: 28px; }
+  .doc-subtitle { text-align: center; font-size: 11px; color: #888; margin-bottom: 14px; }
 
-  .letter-body { line-height: 2; font-size: 15px; text-align: justify; padding: 0 6px; }
-  .letter-body p { margin-bottom: 14px; }
+  .letter-body { line-height: 1.7; font-size: 13px; text-align: justify; padding: 0 4px; }
+  .letter-body p { margin-bottom: 10px; }
   .highlight { font-weight: 600; color: #111; }
 
   .info-box {
     background: #f8fafc;
     border: 1px solid #e2e8f0;
     border-radius: 8px;
-    padding: 16px 20px;
-    margin: 20px 0;
+    padding: 10px 16px;
+    margin: 12px 0;
   }
-  .info-row { display: flex; gap: 10px; padding: 4px 0; }
-  .info-label { font-size: 13px; color: #666; min-width: 140px; }
-  .info-value { font-size: 14px; font-weight: 600; color: #111; }
+  .info-row { display: flex; gap: 10px; padding: 2px 0; }
+  .info-label { font-size: 11px; color: #666; min-width: 120px; }
+  .info-value { font-size: 12px; font-weight: 600; color: #111; }
 
   .signature-section {
-    margin-top: 56px;
+    margin-top: 24px;
     display: flex;
     justify-content: flex-end;
   }
-  .sig-box { text-align: center; width: 240px; }
-  .sig-line { border-bottom: 1px solid #aaa; height: 56px; margin: 0 10px 8px 10px; }
-  .sig-name { font-size: 14px; font-weight: 600; color: #111; }
-  .sig-title { font-size: 12px; color: #666; margin-top: 2px; }
+  .sig-box { text-align: center; width: 220px; }
+  .sig-line { border-bottom: 1px solid #aaa; height: 36px; margin: 0 10px 6px 10px; }
+  .sig-name { font-size: 12px; font-weight: 600; color: #111; }
+  .sig-title { font-size: 10px; color: #666; margin-top: 2px; }
 
   .watermark {
     position: fixed;
@@ -143,13 +146,10 @@ export function generateCertificateHTML(data: CertificateTemplateData, appUrl: s
   }
 
   .footer {
-    position: absolute;
-    bottom: 14mm;
-    left: 20mm;
-    right: 20mm;
-    padding-top: 10px;
+    margin-top: auto;
+    padding-top: 8px;
     border-top: 1px solid #e5e7eb;
-    font-size: 10px;
+    font-size: 8px;
     color: #aaa;
     display: flex;
     justify-content: space-between;

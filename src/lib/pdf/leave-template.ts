@@ -83,82 +83,83 @@ export function generateLeaveHTML(data: LeaveTemplateData, appUrl: string): stri
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: 'Sarabun', sans-serif;
-    font-size: 14px;
+    font-size: 13px;
     color: #1a1a1a;
     background: #fff;
     padding: 0;
   }
   .page {
     width: 210mm;
-    min-height: 297mm;
-    padding: 20mm 18mm;
+    height: 297mm;
+    padding: 12mm 15mm;
     margin: 0 auto;
     background: #fff;
+    overflow: hidden;
   }
   /* Header */
   .header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    border-bottom: 3px solid #1e3a8a;
-    padding-bottom: 16px;
-    margin-bottom: 20px;
+    border-bottom: 2px solid #1e3a8a;
+    padding-bottom: 8px;
+    margin-bottom: 10px;
   }
-  .header-logo { height: 64px; object-fit: contain; }
+  .header-logo { height: 40px; object-fit: contain; }
   .header-center { text-align: center; flex: 1; }
   .header-center h1 {
-    font-size: 20px;
+    font-size: 16px;
     font-weight: 700;
     color: #1e3a8a;
   }
-  .header-center p { font-size: 13px; color: #555; margin-top: 2px; }
+  .header-center p { font-size: 10px; color: #555; margin-top: 2px; }
   .doc-id {
-    font-size: 11px;
+    font-size: 9px;
     color: #888;
     text-align: right;
-    min-width: 140px;
+    min-width: 130px;
   }
   /* Title */
   .doc-title {
     text-align: center;
-    font-size: 18px;
+    font-size: 15px;
     font-weight: 700;
     color: #1e3a8a;
-    margin-bottom: 20px;
-    padding: 10px 0;
+    margin-bottom: 10px;
+    padding: 5px 0;
     border-top: 1px solid #e5e7eb;
     border-bottom: 1px solid #e5e7eb;
     letter-spacing: 0.5px;
   }
   /* Sections */
-  .section { margin-bottom: 18px; }
+  .section { margin-bottom: 8px; }
   .section-title {
-    font-size: 13px;
+    font-size: 11px;
     font-weight: 600;
     color: #1e3a8a;
     background: #eff6ff;
-    padding: 6px 12px;
-    border-left: 4px solid #1e3a8a;
-    margin-bottom: 10px;
+    padding: 3px 10px;
+    border-left: 3px solid #1e3a8a;
+    margin-bottom: 6px;
     border-radius: 0 4px 4px 0;
   }
   /* Info grid */
   .info-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 8px 20px;
+    gap: 5px 16px;
     padding: 0 4px;
   }
   .info-row { display: flex; gap: 8px; align-items: baseline; }
-  .info-label { font-size: 13px; color: #666; white-space: nowrap; min-width: 110px; }
-  .info-value { font-size: 14px; font-weight: 500; color: #111; border-bottom: 1px solid #e5e7eb; flex: 1; padding-bottom: 2px; }
+  .info-label { font-size: 11px; color: #666; white-space: nowrap; min-width: 95px; }
+  .info-value { font-size: 12px; font-weight: 500; color: #111; border-bottom: 1px solid #e5e7eb; flex: 1; padding-bottom: 1px; }
   .info-row.full { grid-column: 1/-1; }
   /* Leave type badge */
   .type-badge {
     display: inline-block;
-    padding: 3px 12px;
-    border-radius: 12px;
-    font-size: 13px;
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-size: 11px;
     font-weight: 600;
   }
   .type-annual   { background: #dbeafe; color: #1d4ed8; }
@@ -171,64 +172,66 @@ export function generateLeaveHTML(data: LeaveTemplateData, appUrl: string): stri
     background: #f8fafc;
     border: 1px solid #e2e8f0;
     border-radius: 8px;
-    padding: 14px 18px;
+    padding: 8px 14px;
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
-    gap: 12px;
-    margin-bottom: 16px;
+    gap: 10px;
+    margin-bottom: 8px;
   }
   .date-item { text-align: center; }
-  .date-item-label { font-size: 11px; color: #888; margin-bottom: 4px; }
-  .date-item-value { font-size: 15px; font-weight: 600; color: #1e3a8a; }
+  .date-item-label { font-size: 10px; color: #888; margin-bottom: 3px; }
+  .date-item-value { font-size: 13px; font-weight: 600; color: #1e3a8a; }
   .date-days { color: #dc2626; }
   /* Reason box */
   .reason-box {
     border: 1px solid #e2e8f0;
     border-radius: 6px;
-    padding: 10px 14px;
-    min-height: 60px;
+    padding: 6px 10px;
+    min-height: 34px;
+    max-height: 60px;
+    overflow: hidden;
     background: #fafafa;
-    font-size: 14px;
+    font-size: 12px;
     color: #333;
-    line-height: 1.7;
+    line-height: 1.5;
   }
   /* Approval timeline */
-  .approval-timeline { display: flex; flex-direction: column; gap: 10px; padding: 0 4px; }
-  .approval-item { display: flex; align-items: flex-start; gap: 12px; }
+  .approval-timeline { display: flex; flex-direction: column; gap: 5px; padding: 0 4px; }
+  .approval-item { display: flex; align-items: flex-start; gap: 8px; }
   .approval-icon {
-    width: 28px; height: 28px;
+    width: 20px; height: 20px;
     border-radius: 50%;
     display: flex; align-items: center; justify-content: center;
-    font-size: 14px; flex-shrink: 0; margin-top: 2px;
+    font-size: 11px; flex-shrink: 0; margin-top: 1px;
   }
   .icon-approved  { background: #dcfce7; }
   .icon-rejected  { background: #fee2e2; }
   .icon-auto      { background: #ede9fe; }
   .approval-body { flex: 1; }
-  .approval-name { font-size: 13px; font-weight: 600; color: #111; }
+  .approval-name { font-size: 11px; font-weight: 600; color: #111; }
   .approval-action-approved { color: #16a34a; font-weight: 600; }
   .approval-action-rejected { color: #dc2626; font-weight: 600; }
-  .approval-time { font-size: 11px; color: #888; margin-top: 2px; }
-  .approval-comment { font-size: 12px; color: #555; margin-top: 3px; font-style: italic; }
+  .approval-time { font-size: 9px; color: #888; margin-top: 1px; }
+  .approval-comment { font-size: 10px; color: #555; margin-top: 2px; font-style: italic; }
   /* Signature section */
   .signature-section {
     display: grid;
     grid-template-columns: 1fr 1fr 1fr;
-    gap: 20px;
-    margin-top: 32px;
+    gap: 16px;
+    margin-top: 14px;
     border-top: 1px solid #e5e7eb;
-    padding-top: 20px;
+    padding-top: 10px;
   }
   .sig-box { text-align: center; }
   .sig-line {
     border-bottom: 1px solid #aaa;
-    height: 48px;
-    margin-bottom: 8px;
-    margin: 0 20px 8px 20px;
+    height: 30px;
+    margin-bottom: 5px;
+    margin: 0 16px 5px 16px;
   }
-  .sig-label { font-size: 12px; color: #555; margin-bottom: 3px; }
-  .sig-name  { font-size: 13px; font-weight: 600; color: #111; }
-  .sig-date  { font-size: 11px; color: #888; margin-top: 2px; }
+  .sig-label { font-size: 10px; color: #555; margin-bottom: 2px; }
+  .sig-name  { font-size: 11px; font-weight: 600; color: #111; }
+  .sig-date  { font-size: 9px; color: #888; margin-top: 1px; }
   /* Status watermark */
   .watermark {
     position: fixed;
@@ -246,14 +249,13 @@ export function generateLeaveHTML(data: LeaveTemplateData, appUrl: string): stri
   .watermark-pending  { color: #d97706; }
   /* Footer */
   .footer {
-    margin-top: auto;
-    padding-top: 12px;
+    padding-top: 6px;
     border-top: 1px solid #e5e7eb;
-    font-size: 10px;
+    font-size: 8px;
     color: #aaa;
     display: flex;
     justify-content: space-between;
-    margin-top: 30px;
+    margin-top: 10px;
   }
 </style>
 </head>
