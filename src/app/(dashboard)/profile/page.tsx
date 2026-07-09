@@ -7,9 +7,17 @@
 import { useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from '@/components/ui/Toaster'
-import { User, Loader2, Camera, KeyRound, MessageCircle } from 'lucide-react'
+import { User, Loader2, Camera, KeyRound, MessageCircle, FileText } from 'lucide-react'
 import Link from 'next/link'
-import { ROLE_LABEL, formatDateTH } from '@/utils'
+import { ROLE_LABEL, formatDateTH, cn } from '@/utils'
+
+const CONTRACT_STATUS_LABEL: Record<string, string> = {
+  draft: 'ร่าง', active: 'ใช้งาน', expired: 'หมดอายุ', terminated: 'ยกเลิก',
+}
+const CONTRACT_STATUS_COLOR: Record<string, string> = {
+  draft: 'bg-gray-100 text-gray-600', active: 'bg-green-100 text-green-700',
+  expired: 'bg-amber-100 text-amber-700', terminated: 'bg-red-100 text-red-700',
+}
 
 type ProfileUser = {
   id: string
@@ -26,11 +34,17 @@ type ProfileUser = {
   line_user_id: string | null
 }
 
-async function fetchProfile() {
+type ProfileData = {
+  user: ProfileUser
+  contracts: { id: string; contract_no: string; contract_type: string; status: string; start_date: string; position_th: string | null; department: string | null }[]
+  certificates: { id: string; cert_no: string; cert_type: string; purpose: string | null; issued_date: string }[]
+}
+
+async function fetchProfile(): Promise<ProfileData> {
   const res  = await fetch('/api/profile')
   const json = await res.json()
   if (!res.ok) throw new Error(json.error)
-  return json.data?.user as ProfileUser
+  return json.data as ProfileData
 }
 
 export default function ProfilePage() {
@@ -40,10 +54,13 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
 
-  const { data: user, isLoading } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['my-profile'],
     queryFn: fetchProfile,
   })
+  const user         = data?.user
+  const contracts     = data?.contracts ?? []
+  const certificates   = data?.certificates ?? []
 
   const phoneValue = phone ?? user?.phone ?? ''
 
@@ -156,6 +173,32 @@ export default function ProfilePage() {
             </button>
           </div>
         </div>
+      </div>
+
+      {/* Read-only: own contracts + certificates */}
+      <div className="card card-body space-y-3">
+        <h3 className="text-sm font-medium text-gray-700 border-b border-gray-100 pb-2 flex items-center gap-2">
+          <FileText className="w-4 h-4 text-gray-400" /> สัญญาจ้างและใบรับรองของฉัน
+        </h3>
+        {contracts.length === 0 && certificates.length === 0 ? (
+          <p className="text-xs text-gray-400">ยังไม่มีเอกสาร</p>
+        ) : (
+          <div className="space-y-2 text-sm">
+            {contracts.map(c => (
+              <div key={c.id} className="flex items-center justify-between">
+                <span className="text-gray-700">{c.contract_no} — {c.position_th ?? '—'} {c.department ? `(${c.department})` : ''}</span>
+                <span className={cn('badge', CONTRACT_STATUS_COLOR[c.status])}>{CONTRACT_STATUS_LABEL[c.status] ?? c.status}</span>
+              </div>
+            ))}
+            {certificates.map(c => (
+              <div key={c.id} className="flex items-center justify-between">
+                <span className="text-gray-700">{c.cert_no} — {c.purpose ?? c.cert_type}</span>
+                <span className="text-xs text-gray-400">{formatDateTH(c.issued_date)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <p className="text-xs text-gray-400">ต้องการสำเนาเอกสาร กรุณาติดต่อ HR</p>
       </div>
 
       {/* Quick links */}

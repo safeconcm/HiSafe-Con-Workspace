@@ -27,7 +27,18 @@ export async function GET(req: NextRequest) {
     .eq('id', session.id)
     .single()
   if (error) return serverError(error)
-  return ok({ user: data })
+
+  // Employees can see their own contracts and certificates (read-only) —
+  // deliberately NOT salary_records, which stays Admin/HR-only, matching
+  // the "admin/HR see everything, employee sees a subset" access model.
+  const [{ data: contracts }, { data: certificates }] = await Promise.all([
+    supabase.from('contracts').select('id, contract_no, contract_type, status, start_date, end_date, position_th, department')
+      .eq('user_id', session.id).order('created_at', { ascending: false }),
+    supabase.from('employment_certificates').select('id, cert_no, cert_type, purpose, issued_date')
+      .eq('user_id', session.id).order('created_at', { ascending: false }),
+  ])
+
+  return ok({ user: data, contracts: contracts ?? [], certificates: certificates ?? [] })
 }
 
 export async function PATCH(req: NextRequest) {

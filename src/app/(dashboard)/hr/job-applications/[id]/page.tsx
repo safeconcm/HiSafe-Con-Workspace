@@ -12,7 +12,7 @@ import { toast }  from '@/components/ui/Toaster'
 import { cn }     from '@/utils'
 import {
   ArrowLeft, Loader2, Printer, FileText, Download,
-  Users, GraduationCap, Briefcase, Languages, Star, Phone, Info,
+  Users, GraduationCap, Briefcase, Languages, Star, Phone, Info, UserPlus, CheckCircle2,
 } from 'lucide-react'
 import {
   LIVING_WITH_LABEL, MILITARY_STATUS_LABEL, MARITAL_STATUS_LABEL, GENDER_LABEL,
@@ -87,6 +87,33 @@ export default function JobApplicationDetailPage() {
       toast.success('บันทึกแล้ว')
     },
     onError: (e: Error) => toast.error('บันทึกไม่สำเร็จ', e.message),
+  })
+
+  const [employeeCode, setEmployeeCode] = useState('')
+  const [hireRole, setHireRole] = useState('employee')
+  const [hiredUserId, setHiredUserId] = useState<string | null>(null)
+
+  const hire = useMutation({
+    mutationFn: async () => {
+      const res  = await fetch(`/api/hr/job-applications/${id}/hire`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          employee_code: employeeCode, role: hireRole,
+          position_th: hireForm.hire_position, department: hireForm.hire_department,
+          base_salary: hireForm.hire_salary, hire_date: hireForm.hire_start_date,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error)
+      return json.data
+    },
+    onSuccess: (data) => {
+      setHiredUserId(data.user_id)
+      qc.invalidateQueries({ queryKey: ['job-application', id] })
+      qc.invalidateQueries({ queryKey: ['job-applications'] })
+      toast.success('รับเข้าทำงานสำเร็จ สร้างบัญชีพนักงานแล้ว')
+    },
+    onError: (e: Error) => toast.error('รับเข้าทำงานไม่สำเร็จ', e.message),
   })
 
   if (isLoading || !app) {
@@ -367,6 +394,50 @@ export default function JobApplicationDetailPage() {
             >
               {patch.isPending ? 'กำลังบันทึก...' : 'บันทึกข้อมูลการพิจารณา'}
             </button>
+          </div>
+
+          {/* Convert to employee */}
+          <div className="card card-body space-y-3">
+            <h3 className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+              <UserPlus className="w-4 h-4 text-gray-400" />
+              รับเข้าทำงานเป็นพนักงาน
+            </h3>
+            {app.converted_user_id || hiredUserId ? (
+              <div className="flex items-center gap-2 text-green-700 bg-green-50 rounded-lg px-4 py-3 text-sm">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>รับเข้าทำงานแล้ว —{' '}
+                  <Link href={`/admin/users/${hiredUserId ?? app.converted_user_id}`} className="underline font-medium">
+                    ดูข้อมูลพนักงาน
+                  </Link>
+                </span>
+              </div>
+            ) : (
+              <>
+                <p className="text-xs text-gray-400">
+                  สร้างบัญชีพนักงานจากข้อมูลในใบสมัคร (ชื่อ อีเมล เบอร์โทร รูปถ่าย) พร้อมสัญญาทดลองงานเริ่มต้น — ใช้ข้อมูล ตำแหน่ง/แผนก/เงินเดือน/วันเริ่มงาน จากช่อง &quot;การพิจารณาว่าจ้าง&quot; ด้านบน
+                </p>
+                <div>
+                  <label className="form-label text-xs">รหัสพนักงาน *</label>
+                  <input className="form-input text-sm" value={employeeCode} onChange={e => setEmployeeCode(e.target.value)} placeholder="เช่น SC-045" />
+                </div>
+                <div>
+                  <label className="form-label text-xs">Role</label>
+                  <select className="form-input text-sm" value={hireRole} onChange={e => setHireRole(e.target.value)}>
+                    <option value="employee">พนักงาน</option>
+                    <option value="supervisor">หัวหน้างาน</option>
+                    <option value="hr">HR</option>
+                  </select>
+                </div>
+                <button
+                  onClick={() => hire.mutate()}
+                  disabled={!employeeCode.trim() || hire.isPending}
+                  className="w-full flex items-center justify-center gap-2 rounded-lg bg-green-700 text-white px-4 py-2 text-sm font-medium hover:bg-green-800 disabled:opacity-60"
+                >
+                  {hire.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
+                  รับเข้าทำงาน
+                </button>
+              </>
+            )}
           </div>
         </div>
       </div>

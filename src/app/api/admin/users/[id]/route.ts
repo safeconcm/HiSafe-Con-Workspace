@@ -44,7 +44,30 @@ export async function GET(req: NextRequest, ctx: Ctx) {
     .eq('user_id', params.id)
     .eq('year', new Date().getFullYear())
 
-  return ok({ user, balances: balances ?? [] })
+  // Aggregate the "employee 360" data that used to require visiting several
+  // separate pages: contracts, certificates, salary history, and recent
+  // timesheets. All scoped to this one user, newest first.
+  const [
+    { data: contracts },
+    { data: certificates },
+    { data: salaryRecords },
+    { data: timesheets },
+    { data: jobApplication },
+  ] = await Promise.all([
+    supabase.from('contracts').select('*').eq('user_id', params.id).order('created_at', { ascending: false }),
+    supabase.from('employment_certificates').select('*').eq('user_id', params.id).order('created_at', { ascending: false }),
+    supabase.from('salary_records').select('*').eq('user_id', params.id).order('effective_date', { ascending: false }),
+    supabase.from('timesheets').select('*').eq('user_id', params.id).order('year', { ascending: false }).order('month', { ascending: false }).limit(6),
+    supabase.from('job_applications').select('id, position_applied_1, hire_position, hire_department, hire_salary, hire_start_date, status, created_at')
+      .eq('converted_user_id', params.id).maybeSingle(),
+  ])
+
+  return ok({
+    user, balances: balances ?? [],
+    contracts: contracts ?? [], certificates: certificates ?? [],
+    salary_records: salaryRecords ?? [], timesheets: timesheets ?? [],
+    job_application: jobApplication ?? null,
+  })
 }
 
 export async function PATCH(req: NextRequest, ctx: Ctx) {
