@@ -7,6 +7,7 @@ import {
   getSessionFromHeaders, createAdminSupabaseClient,
   ok, unauthorized, serverError,
 } from '@/lib/api-helpers'
+import { getWorkingDayMapForMonth } from '@/lib/work-schedule'
 
 export async function GET(req: NextRequest) {
   const session = getSessionFromHeaders(req)
@@ -77,7 +78,17 @@ export async function GET(req: NextRequest) {
       .eq('status', 'active')
       .order('job_code')
 
-    return ok({ timesheet: ts, holidays: holidays ?? [], leaves: leaves ?? [], jobs: jobs ?? [] })
+    // This company's actual working-day pattern for the month (weekly
+    // pattern + date overrides — see src/lib/work-schedule.ts), so the
+    // on-screen grid shades/locks the right days instead of assuming
+    // every company's weekend is Sat+Sun. Sent as a plain object since
+    // Map isn't JSON-serializable.
+    const workingDayMap = await getWorkingDayMapForMonth(supabase, session.company_id, y, m)
+
+    return ok({
+      timesheet: ts, holidays: holidays ?? [], leaves: leaves ?? [], jobs: jobs ?? [],
+      workingDays: Object.fromEntries(workingDayMap),
+    })
   }
 
   // ── List: all my timesheets ────────────────────────────────

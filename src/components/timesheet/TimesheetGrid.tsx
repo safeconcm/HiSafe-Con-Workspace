@@ -52,6 +52,12 @@ interface Props {
   jobs:       Job[]
   holidays:   Holiday[]
   leaves:     LeaveRecord[]
+  // This company's working-day pattern for the month, keyed by
+  // day-of-month (1..31) -> is this a working day. Comes from
+  // /api/timesheet's workingDays field (see src/lib/work-schedule.ts).
+  // Falls back to the old Sat/Sun assumption if not provided, so nothing
+  // breaks if an older cached response lacks the field.
+  workingDays?: Record<number, boolean>
   savedLines: TimesheetLine[]
   disabled:   boolean           // true when submitted/approved
   onChange:   (lines: DayState[]) => void
@@ -60,7 +66,7 @@ interface Props {
 const TH_DAYS = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส']
 const TH_MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
 
-export function TimesheetGrid({ year, month, jobs, holidays, leaves, savedLines, disabled, onChange }: Props) {
+export function TimesheetGrid({ year, month, jobs, holidays, leaves, workingDays, savedLines, disabled, onChange }: Props) {
 
   // Build lookup maps
   const holidayMap = useMemo(() =>
@@ -169,7 +175,7 @@ export function TimesheetGrid({ year, month, jobs, holidays, leaves, savedLines,
       <div className="flex flex-wrap gap-3 text-xs text-gray-500">
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-100 inline-block"/>&nbsp;วันหยุด</span>
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-green-100 inline-block"/>&nbsp;วันลา</span>
-        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-gray-100 inline-block"/>&nbsp;เสาร์-อาทิตย์</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-gray-100 inline-block"/>&nbsp;วันหยุดประจำสัปดาห์</span>
       </div>
 
       {/* Grid */}
@@ -191,7 +197,10 @@ export function TimesheetGrid({ year, month, jobs, holidays, leaves, savedLines,
                 const dateStr    = toISODate(day)
                 const dow        = day.getDay()
                 const dayDate    = day.getDate()
-                const weekend    = isWeekend(day)
+                // Use this company's actual work schedule when provided;
+                // fall back to the old Sat/Sun assumption otherwise (see
+                // Props.workingDays doc comment above).
+                const weekend    = workingDays ? workingDays[dayDate] === false : isWeekend(day)
                 const holiday    = holidayMap.get(dateStr)
                 const leave      = leaveMap.get(dateStr)
                 const locked     = leaveLockedMap.get(dateStr) ?? 0
@@ -215,7 +224,7 @@ export function TimesheetGrid({ year, month, jobs, holidays, leaves, savedLines,
                 return (
                   <tr key={dateStr} className={cn('border-b border-gray-100 transition-colors', rowBg)}>
                     {/* Day name */}
-                    <td className={cn('px-3 py-2 text-xs', dow === 0 || dow === 6 ? 'text-gray-400' : 'text-gray-600')}>
+                    <td className={cn('px-3 py-2 text-xs', weekend ? 'text-gray-400' : 'text-gray-600')}>
                       {TH_DAYS[dow]}
                     </td>
 

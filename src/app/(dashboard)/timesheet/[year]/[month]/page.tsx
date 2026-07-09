@@ -32,11 +32,12 @@ export default function TimesheetMonthPage() {
 
   const { data, isLoading, refetch } = useMonthTimesheet(year, month)
 
-  const ts       = data?.timesheet
-  const jobs     = data?.jobs     ?? []
-  const holidays = data?.holidays ?? []
-  const leaves   = data?.leaves   ?? []
-  const lines    = ts?.lines      ?? []
+  const ts         = data?.timesheet
+  const jobs       = data?.jobs       ?? []
+  const holidays   = data?.holidays   ?? []
+  const leaves     = data?.leaves     ?? []
+  const lines      = ts?.lines        ?? []
+  const workingDays = data?.workingDays ?? {}
 
   const pendingLines   = useRef<any[]>([])
   const handleChange   = useCallback((l: any[]) => { pendingLines.current = l }, [])
@@ -217,6 +218,7 @@ export default function TimesheetMonthPage() {
           jobs={jobs}
           holidays={holidays}
           leaves={leaves}
+          workingDays={workingDays}
           savedLines={lines}
           disabled={disabled}
           onChange={handleChange}

@@ -8,6 +8,7 @@ import {
   ok, created, badRequest, unauthorized, serverError,
   writeAuditLog, dispatchNotifications, isHROrAdmin,
 } from '@/lib/api-helpers'
+import { isWorkingDay } from '@/lib/work-schedule'
 
 export async function GET(req: NextRequest) {
   const session = getSessionFromHeaders(req)
@@ -65,10 +66,13 @@ export async function POST(req: NextRequest) {
 
   const supabase = createAdminSupabaseClient()
 
-  // Determine OT type from date
-  const d   = new Date(ot_date)
-  const dow = d.getDay()
-  let ot_type: 'weekday' | 'weekend' | 'holiday' = dow === 0 || dow === 6 ? 'weekend' : 'weekday'
+  // Determine OT type from date — uses this company's actual work schedule
+  // (weekly pattern + date overrides) instead of assuming Sat/Sun are
+  // always the weekend, so e.g. Highcon's working Saturdays correctly
+  // classify as 'weekday' OT, not 'weekend' OT.
+  const d = new Date(ot_date)
+  const workingDay = await isWorkingDay(supabase, session.company_id, d)
+  let ot_type: 'weekday' | 'weekend' | 'holiday' = workingDay ? 'weekday' : 'weekend'
 
   const { data: holiday } = await supabase
     .from('holidays').select('id')

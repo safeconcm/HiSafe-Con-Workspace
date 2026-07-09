@@ -4,7 +4,7 @@
 
 import { useState }        from 'react'
 import { useQuery }        from '@tanstack/react-query'
-import { getDaysInMonth, isWeekend, toISODate, LEAVE_TYPE_LABEL, LEAVE_TYPE_COLOR, cn, formatDays } from '@/utils'
+import { getDaysInMonth, toISODate, LEAVE_TYPE_LABEL, LEAVE_TYPE_COLOR, cn, formatDays } from '@/utils'
 import { CalendarDays, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
 import Link from 'next/link'
 import type { LeaveType } from '@/types/database'
@@ -35,6 +35,12 @@ async function fetchHolidays(year: number, month: number) {
   )
 }
 
+async function fetchWorkingDays(year: number, month: number): Promise<Record<number, boolean>> {
+  const res  = await fetch(`/api/work-schedule/month?year=${year}&month=${month}`)
+  const json = await res.json()
+  return json.data?.workingDays ?? {}
+}
+
 export default function TeamLeavePage() {
   const now   = new Date()
   const [year,  setYear]  = useState(now.getFullYear())
@@ -47,6 +53,10 @@ export default function TeamLeavePage() {
   const { data: holidays = [], isLoading: l2 } = useQuery({
     queryKey: ['holidays-month', year, month],
     queryFn:  () => fetchHolidays(year, month),
+  })
+  const { data: workingDays = {} } = useQuery({
+    queryKey: ['working-days-month', year, month],
+    queryFn:  () => fetchWorkingDays(year, month),
   })
 
   const days = getDaysInMonth(year, month)
@@ -135,12 +145,13 @@ export default function TeamLeavePage() {
                     const ds  = toISODate(day)
                     const dow = day.getDay()
                     const isHoliday = holidaySet.has(ds)
+                    const isNonWorking = workingDays[day.getDate()] === false
                     return (
                       <th
                         key={ds}
                         className={cn(
                           'text-center px-0.5 py-1.5 font-normal min-w-[28px]',
-                          dow === 0 || dow === 6 ? 'text-gray-300' :
+                          isNonWorking ? 'text-gray-300' :
                           isHoliday ? 'text-red-400' : 'text-gray-500'
                         )}
                       >
@@ -179,7 +190,7 @@ export default function TeamLeavePage() {
                         cellClass = colorMap[leaveType] ?? 'bg-purple-200'
                       } else if (isHoliday) {
                         cellClass = 'bg-red-50'
-                      } else if (isWeekend(day)) {
+                      } else if (workingDays[day.getDate()] === false) {
                         cellClass = 'bg-gray-50'
                       }
 
