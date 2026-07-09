@@ -9,7 +9,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from '@/components/ui/Toaster'
 import { fullNameTH, cn } from '@/utils'
-import { ArrowLeft, Save, Loader2, CheckCircle2, FileText, Wallet } from 'lucide-react'
+import { ArrowLeft, Save, Loader2, CheckCircle2, FileText, Wallet, Download } from 'lucide-react'
 import Link from 'next/link'
 
 const CONTRACT_TYPES: Record<string, string> = {
@@ -123,6 +123,16 @@ export default function ContractDetailPage() {
           <p className="text-sm text-gray-400 font-mono">{contract.contract_no} · {contract.user?.employee_code}</p>
         </div>
         <span className={cn('badge', STATUS_COLOR[contract.status])}>{STATUS_LABEL[contract.status]}</span>
+        {/* PDF download — renders on demand via /api/pdf/contract/:id (see
+            src/lib/pdf/render.ts), same pattern as /api/pdf/leave. */}
+        <button
+          type="button"
+          onClick={() => window.open(`/api/pdf/contract/${id}`, '_blank')}
+          className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 whitespace-nowrap"
+        >
+          <Download className="w-4 h-4" />
+          ดาวน์โหลด PDF
+        </button>
       </div>
 
       {contract.probation_status && (
