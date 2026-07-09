@@ -36,7 +36,21 @@ function chromiumPackUrl(): string {
   // can't drift out of sync the way a hardcoded external URL did.
   const host = process.env.VERCEL_URL ?? process.env.NEXT_PUBLIC_APP_URL?.replace(/^https?:\/\//, '')
   if (!host) throw new Error('Cannot resolve chromium-pack.tar URL: VERCEL_URL and NEXT_PUBLIC_APP_URL are both unset')
-  return `https://${host}/chromium-pack.tar`
+
+  // This project has Vercel Authentication (Deployment Protection) enabled
+  // on preview deployments — confirmed by a self-fetch of /chromium-pack.tar
+  // getting redirected to Vercel's own login page (verified via
+  // mcp__workspace__web_fetch, which has no session cookie) and, from inside
+  // the actual serverless function, failing with "Invalid tar header" for
+  // the same reason (it received the login page's HTML instead of the tar).
+  // VERCEL_AUTOMATION_BYPASS_SECRET is Vercel's documented mechanism for a
+  // deployment to call its own protected endpoints: a project-level secret
+  // set as a system env var (Settings -> Deployment Protection -> Protection
+  // Bypass for Automation), sent as the x-vercel-protection-bypass query
+  // param/header to skip the auth wall for just this request.
+  const bypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET
+  const query = bypass ? `?x-vercel-protection-bypass=${bypass}` : ''
+  return `https://${host}/chromium-pack.tar${query}`
 }
 
 // Returns a plain Uint8Array rather than Node's Buffer — Buffer is a
