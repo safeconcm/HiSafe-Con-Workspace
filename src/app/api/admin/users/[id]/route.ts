@@ -75,6 +75,30 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     updates.resign_date = new Date().toISOString().split('T')[0]
   }
 
+  // Email is handled separately: it's globally unique and also lives on the
+  // linked Supabase Auth account, so changing it needs a format check, a
+  // uniqueness check, and — if the user has ever logged in (auth_user_id set)
+  // — an update to auth.users too, otherwise login would break silently.
+  if ('email' in body) {
+    const newEmail = String(body.email ?? '').trim().toLowerCase()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+      return badRequest('รูปแบบอีเมลไม่ถูกต้อง')
+    }
+    if (newEmail !== existing.email) {
+      const { data: dupe } = await supabase
+        .from('users').select('id').eq('email', newEmail).neq('id', params.id).maybeSingle()
+      if (dupe) return badRequest('มีผู้ใช้อื่นใช้อีเมลนี้อยู่แล้ว')
+
+      if (existing.auth_user_id) {
+        const { error: authErr } = await supabase.auth.admin.updateUserById(
+          existing.auth_user_id, { email: newEmail, email_confirm: true }
+        )
+        if (authErr) return serverError(new Error(`เปลี่ยนอีเมลไม่สำเร็จ (ระบบล็อกอิน): ${authErr.message}`))
+      }
+      updates.email = newEmail
+    }
+  }
+
   const { data: updated, error } = await supabase
     .from('users').update(updates).eq('id', params.id).select().single()
   if (error) return serverError(error)

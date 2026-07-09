@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, CalendarDays, Clock, Briefcase,
   Bell, Users, Building2, Settings, ChevronDown,
-  ClipboardList, BarChart3, ShieldCheck, LogOut, Wallet, MessageCircle, Megaphone
+  ClipboardList, BarChart3, ShieldCheck, LogOut, Wallet, MessageCircle, Megaphone, User
 } from 'lucide-react'
 import { cn, fullNameTH } from '@/utils'
 import type { SessionUser } from '@/types/database'
@@ -117,6 +117,11 @@ const NAV_ITEMS: NavItem[] = [
     label: 'หน้าหลัก',
     href:  '/dashboard',
     icon:  LayoutDashboard,
+  },
+  {
+    label: 'โปรไฟล์ของฉัน',
+    href:  '/profile',
+    icon:  User,
   },
   {
     label: 'การลา',

@@ -35,7 +35,7 @@ export default function UserDetailPage() {
     first_name_th: '', last_name_th: '',
     first_name_en: '', last_name_en: '',
     position_th: '', department: '',
-    phone: '', role: 'employee', status: 'active', hire_date: '',
+    phone: '', email: '', role: 'employee', status: 'active', hire_date: '',
   })
 
   useEffect(() => {
@@ -48,6 +48,7 @@ export default function UserDetailPage() {
       position_th:   user.position_th   ?? '',
       department:    user.department    ?? '',
       phone:         user.phone         ?? '',
+      email:         user.email         ?? '',
       role:          user.role,
       status:        user.status,
       hire_date:     user.hire_date     ?? '',
@@ -158,6 +159,11 @@ export default function UserDetailPage() {
           <div>
             <label className="form-label">เบอร์โทร</label>
             <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} className="form-input" />
+          </div>
+          <div>
+            <label className="form-label">อีเมล (ใช้ login ด้วย)</label>
+            <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="form-input" />
+            <p className="text-xs text-amber-600 mt-1">เปลี่ยนแล้วต้องใช้อีเมลใหม่ login ครั้งถัดไป</p>
           </div>
           <div>
             <label className="form-label">วันเริ่มงาน</label>
