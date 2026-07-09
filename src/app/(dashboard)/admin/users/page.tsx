@@ -9,6 +9,7 @@ import {
   ChevronRight, UserCheck, UserX,
 } from 'lucide-react'
 import type { UserRole, UserStatus } from '@/types/database'
+import { useAuthStore } from '@/store/auth.store'
 
 const STATUS_COLOR: Record<UserStatus, string> = {
   active:   'bg-green-100 text-green-700',
@@ -37,6 +38,11 @@ export default function AdminUsersPage() {
   const [status, setStatus] = useState('active')
   const [page,   setPage]   = useState(1)
 
+  // HR can view this list (same as Admin — see /api/admin/users GET), but
+  // creating/importing users stays Admin-only, matching the API guard, so
+  // those buttons are hidden rather than left as dead-end links for HR.
+  const isAdmin = useAuthStore(s => s.session?.role) === 'admin'
+
   const { data, isLoading } = useUsers({ q: q || undefined, role: role || undefined, status, page, limit: 30 })
   const users = data?.users ?? []
   const total = data?.total ?? 0
@@ -47,22 +53,24 @@ export default function AdminUsersPage() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1>จัดการผู้ใช้</h1>
-        <div className="flex items-center gap-2">
-          <Link
-            href="/admin/users/import"
-            className="flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
-          >
-            <Upload className="w-4 h-4" />
-            Import CSV
-          </Link>
-          <Link
-            href="/admin/users/new"
-            className="flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800"
-          >
-            <Plus className="w-4 h-4" />
-            เพิ่มผู้ใช้
-          </Link>
-        </div>
+        {isAdmin && (
+          <div className="flex items-center gap-2">
+            <Link
+              href="/admin/users/import"
+              className="flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+            >
+              <Upload className="w-4 h-4" />
+              Import CSV
+            </Link>
+            <Link
+              href="/admin/users/new"
+              className="flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800"
+            >
+              <Plus className="w-4 h-4" />
+              เพิ่มผู้ใช้
+            </Link>
+          </div>
+        )}
       </div>
 
       {/* Filters */}

@@ -12,10 +12,22 @@ import { pickActiveRow, ACTIVE_COMPANY_COOKIE } from '@/lib/company-context'
 // Routes that don't require authentication
 const PUBLIC_ROUTES = ['/login', '/forgot-password', '/reset-password', '/api/auth/callback', '/api/auth/logout', '/manifest.json', '/sw.js', '/apply', '/api/public']
 
-// Routes that require specific roles
+// Routes that require specific roles. Matched by longest-prefix-wins (see the
+// route-guard loop below), so more specific paths must be listed — order in
+// this object doesn't matter, only string length does.
+// HR can view employee records (list + the employee-360 detail page) since
+// the underlying APIs already treat HR the same as Admin for reads — see
+// GET /api/admin/users and GET /api/admin/users/[id]. Creating/importing
+// users, org structure, job codes, and system settings stay Admin-only.
 const ROLE_ROUTES: Record<string, string[]> = {
-  '/hr':    ['hr', 'admin'],
-  '/admin': ['admin'],
+  '/hr':                  ['hr', 'admin'],
+  '/admin/users/new':     ['admin'],
+  '/admin/users/import':  ['admin'],
+  '/admin/organization':  ['admin'],
+  '/admin/jobs':          ['admin'],
+  '/admin/settings':      ['admin'],
+  '/admin/users':         ['hr', 'admin'],
+  '/admin':               ['admin'],
 }
 
 export async function middleware(request: NextRequest) {
@@ -134,10 +146,14 @@ export async function middleware(request: NextRequest) {
   }
 
   // ── Role-based route guard ───────────────────────────────────
-  for (const [prefix, allowedRoles] of Object.entries(ROLE_ROUTES)) {
-    if (pathname.startsWith(prefix) && !allowedRoles.includes(sessionUser.role)) {
-      return NextResponse.redirect(new URL('/dashboard', request.url), 303)
-    }
+  // Longest-prefix-wins: e.g. "/admin/users/new" must be checked before the
+  // broader "/admin/users" and "/admin" rules, otherwise the first matching
+  // (shorter) prefix in object-iteration order would win instead.
+  const matchedPrefix = Object.keys(ROLE_ROUTES)
+    .filter(prefix => pathname.startsWith(prefix))
+    .sort((a, b) => b.length - a.length)[0]
+  if (matchedPrefix && !ROLE_ROUTES[matchedPrefix].includes(sessionUser.role)) {
+    return NextResponse.redirect(new URL('/dashboard', request.url), 303)
   }
 
   // ── Inject session into request headers for API routes ───────

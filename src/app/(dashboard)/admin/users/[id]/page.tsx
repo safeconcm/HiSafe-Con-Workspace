@@ -20,6 +20,7 @@ import {
 import Link from 'next/link'
 import { useState, useEffect, useRef } from 'react'
 import type { UserRole, UserStatus, LeaveType } from '@/types/database'
+import { useAuthStore } from '@/store/auth.store'
 
 const STATUS_LABEL: Record<UserStatus, string> = {
   active: 'ทำงานอยู่', inactive: 'ระงับการใช้งาน', resigned: 'ลาออกแล้ว',
@@ -51,6 +52,14 @@ export default function UserDetailPage() {
 
   const { data, isLoading } = useUser(id)
   const update = useUpdateUser(id)
+
+  // HR can view this whole page (see GET /api/admin/users/[id]), but editing
+  // profile fields / role / status / email and uploading a photo on someone
+  // else's behalf stays Admin-only, matching the PATCH and avatar API guards
+  // — so those controls render read-only for HR instead of failing on save
+  // with a 403. Leave-balance adjustment is excluded from this: HR is
+  // already allowed there (see /api/hr/leave/adjustment).
+  const isAdmin = useAuthStore(s => s.session?.role) === 'admin'
 
   const user           = data?.user
   const balances        = data?.balances ?? []
@@ -171,25 +180,29 @@ export default function UserDetailPage() {
                 {user.first_name_th.charAt(0)}
               </div>
             )}
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              disabled={uploadingPhoto}
-              className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-blue-700 text-white flex items-center justify-center hover:bg-blue-800 disabled:opacity-60"
-              title="เปลี่ยนรูปโปรไฟล์"
-            >
-              {uploadingPhoto ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Camera className="w-2.5 h-2.5" />}
-            </button>
-            <input
-              ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp"
-              className="hidden" onChange={e => onPhotoChange(e.target.files?.[0] ?? null)}
-            />
+            {isAdmin && (
+              <>
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadingPhoto}
+                  className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-blue-700 text-white flex items-center justify-center hover:bg-blue-800 disabled:opacity-60"
+                  title="เปลี่ยนรูปโปรไฟล์"
+                >
+                  {uploadingPhoto ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <Camera className="w-2.5 h-2.5" />}
+                </button>
+                <input
+                  ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp"
+                  className="hidden" onChange={e => onPhotoChange(e.target.files?.[0] ?? null)}
+                />
+              </>
+            )}
           </div>
           <div>
             <h1 className="text-lg font-semibold">{fullNameTH(user)}</h1>
             <p className="text-sm text-gray-400">{user.employee_code} · {user.email}</p>
           </div>
         </div>
-        {tab === 'general' && (
+        {tab === 'general' && isAdmin && (
           <button
             onClick={handleSave}
             disabled={update.isPending}
@@ -246,7 +259,8 @@ export default function UserDetailPage() {
                   <input
                     value={(form as any)[field]}
                     onChange={e => setForm(f => ({ ...f, [field]: e.target.value }))}
-                    className="form-input"
+                    className="form-input disabled:bg-gray-50 disabled:text-gray-500"
+                    disabled={!isAdmin}
                   />
                 </div>
               ))}
@@ -256,31 +270,34 @@ export default function UserDetailPage() {
           {/* Work Info */}
           <div className="card card-body space-y-4">
             <h3 className="text-sm font-medium text-gray-700 border-b border-gray-100 pb-2">ข้อมูลการทำงาน</h3>
+            {!isAdmin && (
+              <p className="text-xs text-gray-400 -mt-2">ดูได้อย่างเดียว แก้ไขได้เฉพาะ Admin</p>
+            )}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="form-label">แผนก</label>
-                <input value={form.department} onChange={e => setForm(f => ({ ...f, department: e.target.value }))} className="form-input" />
+                <input value={form.department} onChange={e => setForm(f => ({ ...f, department: e.target.value }))} className="form-input disabled:bg-gray-50 disabled:text-gray-500" disabled={!isAdmin} />
               </div>
               <div>
                 <label className="form-label">ตำแหน่ง</label>
-                <input value={form.position_th} onChange={e => setForm(f => ({ ...f, position_th: e.target.value }))} className="form-input" />
+                <input value={form.position_th} onChange={e => setForm(f => ({ ...f, position_th: e.target.value }))} className="form-input disabled:bg-gray-50 disabled:text-gray-500" disabled={!isAdmin} />
               </div>
               <div>
                 <label className="form-label">เบอร์โทร</label>
-                <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} className="form-input" />
+                <input value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} className="form-input disabled:bg-gray-50 disabled:text-gray-500" disabled={!isAdmin} />
               </div>
               <div>
                 <label className="form-label">อีเมล (ใช้ login ด้วย)</label>
-                <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="form-input" />
-                <p className="text-xs text-amber-600 mt-1">เปลี่ยนแล้วต้องใช้อีเมลใหม่ login ครั้งถัดไป</p>
+                <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="form-input disabled:bg-gray-50 disabled:text-gray-500" disabled={!isAdmin} />
+                {isAdmin && <p className="text-xs text-amber-600 mt-1">เปลี่ยนแล้วต้องใช้อีเมลใหม่ login ครั้งถัดไป</p>}
               </div>
               <div>
                 <label className="form-label">วันเริ่มงาน</label>
-                <input type="date" value={form.hire_date} onChange={e => setForm(f => ({ ...f, hire_date: e.target.value }))} className="form-input" />
+                <input type="date" value={form.hire_date} onChange={e => setForm(f => ({ ...f, hire_date: e.target.value }))} className="form-input disabled:bg-gray-50 disabled:text-gray-500" disabled={!isAdmin} />
               </div>
               <div>
                 <label className="form-label">Role</label>
-                <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))} className="form-input">
+                <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))} className="form-input disabled:bg-gray-50 disabled:text-gray-500" disabled={!isAdmin}>
                   {(Object.entries(ROLE_LABEL) as [UserRole, string][]).map(([v, l]) => (
                     <option key={v} value={v}>{l}</option>
                   ))}
@@ -288,7 +305,7 @@ export default function UserDetailPage() {
               </div>
               <div>
                 <label className="form-label">สถานะ</label>
-                <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} className="form-input">
+                <select value={form.status} onChange={e => setForm(f => ({ ...f, status: e.target.value }))} className="form-input disabled:bg-gray-50 disabled:text-gray-500" disabled={!isAdmin}>
                   {(Object.entries(STATUS_LABEL) as [UserStatus, string][]).map(([v, l]) => (
                     <option key={v} value={v}>{l}</option>
                   ))}
@@ -405,9 +422,11 @@ export default function UserDetailPage() {
                   </div>
                 )}
               </div>
-              <Link href="/admin/organization" className="mt-3 inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
-                แก้ไขใน Org Structure →
-              </Link>
+              {isAdmin && (
+                <Link href="/admin/organization" className="mt-3 inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
+                  แก้ไขใน Org Structure →
+                </Link>
+              )}
             </div>
           )}
         </div>
