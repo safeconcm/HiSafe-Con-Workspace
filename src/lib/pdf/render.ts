@@ -13,52 +13,39 @@
 // the function bundle size limit:
 // https://vercel.com/kb/guide/deploying-puppeteer-with-nextjs-on-vercel
 //
-// The "-min" package doesn't bundle the ~50MB Chromium binary. First attempt
-// pointed this at a hardcoded old external release (v123.0.1, Sparticuz's
-// GitHub) and it failed at runtime with "libnss3.so: cannot open shared
-// object file" — that binary predates changes to Vercel's Node.js runtime
-// base image and its shared-library expectations no longer match.
-//
-// Fixed by following Vercel's own official template
-// (https://github.com/gabenunez/puppeteer-on-vercel): self-host the pack
-// instead. scripts/postinstall-chromium.mjs packages the *actual* installed
-// @sparticuz/chromium version into public/chromium-pack.tar at install time,
-// and at runtime we fetch it from this same deployment's own URL — so the
-// binary always matches the pinned package version and this Vercel runtime,
-// on every environment (staging preview, production) automatically.
+// The "-min" package doesn't bundle the ~50MB Chromium binary, so it has to
+// come from somewhere else at runtime. This went through three attempts:
+//   1. A hardcoded old external release (v123.0.1, Sparticuz's GitHub) —
+//      failed with "libnss3.so: cannot open shared object file". That build
+//      predates changes to Vercel's Node.js runtime base image.
+//   2. Self-hosting the pack at public/chromium-pack.tar and fetching it
+//      from this deployment's own URL at runtime (Vercel's own template
+//      pattern: https://github.com/gabenunez/puppeteer-on-vercel) — failed
+//      because this project has Vercel Deployment Protection enabled, and
+//      the HTTP client @sparticuz/chromium-min uses internally
+//      (follow-redirects) doesn't retain the protection-bypass cookie across
+//      the redirect Vercel's bypass flow issues. Confirmed via Vercel's own
+//      request logs: every attempt got a 303, on both the ephemeral
+//      per-deployment URL and the stable git-branch alias, while the exact
+//      same URL worked fine from a browser or mcp__workspace__web_fetch
+//      (which do retain cookies across redirects).
+//   3. (Current) Skip the network fetch entirely. scripts/postinstall-
+//      chromium.mjs copies the actual installed @sparticuz/chromium
+//      version's binary into chromium-bin/ at install time, and
+//      next.config.ts's outputFileTracingIncludes ships that directory
+//      inside the PDF routes' own function bundle. chromium.executablePath()
+//      is given a local directory path (not a URL), which
+//      @sparticuz/chromium-min inflates straight from disk — no network
+//      call, no redirect, no protection interaction, and the binary always
+//      matches the pinned package version on every environment.
 
+import { join } from 'node:path'
 import chromium from '@sparticuz/chromium-min'
 import puppeteer from 'puppeteer-core'
 
-function chromiumPackUrl(): string {
-  // Deliberately NOT process.env.VERCEL_URL: that resolves to the
-  // ephemeral, deployment-specific hash hostname
-  // (hi-safe-con-workspace-<hash>-safeconcms-projects.vercel.app), and
-  // fetching /chromium-pack.tar from THAT host returns a 303 redirect whose
-  // target drops the bypass query param below, landing on Vercel's auth
-  // wall and producing "Invalid tar header" (the wall's HTML instead of the
-  // tar). Confirmed by directly comparing the two hosts with
-  // mcp__workspace__web_fetch: the hash host redirects, the stable
-  // git-branch alias host (VERCEL_BRANCH_URL, e.g.
-  // hi-safe-con-workspace-git-staging-*.vercel.app) does not.
-  const host = process.env.VERCEL_BRANCH_URL ?? process.env.VERCEL_URL ?? process.env.NEXT_PUBLIC_APP_URL?.replace(/^https?:\/\//, '')
-  if (!host) throw new Error('Cannot resolve chromium-pack.tar URL: VERCEL_BRANCH_URL, VERCEL_URL, and NEXT_PUBLIC_APP_URL are all unset')
-
-  // This project has Vercel Authentication (Deployment Protection) enabled
-  // on preview deployments — confirmed by a self-fetch of /chromium-pack.tar
-  // getting redirected to Vercel's own login page (verified via
-  // mcp__workspace__web_fetch, which has no session cookie) and, from inside
-  // the actual serverless function, failing with "Invalid tar header" for
-  // the same reason (it received the login page's HTML instead of the tar).
-  // VERCEL_AUTOMATION_BYPASS_SECRET is Vercel's documented mechanism for a
-  // deployment to call its own protected endpoints: a project-level secret
-  // set as a system env var (Settings -> Deployment Protection -> Protection
-  // Bypass for Automation), sent as the x-vercel-protection-bypass query
-  // param/header to skip the auth wall for just this request.
-  const bypass = process.env.VERCEL_AUTOMATION_BYPASS_SECRET
-  const query = bypass ? `?x-vercel-protection-bypass=${bypass}` : ''
-  return `https://${host}/chromium-pack.tar${query}`
-}
+// process.cwd() at runtime on Vercel is the function's own bundle root,
+// which is where outputFileTracingIncludes places chromium-bin/.
+const CHROMIUM_BIN_DIR = join(process.cwd(), 'chromium-bin')
 
 // Returns a plain Uint8Array rather than Node's Buffer — Buffer is a
 // structurally different generic type in this Next.js/TS setup and isn't
@@ -73,7 +60,7 @@ export async function renderPdfFromHtml(html: string): Promise<Uint8Array> {
   // passes `headless: true` directly. `args`/`executablePath` are unchanged.
   const browser = await puppeteer.launch({
     args: chromium.args,
-    executablePath: await chromium.executablePath(chromiumPackUrl()),
+    executablePath: await chromium.executablePath(CHROMIUM_BIN_DIR),
     headless: true,
   })
 

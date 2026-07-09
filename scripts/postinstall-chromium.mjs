@@ -1,25 +1,35 @@
 // scripts/postinstall-chromium.mjs
-// Packages the Chromium binary (from the full @sparticuz/chromium devDependency,
-// resolved at THIS build's install time) into public/chromium-pack.tar.
+// Copies the Chromium binary (from the full @sparticuz/chromium
+// devDependency, resolved at THIS build's install time) into
+// chromium-bin/ at the project root.
 //
-// Why: src/lib/pdf/render.ts uses @sparticuz/chromium-min at runtime, which
-// downloads a pre-built Chromium tar instead of bundling the ~50MB binary in
-// the function (Vercel's 250MB bundle limit). The first attempt at this
-// pointed at a hardcoded old release (v123.0.1) hosted on Sparticuz's GitHub,
-// which failed at runtime with "libnss3.so: cannot open shared object file" —
-// Vercel's Node.js runtime base image has moved on since Chromium 123 was
-// built, and the old binary's shared-library expectations no longer match.
+// History: src/lib/pdf/render.ts uses @sparticuz/chromium-min at runtime,
+// which needs the Chromium binary from somewhere other than its own npm
+// package (Vercel's 250MB function bundle limit rules out the full
+// @sparticuz/chromium as a production dependency). The first two attempts at
+// this fetched it over HTTP from this same deployment's own
+// public/chromium-pack.tar at runtime — first from a hardcoded old external
+// URL (broke: Chromium too old for Vercel's current runtime libraries),
+// then self-hosted (broke: this project has Vercel Deployment Protection
+// enabled, and the HTTP client @sparticuz/chromium-min uses internally,
+// follow-redirects, doesn't retain the protection-bypass cookie across the
+// redirect Vercel's bypass flow issues — confirmed via Vercel's own request
+// logs showing a 303 on every attempt, on both the ephemeral per-deployment
+// URL and the stable git-branch alias, while the exact same URL worked fine
+// from a browser or mcp__workspace__web_fetch, which do retain cookies
+// across redirects).
 //
-// The fix (matching Vercel's own official template,
-// https://github.com/gabenunez/puppeteer-on-vercel): self-host the pack by
-// building it fresh on every install, from whatever @sparticuz/chromium
-// version is actually pinned in package.json. That guarantees the binary
-// always matches the version puppeteer-core expects, instead of drifting
-// from an old external URL.
+// This sidesteps the whole class of self-fetch/redirect/cookie problems:
+// instead of downloading the binary over the network at runtime, it's
+// copied into chromium-bin/ at build time and shipped inside the function's
+// own bundle via next.config.ts's outputFileTracingIncludes. At runtime,
+// chromium.executablePath() is given a local directory path (not a URL),
+// which @sparticuz/chromium-min inflates directly from disk — no network
+// call, no redirect, no protection interaction at all.
 import { execSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { existsSync } from 'node:fs'
+import { existsSync, mkdirSync, cpSync } from 'node:fs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const projectRoot = dirname(__dirname)
@@ -39,14 +49,11 @@ async function main() {
       return
     }
 
-    const publicDir = join(projectRoot, 'public')
-    const outputPath = join(publicDir, 'chromium-pack.tar')
+    const outputDir = join(projectRoot, 'chromium-bin')
+    console.log('[postinstall-chromium] copying', binDir, '->', outputDir)
 
-    console.log('[postinstall-chromium] packaging', binDir, '->', outputPath)
-    execSync(`mkdir -p "${publicDir}" && tar -cf "${outputPath}" -C "${binDir}" .`, {
-      stdio: 'inherit',
-      cwd: projectRoot,
-    })
+    mkdirSync(outputDir, { recursive: true })
+    cpSync(binDir, outputDir, { recursive: true })
 
     console.log('[postinstall-chromium] done')
   } catch (err) {

@@ -39,7 +39,7 @@ yarn-error.log*
 # generated at install time by scripts/postinstall-chromium.mjs — see
 # src/lib/pdf/render.ts for why this isn't committed (it's rebuilt fresh on
 # every install so it always matches the pinned @sparticuz/chromium version)
-/public/chromium-pack.tar
+/chromium-bin
 
 # typescript
 *.tsbuildinfo
