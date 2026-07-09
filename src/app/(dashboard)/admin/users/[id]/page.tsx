@@ -15,7 +15,7 @@ import {
 } from '@/utils'
 import {
   ArrowLeft, Save, Loader2, User,
-  CalendarDays, Building2, FileText, Clock, Wallet, Camera, ExternalLink,
+  CalendarDays, Building2, FileText, Clock, Wallet, Camera, ExternalLink, Download,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useState, useEffect, useRef } from 'react'
@@ -202,6 +202,17 @@ export default function UserDetailPage() {
             <p className="text-sm text-gray-400">{user.employee_code} · {user.email}</p>
           </div>
         </div>
+        {/* 1-page profile summary PDF — renders on demand via
+            /api/pdf/employee-summary/:id (see src/lib/pdf/render.ts), same
+            pattern as /api/pdf/leave and /api/pdf/contract. */}
+        <button
+          type="button"
+          onClick={() => window.open(`/api/pdf/employee-summary/${id}`, '_blank')}
+          className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50 whitespace-nowrap"
+        >
+          <Download className="w-4 h-4" />
+          สรุปพนักงาน PDF
+        </button>
         {tab === 'general' && isAdmin && (
           <button
             onClick={handleSave}
