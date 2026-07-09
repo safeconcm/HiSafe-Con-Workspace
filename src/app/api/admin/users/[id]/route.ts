@@ -19,11 +19,17 @@ export async function GET(req: NextRequest, ctx: Ctx) {
 
   const supabase = createAdminSupabaseClient()
 
+  // NOTE: organization_nodes has TWO foreign keys pointing at users
+  // (user_id, and acting_approver_id for delegated approval). The top-level
+  // "org_node" embed below must pin the FK explicitly with
+  // "!organization_nodes_user_id_fkey" — without it, PostgREST can't tell
+  // which relationship to embed and errors out, which this route was
+  // silently mapping to a generic "not found" for every single user.
   const { data: user, error } = await supabase
     .from('users')
     .select(`
       *,
-      org_node:organization_nodes(
+      org_node:organization_nodes!organization_nodes_user_id_fkey(
         id, parent_id, depth, acting_approver_id,
         parent:organization_nodes!organization_nodes_parent_id_fkey(
           user:users!organization_nodes_user_id_fkey(id, first_name_th, last_name_th)
