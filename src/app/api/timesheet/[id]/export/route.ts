@@ -171,7 +171,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   worksheet.columns = [
     { width: 12 },
     { width: 22 },
-    ...dayNumbers.map(() => ({ width: 4 })),
+    ...dayNumbers.map(() => ({ width: 4.6 })),
     { width: 10 },
   ]
 
@@ -206,9 +206,9 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const headerRow = worksheet.addRow(headerLabels)
   headerRow.height = 26
   headerRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-    cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }
+    cell.font = { bold: true, size: 9, color: { argb: 'FFFFFFFF' } }
     cell.fill = FILL_HEADER
-    cell.alignment = { horizontal: 'center', vertical: 'middle' }
+    cell.alignment = { horizontal: 'center', vertical: 'middle', shrinkToFit: true }
     cell.border = BORDER_ALL
     if (colNumber >= 3 && colNumber <= 2 + daysInMonth) {
       const d = colNumber - 2
@@ -219,6 +219,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 
   const shadeDataCell = (cell: ExcelJS.Cell, colNumber: number) => {
     cell.border = BORDER_ALL
+    cell.alignment = { horizontal: 'center', vertical: 'middle', shrinkToFit: true }
+    if (!cell.font) cell.font = { size: 10 }
     if (colNumber >= 3 && colNumber <= 2 + daysInMonth) {
       const d = colNumber - 2
       if (holidayDays.has(d)) cell.fill = FILL_HOLIDAY
@@ -234,9 +236,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       row.total,
     ])
     r.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+      if (colNumber === 1) cell.font = { bold: true, size: 10, color: { argb: 'FF1E3A8A' } }
+      if (colNumber === 2) cell.font = { size: 10 }
+      if (colNumber === totalCols) cell.font = { bold: true, size: 10, color: { argb: 'FF1E3A8A' } }
       shadeDataCell(cell, colNumber)
-      if (colNumber === 1) cell.font = { bold: true, color: { argb: 'FF1E3A8A' } }
-      if (colNumber === totalCols) cell.font = { bold: true, color: { argb: 'FF1E3A8A' } }
+      if (colNumber === 2) cell.alignment = { horizontal: 'left', vertical: 'middle' }
     })
   })
 
@@ -250,7 +254,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     r.eachCell({ includeEmpty: true }, (cell, colNumber) => {
       cell.border = BORDER_ALL
       cell.fill = FILL_LEAVE
-      cell.font = { color: { argb: 'FF16A34A' }, bold: colNumber === 2 }
+      cell.font = { size: 10, color: { argb: 'FF16A34A' }, bold: colNumber === 2 }
+      cell.alignment = { horizontal: colNumber === 2 ? 'left' : 'center', vertical: 'middle', shrinkToFit: true }
     })
   }
 
@@ -260,10 +265,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     ...dayNumbers.map(d => dayTotals.get(d) ?? null),
     ts.total_hours,
   ])
-  totalRow.eachCell({ includeEmpty: true }, (cell) => {
+  totalRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+    cell.alignment = { horizontal: colNumber === 2 ? 'left' : 'center', vertical: 'middle', shrinkToFit: true }
     cell.border = BORDER_ALL
     cell.fill = FILL_TOTAL
-    cell.font = { bold: true, color: { argb: 'FF1E3A8A' } }
+    cell.font = { bold: true, size: 10, color: { argb: 'FF1E3A8A' } }
   })
 
   const buf = Buffer.from(await workbook.xlsx.writeBuffer())
