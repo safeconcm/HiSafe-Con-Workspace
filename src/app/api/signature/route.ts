@@ -58,8 +58,28 @@ export async function POST(req: NextRequest) {
     })
   }
 
-  // Get public URL
-  const { data: urlData } = supabase.storage.from('documents').getPublicUrl(fileName)
+  // NOTE: "documents" is a PRIVATE bucket (confirmed via storage.buckets —
+  // public: false), so getPublicUrl() here returns a URL the browser (or
+  // Puppeteer) can't actually fetch unauthenticated. We store the storage
+  // PATH (fileName) in the DB, not that unusable public URL — the PDF
+  // route (src/app/api/pdf/leave/[id]/route.ts) downloads the bytes
+  // server-side with the service-role client and inlines them as a
+  // data: URI, the same "avoid self-fetch" approach used for the Chromium
+  // binary (see src/lib/pdf/render.ts).
+
+  // Persist onto the entity itself so it's queryable (not just buried in
+  // the audit log) and so the PDF generator can pick it up — currently
+  // wired for leave_request only (see src/lib/pdf/leave-template.ts /
+  // src/app/api/pdf/leave/[id]/route.ts), which is the only one of the
+  // three entity types with signature_* columns on it so far.
+  const effectiveRole = role ?? session.role
+  if (entity_type === 'leave_request' && ['employee', 'hr'].includes(effectiveRole)) {
+    const column = effectiveRole === 'employee' ? 'signature_employee_url' : 'signature_hr_url'
+    const atColumn = effectiveRole === 'employee' ? 'signature_employee_at' : 'signature_hr_at'
+    await supabase.from('leave_requests')
+      .update({ [column]: fileName, [atColumn]: new Date().toISOString() })
+      .eq('id', entity_id)
+  }
 
   // Record in audit log
   await writeAuditLog({
@@ -67,16 +87,16 @@ export async function POST(req: NextRequest) {
     entity_type, entity_id,
     new_data: {
       signed_by:   session.id,
-      role:        role ?? session.role,
+      role:        effectiveRole,
       signed_at:   new Date().toISOString(),
-      signature_url: urlData.publicUrl,
+      signature_path: fileName,
     },
     req,
   })
 
   return ok({
-    stored:        'storage',
-    signature_url: urlData.publicUrl,
-    message:       'บันทึกลายเซ็นสำเร็จ',
+    stored:          'storage',
+    signature_path:  fileName,
+    message:         'บันทึกลายเซ็นสำเร็จ',
   })
 }

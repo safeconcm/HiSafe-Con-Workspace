@@ -15,6 +15,13 @@ interface Props {
   status:        string
   currentUserId: string
   ownerId:       string
+  // Whether each role has already signed (from leave.signature_employee_url /
+  // leave.signature_hr_url on the record) — without this, the "signed" badge
+  // was only ever set by the local mutation's onSuccess callback, so it
+  // silently reset to "not signed" on every page reload even though the
+  // signature was actually saved.
+  signedEmployee?: boolean
+  signedHr?:       boolean
 }
 
 async function saveSignature(entityId: string, dataUrl: string, role: string) {
@@ -33,9 +40,12 @@ async function saveSignature(entityId: string, dataUrl: string, role: string) {
   return json.data
 }
 
-export function LeaveSignatureSection({ leaveId, status, currentUserId, ownerId }: Props) {
+export function LeaveSignatureSection({ leaveId, status, currentUserId, ownerId, signedEmployee, signedHr }: Props) {
   const [showCanvas, setShowCanvas] = useState<string | null>(null)
-  const [signed,     setSigned]     = useState<Record<string, boolean>>({})
+  const [signed,     setSigned]     = useState<Record<string, boolean>>({
+    employee: !!signedEmployee,
+    hr:       !!signedHr,
+  })
 
   const save = useMutation({
     mutationFn: ({ dataUrl, role }: { dataUrl: string; role: string }) =>

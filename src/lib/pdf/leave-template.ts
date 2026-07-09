@@ -34,6 +34,12 @@ export interface LeaveTemplateData {
     last_name_th:  string
     approved_at:   string | null
   } | null
+  signatures?: {
+    employee_url?: string | null
+    employee_at?:  string | null
+    hr_url?:       string | null
+    hr_at?:        string | null
+  }
   approvals: {
     action:        string
     approver_name: string | null
@@ -229,6 +235,15 @@ export function generateLeaveHTML(data: LeaveTemplateData, appUrl: string): stri
     margin-bottom: 5px;
     margin: 0 16px 5px 16px;
   }
+  .sig-image {
+    height: 30px;
+    margin: 0 16px 5px 16px;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    border-bottom: 1px solid #aaa;
+  }
+  .sig-image img { max-height: 28px; max-width: 100%; object-fit: contain; }
   .sig-label { font-size: 10px; color: #555; margin-bottom: 2px; }
   .sig-name  { font-size: 11px; font-weight: 600; color: #111; }
   .sig-date  { font-size: 9px; color: #888; margin-top: 1px; }
@@ -383,10 +398,16 @@ export function generateLeaveHTML(data: LeaveTemplateData, appUrl: string): stri
   <!-- Signature Section -->
   <div class="signature-section">
     <div class="sig-box">
-      <div class="sig-line"></div>
+      ${data.signatures?.employee_url
+        ? `<div class="sig-image"><img src="${data.signatures.employee_url}" alt="ลายเซ็นพนักงาน" /></div>`
+        : `<div class="sig-line"></div>`}
       <div class="sig-label">ลงชื่อผู้ขอลา</div>
       <div class="sig-name">${data.employee.first_name_th} ${data.employee.last_name_th}</div>
-      <div class="sig-date">วันที่ ${formatThaiDate(data.leave.created_at)}</div>
+      <div class="sig-date">${
+        data.signatures?.employee_at
+          ? `เซ็นดิจิทัล ${formatThaiDate(data.signatures.employee_at)}`
+          : `วันที่ ${formatThaiDate(data.leave.created_at)}`
+      }</div>
     </div>
     <div class="sig-box">
       <div class="sig-line"></div>
@@ -403,10 +424,16 @@ export function generateLeaveHTML(data: LeaveTemplateData, appUrl: string): stri
       }</div>
     </div>
     <div class="sig-box">
-      <div class="sig-line"></div>
+      ${data.signatures?.hr_url
+        ? `<div class="sig-image"><img src="${data.signatures.hr_url}" alt="ลายเซ็น HR" /></div>`
+        : `<div class="sig-line"></div>`}
       <div class="sig-label">ลงชื่อ HR รับทราบ</div>
-      <div class="sig-name">...</div>
-      <div class="sig-date">&nbsp;</div>
+      <div class="sig-name">${data.signatures?.hr_at ? 'รับทราบแล้ว' : '...'}</div>
+      <div class="sig-date">${
+        data.signatures?.hr_at
+          ? `เซ็นดิจิทัล ${formatThaiDate(data.signatures.hr_at)}`
+          : '&nbsp;'
+      }</div>
     </div>
   </div>
 

@@ -55,6 +55,25 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     .from('companies').select('code, name_th, name_en, logo_url')
     .eq('id', session.company_id).single()
 
+  // Signatures are stored as storage PATHs (not public URLs — "documents"
+  // is a private bucket), so download the bytes here with the service-role
+  // client and inline them as data: URIs. This avoids Puppeteer having to
+  // fetch anything over the network for an <img src>, same reasoning as
+  // src/lib/pdf/render.ts's local Chromium bundle: network self-fetches
+  // inside the render step have already burned us once this project.
+  async function signatureDataUri(path: string | null): Promise<string | null> {
+    if (!path) return null
+    const { data: blob, error: dlErr } = await supabase.storage.from('documents').download(path)
+    if (dlErr || !blob) return null
+    const buf = Buffer.from(await blob.arrayBuffer())
+    return `data:image/png;base64,${buf.toString('base64')}`
+  }
+
+  const [employeeSigUri, hrSigUri] = await Promise.all([
+    signatureDataUri(leave.signature_employee_url ?? null),
+    signatureDataUri(leave.signature_hr_url ?? null),
+  ])
+
   const templateData: LeaveTemplateData = {
     company: {
       code:     company?.code     ?? '',
@@ -87,6 +106,12 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       last_name_th:  (leave.approved_by as any).last_name_th,
       approved_at:   leave.approved_at,
     } : null,
+    signatures: {
+      employee_url: employeeSigUri,
+      employee_at:  leave.signature_employee_at ?? null,
+      hr_url:       hrSigUri,
+      hr_at:        leave.signature_hr_at        ?? null,
+    },
     approvals: ((leave.approvals as any[]) ?? []).map(ap => ({
       action:        ap.action,
       approver_name: ap.approver

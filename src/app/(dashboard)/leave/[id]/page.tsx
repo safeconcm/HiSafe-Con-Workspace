@@ -169,6 +169,8 @@ export default function LeaveDetailPage() {
         status={leave.status}
         currentUserId={currentUserId}
         ownerId={leave.user_id}
+        signedEmployee={!!leave.signature_employee_url}
+        signedHr={!!leave.signature_hr_url}
       />
 
       {/* Cancel */}

@@ -169,6 +169,10 @@ export interface LeaveRequest {
   cancelled_at: string | null
   cancel_reason: string | null
   pdf_url: string | null
+  signature_employee_url: string | null
+  signature_employee_at: string | null
+  signature_hr_url: string | null
+  signature_hr_at: string | null
   created_at: string
   updated_at: string
 }

@@ -10,7 +10,7 @@ import { LeaveTimeline }              from '@/components/leave/LeaveTimeline'
 import { formatMonthYearTH, cn }      from '@/utils'
 import {
   ArrowLeft, ArrowRight, Save, Send,
-  Loader2, Download, Clock
+  Loader2, Download, Clock, FileSpreadsheet
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -121,6 +121,28 @@ export default function TimesheetMonthPage() {
               <Download className="w-4 h-4" />
               ดาวน์โหลด PDF
             </button>
+          )}
+          {/* Excel / CSV export — same job x date matrix as the PDF, via
+              /api/timesheet/:id/export (see route for details) */}
+          {ts && (
+            <>
+              <button
+                type="button"
+                onClick={() => window.open(`/api/timesheet/${ts.id}/export?format=xlsx`, '_blank')}
+                className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                Excel
+              </button>
+              <button
+                type="button"
+                onClick={() => window.open(`/api/timesheet/${ts.id}/export?format=csv`, '_blank')}
+                className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50"
+              >
+                <FileSpreadsheet className="w-4 h-4" />
+                CSV
+              </button>
+            </>
           )}
           {/* Save button */}
           {!disabled && (
