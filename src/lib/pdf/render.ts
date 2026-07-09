@@ -13,15 +13,31 @@
 // the function bundle size limit:
 // https://vercel.com/kb/guide/deploying-puppeteer-with-nextjs-on-vercel
 //
-// The "-min" package doesn't bundle the ~50MB Chromium binary — it downloads
-// it once per cold start from Sparticuz's own GitHub release and caches it
-// in /tmp for subsequent invocations on the same instance.
+// The "-min" package doesn't bundle the ~50MB Chromium binary. First attempt
+// pointed this at a hardcoded old external release (v123.0.1, Sparticuz's
+// GitHub) and it failed at runtime with "libnss3.so: cannot open shared
+// object file" — that binary predates changes to Vercel's Node.js runtime
+// base image and its shared-library expectations no longer match.
+//
+// Fixed by following Vercel's own official template
+// (https://github.com/gabenunez/puppeteer-on-vercel): self-host the pack
+// instead. scripts/postinstall-chromium.mjs packages the *actual* installed
+// @sparticuz/chromium version into public/chromium-pack.tar at install time,
+// and at runtime we fetch it from this same deployment's own URL — so the
+// binary always matches the pinned package version and this Vercel runtime,
+// on every environment (staging preview, production) automatically.
 
 import chromium from '@sparticuz/chromium-min'
 import puppeteer from 'puppeteer-core'
 
-const CHROMIUM_PACK_URL =
-  'https://github.com/Sparticuz/chromium/releases/download/v123.0.1/chromium-v123.0.1-pack.tar'
+function chromiumPackUrl(): string {
+  // VERCEL_URL is auto-populated by Vercel to this exact deployment's own
+  // hostname (preview or production) — no manual config needed, and it
+  // can't drift out of sync the way a hardcoded external URL did.
+  const host = process.env.VERCEL_URL ?? process.env.NEXT_PUBLIC_APP_URL?.replace(/^https?:\/\//, '')
+  if (!host) throw new Error('Cannot resolve chromium-pack.tar URL: VERCEL_URL and NEXT_PUBLIC_APP_URL are both unset')
+  return `https://${host}/chromium-pack.tar`
+}
 
 // Returns a plain Uint8Array rather than Node's Buffer — Buffer is a
 // structurally different generic type in this Next.js/TS setup and isn't
@@ -32,7 +48,7 @@ export async function renderPdfFromHtml(html: string): Promise<Uint8Array> {
   const browser = await puppeteer.launch({
     args: chromium.args,
     defaultViewport: chromium.defaultViewport,
-    executablePath: await chromium.executablePath(CHROMIUM_PACK_URL),
+    executablePath: await chromium.executablePath(chromiumPackUrl()),
     headless: chromium.headless,
   })
 
