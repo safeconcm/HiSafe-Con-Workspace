@@ -73,7 +73,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       await supabase.from('employment_certificates').update({ file_url: storagePath }).eq('id', params.id)
     }
 
-    return new NextResponse(pdfBuffer, {
+    // See src/app/api/pdf/leave/[id]/route.ts for why this cast is needed.
+    return new NextResponse(pdfBuffer as unknown as BodyInit, {
       status: 200,
       headers: {
         'Content-Type':        'application/pdf',

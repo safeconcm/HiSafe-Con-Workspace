@@ -114,7 +114,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       await supabase.from('leave_requests').update({ pdf_url: storagePath }).eq('id', params.id)
     }
 
-    return new NextResponse(pdfBuffer, {
+    // Cast: Next.js's bundled BodyInit type doesn't structurally accept a
+    // Uint8Array/Buffer here even though the Fetch spec (and Node's actual
+    // runtime Response implementation) both do — verified this is a
+    // type-only mismatch, not a real runtime issue.
+    return new NextResponse(pdfBuffer as unknown as BodyInit, {
       status: 200,
       headers: {
         'Content-Type':        'application/pdf',
