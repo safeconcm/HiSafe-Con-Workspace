@@ -108,17 +108,19 @@ export default function TimesheetMonthPage() {
         {ts && <TimesheetStatusBadge status={ts.status} />}
 
         <div className="ml-auto flex items-center gap-2">
-          {/* PDF download */}
-          {ts?.pdf_url && (
-            <a
-              href={ts.pdf_url}
-              target="_blank"
-              rel="noopener noreferrer"
+          {/* PDF download — renders on demand via /api/pdf/timesheet/:id
+              (see src/lib/pdf/render.ts); not the raw ts.pdf_url storage
+              path, which points into a private bucket the browser can't
+              fetch directly. */}
+          {ts && (
+            <button
+              type="button"
+              onClick={() => window.open(`/api/pdf/timesheet/${ts.id}`, '_blank')}
               className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50"
             >
               <Download className="w-4 h-4" />
-              PDF
-            </a>
+              ดาวน์โหลด PDF
+            </button>
           )}
           {/* Save button */}
           {!disabled && (

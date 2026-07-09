@@ -76,18 +76,18 @@ export default function LeaveDetailPage() {
             ยื่นเมื่อ {formatDateTime(leave.created_at)}
           </p>
         </div>
-        {/* PDF download */}
-        {leave.pdf_url && (
-          <a
-            href={leave.pdf_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50"
-          >
-            <Download className="w-4 h-4" />
-            PDF
-          </a>
-        )}
+        {/* PDF download — renders on demand via /api/pdf/leave/:id (see
+            src/lib/pdf/render.ts); not the raw leave.pdf_url storage path,
+            which points into a private bucket the browser can't fetch
+            directly. */}
+        <button
+          type="button"
+          onClick={() => window.open(`/api/pdf/leave/${id}`, '_blank')}
+          className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50"
+        >
+          <Download className="w-4 h-4" />
+          ดาวน์โหลด PDF
+        </button>
       </div>
 
       {/* Employee info */}
