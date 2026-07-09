@@ -11,6 +11,8 @@ import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 import type { SessionUser } from '@/types/database'
 import type { ApiResponse } from '@/types/api'
+import { sendCompanyEmail } from '@/lib/mailer'
+import { sendLineMessage } from '@/lib/line'
 
 // ── Session ──────────────────────────────────────────────────
 
@@ -256,7 +258,17 @@ export async function dispatchNotifications(params: {
   reference_type?: string
 }) {
   const supabase = createAdminSupabaseClient()
+
+  // Need each recipient's email / LINE link to actually deliver the
+  // email/line channels below (in_app just needs the row itself).
+  const { data: recipients } = await supabase
+    .from('users')
+    .select('id, email, line_user_id')
+    .in('id', params.recipient_ids)
+  const byId = new Map((recipients ?? []).map((u) => [u.id, u]))
+
   const channels = ['in_app', 'email', 'line'] as const
+  const nowIso = new Date().toISOString()
   const rows = params.recipient_ids.flatMap((recipient_id) =>
     channels.map((channel) => ({
       company_id:     params.company_id,
@@ -267,8 +279,64 @@ export async function dispatchNotifications(params: {
       body:           params.body,
       reference_id:   params.reference_id ?? null,
       reference_type: params.reference_type ?? null,
-      status:         'pending',
+      // in_app is "delivered" the moment the row exists — no external
+      // send step needed, so mark it sent immediately.
+      status:         channel === 'in_app' ? 'sent' : 'pending',
+      sent_at:        channel === 'in_app' ? nowIso : null,
     }))
   )
-  await supabase.from('notifications').insert(rows)
+
+  const { data: inserted } = await supabase
+    .from('notifications')
+    .insert(rows)
+    .select('id, recipient_id, channel')
+
+  // Best-effort delivery for email/line, attempted inline in the same
+  // request — there is no background queue worker in this deployment yet.
+  // Failures are recorded on the row (status='failed', last_error) instead
+  // of thrown, so a slow/misconfigured mail server or unlinked LINE
+  // account never breaks the calling API request (leave approval, etc).
+  for (const row of inserted ?? []) {
+    if (row.channel === 'in_app') continue
+    const user = byId.get(row.recipient_id)
+
+    if (row.channel === 'email') {
+      if (!user?.email) {
+        await supabase.from('notifications')
+          .update({ status: 'failed', last_error: 'ไม่มีอีเมลของผู้รับในระบบ' })
+          .eq('id', row.id)
+        continue
+      }
+      const result = await sendCompanyEmail({
+        company_id: params.company_id,
+        to: user.email,
+        subject: params.title,
+        html: `<p>${params.body.replace(/\n/g, '<br/>')}</p>`,
+      })
+      await supabase.from('notifications')
+        .update(result.ok
+          ? { status: 'sent', sent_at: new Date().toISOString() }
+          : { status: 'failed', last_error: result.error, retry_count: 1 })
+        .eq('id', row.id)
+    }
+
+    if (row.channel === 'line') {
+      if (!user?.line_user_id) {
+        await supabase.from('notifications')
+          .update({ status: 'failed', last_error: 'ผู้รับยังไม่ได้เชื่อมต่อบัญชี LINE' })
+          .eq('id', row.id)
+        continue
+      }
+      const result = await sendLineMessage({
+        company_id: params.company_id,
+        line_user_id: user.line_user_id,
+        text: `${params.title}\n${params.body}`,
+      })
+      await supabase.from('notifications')
+        .update(result.ok
+          ? { status: 'sent', sent_at: new Date().toISOString() }
+          : { status: 'failed', last_error: result.error, retry_count: 1 })
+        .eq('id', row.id)
+    }
+  }
 }
