@@ -31,11 +31,18 @@ import chromium from '@sparticuz/chromium-min'
 import puppeteer from 'puppeteer-core'
 
 function chromiumPackUrl(): string {
-  // VERCEL_URL is auto-populated by Vercel to this exact deployment's own
-  // hostname (preview or production) — no manual config needed, and it
-  // can't drift out of sync the way a hardcoded external URL did.
-  const host = process.env.VERCEL_URL ?? process.env.NEXT_PUBLIC_APP_URL?.replace(/^https?:\/\//, '')
-  if (!host) throw new Error('Cannot resolve chromium-pack.tar URL: VERCEL_URL and NEXT_PUBLIC_APP_URL are both unset')
+  // Deliberately NOT process.env.VERCEL_URL: that resolves to the
+  // ephemeral, deployment-specific hash hostname
+  // (hi-safe-con-workspace-<hash>-safeconcms-projects.vercel.app), and
+  // fetching /chromium-pack.tar from THAT host returns a 303 redirect whose
+  // target drops the bypass query param below, landing on Vercel's auth
+  // wall and producing "Invalid tar header" (the wall's HTML instead of the
+  // tar). Confirmed by directly comparing the two hosts with
+  // mcp__workspace__web_fetch: the hash host redirects, the stable
+  // git-branch alias host (VERCEL_BRANCH_URL, e.g.
+  // hi-safe-con-workspace-git-staging-*.vercel.app) does not.
+  const host = process.env.VERCEL_BRANCH_URL ?? process.env.VERCEL_URL ?? process.env.NEXT_PUBLIC_APP_URL?.replace(/^https?:\/\//, '')
+  if (!host) throw new Error('Cannot resolve chromium-pack.tar URL: VERCEL_BRANCH_URL, VERCEL_URL, and NEXT_PUBLIC_APP_URL are all unset')
 
   // This project has Vercel Authentication (Deployment Protection) enabled
   // on preview deployments — confirmed by a self-fetch of /chromium-pack.tar
