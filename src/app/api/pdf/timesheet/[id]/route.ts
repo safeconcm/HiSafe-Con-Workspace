@@ -10,6 +10,7 @@ import {
 } from '@/lib/api-helpers'
 import { generateTimesheetHTML, type TimesheetTemplateData } from '@/lib/pdf/timesheet-template'
 import { renderPdfFromHtml } from '@/lib/pdf/render'
+import { getWorkingDayMapForMonth } from '@/lib/work-schedule'
 
 export const maxDuration = 30
 
@@ -55,6 +56,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     .lte('holiday_date', `${ts.year}-${monthPad}-31`)
     .eq('is_active', true)
 
+  const workingDayMap = await getWorkingDayMapForMonth(supabase, session.company_id, ts.year, ts.month)
+
   const templateData: TimesheetTemplateData = {
     company:   { code: company?.code ?? '', name_th: company?.name_th ?? '', name_en: company?.name_en ?? '' },
     employee:  { ...(ts.user as any) },
@@ -69,6 +72,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     lines:    (ts.lines as any[]) ?? [],
     approver: ts.approved_by as any ?? null,
     holidays: (holidays ?? []) as any[],
+    workingDayMap,
   }
 
   const html = generateTimesheetHTML(templateData, appUrl)

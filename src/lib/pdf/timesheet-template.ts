@@ -33,6 +33,11 @@ export interface TimesheetTemplateData {
   }[]
   approver?: { first_name_th: string; last_name_th: string } | null
   holidays: { holiday_date: string; name_th: string }[]
+  // day-of-month (1..31) -> is this a working day per the company's work
+  // schedule (src/lib/work-schedule.ts)? Replaces the old hardcoded
+  // "Sat/Sun = weekend for everyone" assumption — Highcon works Saturdays,
+  // Safecon may have specific worked Saturdays via HR-set overrides.
+  workingDayMap: Map<number, boolean>
 }
 
 export function generateTimesheetHTML(data: TimesheetTemplateData, appUrl: string): string {
@@ -87,7 +92,7 @@ export function generateTimesheetHTML(data: TimesheetTemplateData, appUrl: strin
 
   const dayHeaderCells = daysInMonth.map(day => {
     const dow = day.getDay()
-    const isWeekend = dow === 0 || dow === 6
+    const isWeekend = data.workingDayMap.get(day.getDate()) === false
     const dateStr = day.toISOString().split('T')[0]
     const isHoliday = holidayMap.has(dateStr)
     const cls = isHoliday ? 'col-holiday' : isWeekend ? 'col-weekend' : ''
@@ -96,8 +101,7 @@ export function generateTimesheetHTML(data: TimesheetTemplateData, appUrl: strin
 
   const jobRowsHtml = sortedJobs.map(row => {
     const cells = daysInMonth.map(day => {
-      const dow = day.getDay()
-      const isWeekend = dow === 0 || dow === 6
+      const isWeekend = data.workingDayMap.get(day.getDate()) === false
       const dateStr = day.toISOString().split('T')[0]
       const isHoliday = holidayMap.has(dateStr)
       const cls = isHoliday ? 'col-holiday' : isWeekend ? 'col-weekend' : ''
@@ -114,8 +118,7 @@ export function generateTimesheetHTML(data: TimesheetTemplateData, appUrl: strin
   const leaveRowHtml = leaveLines.length > 0 ? `<tr class="leave-row">
     <td class="job-col"><span class="job-name">ลา</span></td>
     ${daysInMonth.map(day => {
-      const dow = day.getDay()
-      const isWeekend = dow === 0 || dow === 6
+      const isWeekend = data.workingDayMap.get(day.getDate()) === false
       const dateStr = day.toISOString().split('T')[0]
       const isHoliday = holidayMap.has(dateStr)
       const cls = isHoliday ? 'col-holiday' : isWeekend ? 'col-weekend' : ''
@@ -128,8 +131,7 @@ export function generateTimesheetHTML(data: TimesheetTemplateData, appUrl: strin
   const totalRowHtml = `<tr class="total-row">
     <td class="job-col">รวมชั่วโมง/วัน</td>
     ${daysInMonth.map(day => {
-      const dow = day.getDay()
-      const isWeekend = dow === 0 || dow === 6
+      const isWeekend = data.workingDayMap.get(day.getDate()) === false
       const dateStr = day.toISOString().split('T')[0]
       const isHoliday = holidayMap.has(dateStr)
       const cls = isHoliday ? 'col-holiday' : isWeekend ? 'col-weekend' : ''

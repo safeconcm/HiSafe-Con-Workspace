@@ -23,6 +23,7 @@ import {
   unauthorized, forbidden, notFound, badRequest,
 } from '@/lib/api-helpers'
 import { buildCSV } from '@/lib/xlsx-export'
+import { getWorkingDayMapForMonth } from '@/lib/work-schedule'
 
 const TH_MONTHS = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน',
   'กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม']
@@ -86,12 +87,15 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const holidayMap = new Map<string, string>()
   ;(holidays ?? []).forEach((h: any) => holidayMap.set(h.holiday_date, h.name_th))
 
+  // Per-company work schedule (src/lib/work-schedule.ts) — Highcon works
+  // Saturdays, Safecon's worked Saturdays are HR-set overrides, so this can
+  // no longer be a blanket "Sat/Sun = weekend" check.
+  const workingDayMap = await getWorkingDayMapForMonth(supabase, session.company_id, ts.year, ts.month)
   const weekendDays  = new Set<number>()
   const holidayDays  = new Set<number>()
   dayNumbers.forEach(d => {
     const date = new Date(ts.year, ts.month - 1, d)
-    const dow = date.getDay()
-    if (dow === 0 || dow === 6) weekendDays.add(d)
+    if (workingDayMap.get(d) === false) weekendDays.add(d)
     const dateStr = date.toISOString().split('T')[0]
     if (holidayMap.has(dateStr)) holidayDays.add(d)
   })

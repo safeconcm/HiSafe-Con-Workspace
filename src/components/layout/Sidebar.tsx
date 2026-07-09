@@ -181,6 +181,7 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'นโยบายการลา',    href: '/hr/leave-policies'  },
       { label: 'Timesheet ทั้งหมด', href: '/hr/timesheet'   },
       { label: 'วันหยุด',         href: '/hr/holidays'        },
+      { label: 'ตารางวันทำงาน',  href: '/hr/work-schedule'   },
       { label: 'รายงาน',          href: '/hr/reports'         },
       { label: 'Audit Log',       href: '/hr/audit-logs'      },
       { label: 'สัญญาจ้าง',      href: '/hr/contracts'       },
