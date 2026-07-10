@@ -27,9 +27,38 @@ export async function GET(req: NextRequest) {
   // because the OR-clause below (needed for the approvals page) doesn't
   // distinguish "show my dashboard" from "show only what I personally filed".
   const ownOnly   = searchParams.get('own_only') === '1'
+  // "Team calendar" (leave/team page) wants every APPROVED leave for the
+  // caller's direct reports, regardless of who currently holds
+  // current_approver_id — which is exactly the field the old supervisor
+  // OR-clause below relies on, and it gets set back to null the moment a
+  // leave is approved (see /api/leave/[id]/approve). So for approved leaves
+  // that OR-clause always collapses to "just my own", which is why
+  // subordinates' approved leave never showed up on a supervisor's team
+  // calendar. Resolve the team via organization_nodes instead — the same
+  // parent/child tree already used by the team payroll view (/api/payroll).
+  const teamOnly  = searchParams.get('team_only') === '1'
   const from      = (page - 1) * limit
 
   const supabase  = createAdminSupabaseClient()
+
+  // HR/Admin already see the whole company on this endpoint with no filter
+  // at all (existing behavior below) — team_only should only change
+  // anything for supervisors, who otherwise have no way to see their
+  // reports' approved leave. Restricting HR/Admin to an org_nodes lookup
+  // here would regress them (most HR/Admin accounts have no org_node
+  // children), so this is scoped to role === 'supervisor' only.
+  const isTeamScopedSupervisor = teamOnly && session.role === 'supervisor'
+  let teamUserIds: string[] = []
+  if (isTeamScopedSupervisor) {
+    const { data: myNode } = await supabase
+      .from('organization_nodes').select('id')
+      .eq('user_id', session.id).eq('is_active', true).maybeSingle()
+    const { data: reports } = myNode
+      ? await supabase.from('organization_nodes').select('user_id')
+          .eq('parent_id', myNode.id).eq('is_active', true)
+      : { data: [] }
+    teamUserIds = (reports ?? []).map((r: any) => r.user_id)
+  }
 
   let query = supabase
     .from('leave_requests')
@@ -49,6 +78,10 @@ export async function GET(req: NextRequest) {
   // Scope by role
   if (ownOnly) {
     query = query.eq('user_id', session.id)
+  } else if (isTeamScopedSupervisor) {
+    query = teamUserIds.length
+      ? query.in('user_id', teamUserIds)
+      : query.eq('id', '00000000-0000-0000-0000-000000000000') // no reports → guaranteed-empty result
   } else if (!isHROrAdmin(session)) {
     if (session.role === 'supervisor') {
       // Supervisors see their own + pending items assigned to them

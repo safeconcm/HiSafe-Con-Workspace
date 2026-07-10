@@ -18,7 +18,7 @@ async function fetchTeamLeaves(year: number, month: number) {
   const endDate   = new Date(year, month, 0).toISOString().split('T')[0]
   const res  = await fetch(
     `/api/leave?status=approved&limit=100` +
-    `&year=${year}`
+    `&year=${year}&team_only=1`
   )
   const json = await res.json()
   return (json.data?.requests ?? []).filter((r: any) =>
