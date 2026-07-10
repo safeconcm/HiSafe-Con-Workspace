@@ -9,7 +9,20 @@ import {
   ChevronRight, UserCheck, UserX,
 } from 'lucide-react'
 import type { UserRole, UserStatus } from '@/types/database'
-import { useAuthStore } from '@/store/auth.store'
+
+// Reads the session cookie directly, same pattern used by other client
+// pages (e.g. src/app/(dashboard)/approvals/ot/page.tsx). Not using
+// useAuthStore here — its setSession() is never called anywhere in the
+// app, so session was always null and isAdmin was always false, hiding
+// the "เพิ่มผู้ใช้"/"Import CSV" buttons from every admin, not just HR.
+function useCurrentRole(): string {
+  if (typeof window === 'undefined') return ''
+  try {
+    const raw = document.cookie.split('; ').find(r => r.startsWith('hsc_session='))
+    if (!raw) return ''
+    return JSON.parse(decodeURIComponent(raw.split('=').slice(1).join('=')))?.role ?? ''
+  } catch { return '' }
+}
 
 const STATUS_COLOR: Record<UserStatus, string> = {
   active:   'bg-green-100 text-green-700',
@@ -41,7 +54,7 @@ export default function AdminUsersPage() {
   // HR can view this list (same as Admin — see /api/admin/users GET), but
   // creating/importing users stays Admin-only, matching the API guard, so
   // those buttons are hidden rather than left as dead-end links for HR.
-  const isAdmin = useAuthStore(s => s.session?.role) === 'admin'
+  const isAdmin = useCurrentRole() === 'admin'
 
   const { data, isLoading } = useUsers({ q: q || undefined, role: role || undefined, status, page, limit: 30 })
   const users = data?.users ?? []

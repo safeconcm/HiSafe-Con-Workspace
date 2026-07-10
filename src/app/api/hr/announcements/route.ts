@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
   const supabase = createAdminSupabaseClient()
   const { data, error } = await supabase
     .from('announcements')
-    .select('id, company_ids, category, title, body, image_url, created_by, created_at, users:created_by(first_name_th, last_name_th)')
+    .select('id, company_ids, category, title, body, image_url, require_ack, created_by, created_at, users:created_by(first_name_th, last_name_th)')
     .contains('company_ids', [session.company_id])
     .order('created_at', { ascending: false })
   if (error) return serverError(error)
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
   const rawData = form.get('data')
   if (typeof rawData !== 'string') return badRequest('ไม่พบข้อมูลประกาศ')
 
-  let payload: { title?: string; body?: string; category?: string; company_ids?: string[] }
+  let payload: { title?: string; body?: string; category?: string; company_ids?: string[]; require_ack?: boolean }
   try {
     payload = JSON.parse(rawData)
   } catch {
@@ -60,6 +60,7 @@ export async function POST(req: NextRequest) {
   const body = String(payload.body ?? '').trim()
   const category = String(payload.category ?? '')
   const companyIds = Array.isArray(payload.company_ids) ? payload.company_ids : []
+  const requireAck = payload.require_ack === true
 
   if (!title) return badRequest('กรุณากรอกหัวข้อประกาศ')
   if (!body) return badRequest('กรุณากรอกเนื้อหาประกาศ')
@@ -100,6 +101,7 @@ export async function POST(req: NextRequest) {
       title,
       body,
       image_url,
+      require_ack: requireAck,
       created_by: session.id,
     })
     .select('id')
@@ -108,7 +110,7 @@ export async function POST(req: NextRequest) {
 
   await writeAuditLog({
     session, action: 'create', entity_type: 'announcement', entity_id: inserted.id,
-    new_data: { title, category, company_ids: companyIds }, req,
+    new_data: { title, category, company_ids: companyIds, require_ack: requireAck }, req,
   })
 
   // ── Dispatch notifications, grouped per-company so each group resolves

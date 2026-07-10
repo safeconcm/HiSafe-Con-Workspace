@@ -1,14 +1,15 @@
 // src/app/api/payroll/route.ts
 // GET /api/payroll?year=&month= — wage breakdown per employee per job code,
-// computed from approved timesheets. Visible to hr/admin only — salary data
-// for the whole company, and there is no per-supervisor team scoping in the
-// schema (no manager_id/reports-to relation), so supervisor access was
-// removed rather than exposing every employee's pay to every supervisor.
-// If a future "my team's payroll" view is wanted, that needs a proper
-// reporting-line field first — see the 2026-07 access-control discussion.
+// computed from approved timesheets.
+// - hr/admin: whole-company view (unchanged).
+// - supervisor: scoped to their direct reports only, via the existing
+//   organization_nodes tree (the same parent/child structure find_approver()
+//   already walks for leave/OT approvals) — no new schema needed, since
+//   every employee already has a node with a parent_id.
+// employee role still gets no access at all (this is compensation data).
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getSessionFromHeaders, ok, badRequest, unauthorized, forbidden } from '@/lib/api-helpers'
+import { getSessionFromHeaders, createAdminSupabaseClient, ok, badRequest, unauthorized, forbidden } from '@/lib/api-helpers'
 import { computePayroll } from '@/lib/payroll'
 
 function toCSV(rows: (string | number | null)[][]): string {
@@ -19,7 +20,7 @@ function toCSV(rows: (string | number | null)[][]): string {
 export async function GET(req: NextRequest) {
   const session = getSessionFromHeaders(req)
   if (!session) return unauthorized()
-  if (!['hr', 'admin'].includes(session.role)) return forbidden()
+  if (!['hr', 'admin', 'supervisor'].includes(session.role)) return forbidden()
 
   const { searchParams } = new URL(req.url)
   const year   = parseInt(searchParams.get('year')  ?? String(new Date().getFullYear()))
@@ -27,7 +28,20 @@ export async function GET(req: NextRequest) {
   const format = searchParams.get('format')
   if (month < 1 || month > 12) return badRequest('month ต้องอยู่ระหว่าง 1-12')
 
-  const rows = await computePayroll(session.company_id, year, month)
+  let userIds: string[] | undefined
+  if (session.role === 'supervisor') {
+    const supabase = createAdminSupabaseClient()
+    const { data: myNode } = await supabase
+      .from('organization_nodes').select('id')
+      .eq('user_id', session.id).eq('is_active', true).maybeSingle()
+    const { data: reports } = myNode
+      ? await supabase.from('organization_nodes').select('user_id')
+          .eq('parent_id', myNode.id).eq('is_active', true)
+      : { data: [] }
+    userIds = (reports ?? []).map((r: any) => r.user_id)
+  }
+
+  const rows = await computePayroll(session.company_id, year, month, userIds ? { userIds } : undefined)
 
   if (format === 'csv') {
     const header = ['รหัสพนักงาน', 'ชื่อ-สกุล', 'แผนก', 'Job Code', 'ชื่องาน', 'ชั่วโมง', 'อัตรา/ชม.', 'ค่าแรง (บาท)']

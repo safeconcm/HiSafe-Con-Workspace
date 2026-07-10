@@ -1,7 +1,10 @@
 'use client'
 // src/app/(dashboard)/hr/probation/[id]/page.tsx
-// Detail page for one employee's probation: 3 evaluator slots
-// (supervisor / department head / MD) + HR's final resolve action.
+// Detail page for one employee's probation: 2 evaluator slots
+// (department head / MD) + HR's final resolve action. Was originally 3
+// slots including "หัวหน้างาน" (line supervisor) — dropped per user
+// request (too many evaluator tiers); no probation_evaluations rows ever
+// used 'supervisor' so there was nothing to migrate.
 
 import { useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
@@ -12,7 +15,6 @@ import { ArrowLeft, Loader2, CheckCircle2, XCircle } from 'lucide-react'
 import Link from 'next/link'
 
 const ROLE_LABEL: Record<string, string> = {
-  supervisor: 'หัวหน้างาน',
   dept_head:  'หัวหน้าแผนก',
   md:         'MD (กรรมการผู้จัดการ)',
 }
@@ -150,9 +152,9 @@ export default function ProbationDetailPage() {
     return <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>
   }
 
-  const allSubmitted = ['supervisor', 'dept_head', 'md'].every(r => byRole(r))
-  const allPass  = ['supervisor', 'dept_head', 'md'].every(r => byRole(r)?.result === 'pass')
-  const anyFail  = ['supervisor', 'dept_head', 'md'].some(r => byRole(r)?.result === 'fail')
+  const allSubmitted = ['dept_head', 'md'].every(r => byRole(r))
+  const allPass  = ['dept_head', 'md'].every(r => byRole(r)?.result === 'pass')
+  const anyFail  = ['dept_head', 'md'].some(r => byRole(r)?.result === 'fail')
 
   return (
     <div className="page-container max-w-3xl space-y-5">
@@ -173,7 +175,7 @@ export default function ProbationDetailPage() {
       )}
 
       <div className="grid gap-4 sm:grid-cols-1">
-        {['supervisor', 'dept_head', 'md'].map(role => (
+        {['dept_head', 'md'].map(role => (
           <EvaluatorSlot key={role} contractId={id} role={role} existing={byRole(role)}
             onSaved={() => qc.invalidateQueries({ queryKey: ['probation-evaluations', id] })} />
         ))}
@@ -183,7 +185,7 @@ export default function ProbationDetailPage() {
         <div className="card card-body space-y-3">
           <h3 className="text-sm font-semibold text-gray-900">สรุปผลทดลองงาน (HR)</h3>
           {!allSubmitted && (
-            <p className="text-xs text-amber-600">ยังมีผู้ประเมินที่ยังไม่บันทึกผล — สรุปผลได้เมื่อครบทั้ง 3 คน หรือ HR ยืนยันเองได้ถ้าจำเป็น</p>
+            <p className="text-xs text-amber-600">ยังมีผู้ประเมินที่ยังไม่บันทึกผล — สรุปผลได้เมื่อครบทั้ง 2 คน หรือ HR ยืนยันเองได้ถ้าจำเป็น</p>
           )}
           <div>
             <label className="form-label">ปรับเงินเดือนใหม่ (ถ้าผ่าน — เว้นว่างถ้าไม่ปรับ)</label>
@@ -204,7 +206,7 @@ export default function ProbationDetailPage() {
             className="w-full rounded-lg border border-amber-400 text-amber-700 px-4 py-2.5 text-sm font-medium hover:bg-amber-50 disabled:opacity-60">
             ขยายเวลาทดลองงาน
           </button>
-          {allPass && <p className="text-xs text-green-600">ผู้ประเมินทั้ง 3 คนให้ผล &quot;ผ่าน&quot; ตรงกัน</p>}
+          {allPass && <p className="text-xs text-green-600">ผู้ประเมินทั้ง 2 คนให้ผล &quot;ผ่าน&quot; ตรงกัน</p>}
           {anyFail && <p className="text-xs text-red-600">มีผู้ประเมินอย่างน้อย 1 คนให้ผล &quot;ไม่ผ่าน&quot; — โปรดพิจารณาก่อนสรุป</p>}
         </div>
       )}

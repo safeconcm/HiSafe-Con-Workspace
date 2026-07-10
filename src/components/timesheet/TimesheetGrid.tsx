@@ -1,11 +1,25 @@
 'use client'
 // src/components/timesheet/TimesheetGrid.tsx
-// The main monthly timesheet entry grid
-// Columns: date | day | job selector | hours | remark | status indicator
+// The main monthly timesheet entry grid.
+// Layout: Job (rows) x Date (columns) matrix — matches the Excel/PDF export
+// layout exactly (src/app/api/timesheet/[id]/export/route.ts,
+// src/lib/pdf/timesheet-template.ts), per user request ("ปรับ วันที่เป็นแกนนอน
+// ส่วนงาน Job ควรเป็นแกนตั้ง ... จะได้เหมือนไฟล์ที่ export ออกไป"). Previously this
+// was one row per date with a single job selector per row (so an employee
+// working 2 jobs the same day couldn't enter both) — the backend
+// (PATCH /api/timesheet/:id) already accepted an arbitrary flat list of
+// {work_date, job_id, hours, remark} lines and validated the per-date 8h
+// total across all of them, so this redesign is frontend-only.
+//
+// Per-date remark was dropped from the old per-row design; it's not shown
+// anywhere downstream (not in the PDF, not in the Excel export, not in the
+// approval screen) and cramming a text box into a ~30px-wide date cell isn't
+// workable. It's replaced with one optional remark per job-row, applied to
+// every line saved for that job this month.
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo, useEffect } from 'react'
 import { getDaysInMonth, isWeekend, toISODate, LEAVE_TYPE_LABEL, monthName, cn } from '@/utils'
-import { Lock, AlertCircle } from 'lucide-react'
+import { AlertCircle, Plus, Trash2 } from 'lucide-react'
 import type { LeaveType } from '@/types/database'
 
 interface Job {
@@ -39,13 +53,6 @@ interface TimesheetLine {
   remark?:         string | null
 }
 
-interface DayState {
-  work_date: string
-  job_id:    string
-  hours:     number
-  remark:    string
-}
-
 interface Props {
   year:       number
   month:      number
@@ -60,15 +67,20 @@ interface Props {
   workingDays?: Record<number, boolean>
   savedLines: TimesheetLine[]
   disabled:   boolean           // true when submitted/approved
-  onChange:   (lines: DayState[]) => void
+  onChange:   (lines: { work_date: string; job_id: string; hours: number; remark?: string }[]) => void
 }
 
 const TH_DAYS = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส']
-const TH_MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
+const NO_JOB = '' // sentinel for "not yet selected" in the trailing blank row
+
+function cellKey(jobId: string, dateStr: string) {
+  return `${jobId}::${dateStr}`
+}
 
 export function TimesheetGrid({ year, month, jobs, holidays, leaves, workingDays, savedLines, disabled, onChange }: Props) {
 
-  // Build lookup maps
+  const days = useMemo(() => getDaysInMonth(year, month), [year, month])
+
   const holidayMap = useMemo(() =>
     new Map(holidays.map(h => [h.holiday_date, h.name_th])), [holidays])
 
@@ -98,64 +110,174 @@ export function TimesheetGrid({ year, month, jobs, holidays, leaves, workingDays
     return m
   }, [savedLines])
 
-  // Initialize editable state from saved work lines
-  const initLines = useCallback((): Map<string, DayState> => {
-    const m = new Map<string, DayState>()
+  const jobById = useMemo(() => new Map(jobs.map(j => [j.id, j])), [jobs])
+
+  // ── Row (job) list — initialized from saved work lines' distinct jobs,
+  //    sorted by job code (same order as the Excel export), plus a trailing
+  //    blank row so the user can always add another job. ──
+  const initialRowJobIds = useMemo(() => {
+    const ids = Array.from(new Set(
+      savedLines.filter(l => l.line_type === 'work').map(l => l.job_id)
+    ))
+    ids.sort((a, b) => (jobById.get(a)?.job_code ?? '').localeCompare(jobById.get(b)?.job_code ?? ''))
+    return [...ids, NO_JOB]
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const [rowJobIds, setRowJobIds] = useState<string[]>(initialRowJobIds)
+
+  const [cells, setCells] = useState<Map<string, number>>(() => {
+    const m = new Map<string, number>()
     for (const l of savedLines) {
-      if (l.line_type === 'work') {
-        m.set(l.work_date, {
-          work_date: l.work_date,
-          job_id:    l.job_id,
-          hours:     l.hours,
-          remark:    l.remark ?? '',
-        })
-      }
+      if (l.line_type === 'work') m.set(cellKey(l.job_id, l.work_date), l.hours)
     }
     return m
-  }, [savedLines])
+  })
 
-  const [lines, setLines] = useState<Map<string, DayState>>(initLines)
+  const [rowRemarks, setRowRemarks] = useState<Map<string, string>>(() => {
+    const m = new Map<string, string>()
+    for (const l of savedLines) {
+      if (l.line_type === 'work' && l.remark) m.set(l.job_id, l.remark)
+    }
+    return m
+  })
+
   const [errors, setErrors] = useState<Map<string, string>>(new Map())
 
-  const days = useMemo(() => getDaysInMonth(year, month), [year, month])
+  // Recompute per-date over-8-hours errors whenever cell data changes
+  useEffect(() => {
+    const dailyTotals = new Map<string, number>()
+    cells.forEach((hours, key) => {
+      const dateStr = key.split('::')[1]
+      dailyTotals.set(dateStr, (dailyTotals.get(dateStr) ?? 0) + hours)
+    })
+    const next = new Map<string, string>()
+    dailyTotals.forEach((total, dateStr) => {
+      const locked = leaveLockedMap.get(dateStr) ?? 0
+      if (locked + total > 8) {
+        next.set(dateStr, `รวม ${locked + total} ชม. เกิน 8 ชม./วัน`)
+      }
+    })
+    setErrors(next)
+  }, [cells, leaveLockedMap])
 
-  // Update a single day's entry
-  const updateLine = useCallback((date: string, field: keyof DayState, value: string | number) => {
-    setLines(prev => {
+  // Emit the flat lines array to the parent whenever anything changes
+  useEffect(() => {
+    const out: { work_date: string; job_id: string; hours: number; remark?: string }[] = []
+    cells.forEach((hours, key) => {
+      if (hours <= 0) return
+      const [jobId, dateStr] = key.split('::')
+      if (!jobId) return
+      out.push({ work_date: dateStr, job_id: jobId, hours, remark: rowRemarks.get(jobId) ?? undefined })
+    })
+    onChange(out)
+  }, [cells, rowRemarks, onChange])
+
+  const updateCell = useCallback((jobId: string, dateStr: string, hours: number) => {
+    setCells(prev => {
       const next = new Map(prev)
-      const existing = next.get(date) ?? { work_date: date, job_id: '', hours: 0, remark: '' }
-      next.set(date, { ...existing, [field]: value })
-
-      // Emit all non-empty lines to parent
-      const allLines = Array.from(next.values()).filter(l => l.hours > 0 || l.job_id)
-      onChange(allLines)
+      if (hours > 0) next.set(cellKey(jobId, dateStr), hours)
+      else next.delete(cellKey(jobId, dateStr))
       return next
     })
+  }, [])
 
-    // Validate hours
-    if (field === 'hours') {
-      const locked = leaveLockedMap.get(date) ?? 0
-      const total  = locked + Number(value)
-      setErrors(prev => {
+  const changeRowJob = useCallback((rowIndex: number, newJobId: string) => {
+    setRowJobIds(prev => {
+      const oldJobId = prev[rowIndex]
+      const next = [...prev]
+      next[rowIndex] = newJobId
+      // Was this the trailing blank row? Add a fresh blank row after it.
+      if (oldJobId === NO_JOB && rowIndex === prev.length - 1 && newJobId !== NO_JOB) {
+        next.push(NO_JOB)
+      }
+      return next
+    })
+    // Remap any cells already entered under the old job id (rare — only
+    // possible if the row previously had a job and the user picked a
+    // different one) to the new job id.
+    setCells(prev => {
+      const oldJobId = rowJobIds[rowIndex]
+      if (!oldJobId || oldJobId === newJobId) return prev
+      const next = new Map<string, number>()
+      prev.forEach((hours, key) => {
+        const [jobId, dateStr] = key.split('::')
+        next.set(jobId === oldJobId ? cellKey(newJobId, dateStr) : key, hours)
+      })
+      return next
+    })
+    setRowRemarks(prev => {
+      const oldJobId = rowJobIds[rowIndex]
+      if (!oldJobId || !prev.has(oldJobId)) return prev
+      const next = new Map(prev)
+      const val = next.get(oldJobId)!
+      next.delete(oldJobId)
+      next.set(newJobId, val)
+      return next
+    })
+  }, [rowJobIds])
+
+  const removeRow = useCallback((rowIndex: number) => {
+    const jobId = rowJobIds[rowIndex]
+    setRowJobIds(prev => prev.filter((_, i) => i !== rowIndex))
+    if (jobId) {
+      setCells(prev => {
         const next = new Map(prev)
-        if (total > 8) {
-          next.set(date, `รวม ${total} ชม. เกิน 8 ชม./วัน`)
-        } else {
-          next.delete(date)
-        }
+        Array.from(next.keys()).forEach(key => {
+          if (key.startsWith(`${jobId}::`)) next.delete(key)
+        })
+        return next
+      })
+      setRowRemarks(prev => {
+        if (!prev.has(jobId)) return prev
+        const next = new Map(prev)
+        next.delete(jobId)
         return next
       })
     }
-  }, [leaveLockedMap, onChange])
+  }, [rowJobIds])
 
-  // Total work hours this month
+  const addBlankRow = useCallback(() => {
+    setRowJobIds(prev => prev[prev.length - 1] === NO_JOB ? prev : [...prev, NO_JOB])
+  }, [])
+
+  // Per-date lock flags (weekend / holiday / full-day leave) — independent
+  // of which job row a cell belongs to.
+  const dateInfo = useMemo(() => {
+    return days.map(day => {
+      const dateStr  = toISODate(day)
+      const dow      = day.getDay()
+      const dayDate  = day.getDate()
+      const weekend  = workingDays ? workingDays[dayDate] === false : isWeekend(day)
+      const holiday  = holidayMap.get(dateStr)
+      const leave    = leaveMap.get(dateStr)
+      const locked   = leaveLockedMap.get(dateStr) ?? 0
+      const isFullyLocked = weekend || !!holiday || (!!leave && !leave.isHalf)
+      const maxHours = Math.max(0, 8 - locked)
+      return { dateStr, dow, dayDate, weekend, holiday, leave, locked, isFullyLocked, maxHours }
+    })
+  }, [days, workingDays, holidayMap, leaveMap, leaveLockedMap])
+
   const totalWorkHours = useMemo(() => {
     let t = 0
-    lines.forEach(l => { t += l.hours })
+    cells.forEach(h => { t += h })
     return t
-  }, [lines])
+  }, [cells])
 
-  const defaultJobId = jobs[0]?.id ?? ''
+  const dayTotals = useMemo(() => {
+    const m = new Map<string, number>()
+    cells.forEach((hours, key) => {
+      const dateStr = key.split('::')[1]
+      m.set(dateStr, (m.get(dateStr) ?? 0) + hours)
+    })
+    return m
+  }, [cells])
+
+  const rowTotal = useCallback((jobId: string) => {
+    if (!jobId) return 0
+    let t = 0
+    cells.forEach((hours, key) => { if (key.startsWith(`${jobId}::`)) t += hours })
+    return t
+  }, [cells])
 
   return (
     <div className="space-y-3">
@@ -178,169 +300,187 @@ export function TimesheetGrid({ year, month, jobs, holidays, leaves, workingDays
         <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-gray-100 inline-block"/>&nbsp;วันหยุดประจำสัปดาห์</span>
       </div>
 
-      {/* Grid */}
+      {/* Grid — Job (rows) x Date (columns), matching the Excel/PDF export */}
       <div className="card overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <table className="w-full text-xs border-collapse">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="px-3 py-2.5 text-left font-medium text-gray-600 w-20">วัน</th>
-                <th className="px-3 py-2.5 text-left font-medium text-gray-600 w-10">วันที่</th>
-                <th className="px-3 py-2.5 text-left font-medium text-gray-600 min-w-[180px]">Job</th>
-                <th className="px-3 py-2.5 text-center font-medium text-gray-600 w-20">ชั่วโมง</th>
-                <th className="px-3 py-2.5 text-left font-medium text-gray-600 min-w-[120px]">หมายเหตุ</th>
-                <th className="px-2 py-2.5 w-8"></th>
+                <th className="px-2 py-2 text-left font-medium text-gray-600 min-w-[160px] sticky left-0 bg-gray-50 z-10">Job</th>
+                {dateInfo.map(d => (
+                  <th
+                    key={d.dateStr}
+                    title={d.holiday ?? undefined}
+                    className={cn(
+                      'px-0.5 py-2 text-center font-medium w-8 whitespace-nowrap',
+                      d.holiday ? 'bg-red-100 text-red-700' : d.weekend ? 'bg-gray-100 text-gray-400' : 'text-gray-600'
+                    )}
+                  >
+                    <div>{d.dayDate}</div>
+                    <div className="text-[9px] font-normal">{TH_DAYS[d.dow]}</div>
+                  </th>
+                ))}
+                <th className="px-2 py-2 text-left font-medium text-gray-600 min-w-[100px]">หมายเหตุ</th>
+                <th className="px-2 py-2 text-center font-medium text-gray-600 w-14">รวม</th>
+                <th className="px-1 py-2 w-7"></th>
               </tr>
             </thead>
             <tbody>
-              {days.map(day => {
-                const dateStr    = toISODate(day)
-                const dow        = day.getDay()
-                const dayDate    = day.getDate()
-                // Use this company's actual work schedule when provided;
-                // fall back to the old Sat/Sun assumption otherwise (see
-                // Props.workingDays doc comment above).
-                const weekend    = workingDays ? workingDays[dayDate] === false : isWeekend(day)
-                const holiday    = holidayMap.get(dateStr)
-                const leave      = leaveMap.get(dateStr)
-                const locked     = leaveLockedMap.get(dateStr) ?? 0
-                const isLocked   = weekend || !!holiday
-                const isLeaveDay = !!leave
-                const maxHours   = Math.max(0, 8 - locked)
-                const line       = lines.get(dateStr)
-                const err        = errors.get(dateStr)
-
-                // Row background
-                const rowBg = weekend
-                  ? 'bg-gray-50 opacity-60'
-                  : holiday
-                  ? 'bg-red-50'
-                  : isLeaveDay && !leave?.isHalf
-                  ? 'bg-green-50'
-                  : leave?.isHalf
-                  ? 'bg-green-50/50'
-                  : 'bg-white hover:bg-blue-50/30'
+              {rowJobIds.map((jobId, rowIndex) => {
+                const isBlankRow = jobId === NO_JOB
+                const usedElsewhere = new Set(rowJobIds.filter((id, i) => id && i !== rowIndex))
+                const options = jobs.filter(j => !usedElsewhere.has(j.id))
 
                 return (
-                  <tr key={dateStr} className={cn('border-b border-gray-100 transition-colors', rowBg)}>
-                    {/* Day name */}
-                    <td className={cn('px-3 py-2 text-xs', weekend ? 'text-gray-400' : 'text-gray-600')}>
-                      {TH_DAYS[dow]}
+                  <tr key={rowIndex} className={cn('border-b border-gray-100', isBlankRow && 'bg-gray-50/40')}>
+                    <td className="px-2 py-1 sticky left-0 bg-white z-10">
+                      <select
+                        value={jobId}
+                        onChange={e => changeRowJob(rowIndex, e.target.value)}
+                        disabled={disabled}
+                        className="w-full text-xs rounded border border-gray-200 px-1.5 py-1 bg-white focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50 disabled:text-gray-400"
+                      >
+                        <option value="">— เลือก Job —</option>
+                        {options.map(j => (
+                          <option key={j.id} value={j.id}>{j.job_code} · {j.name_th}</option>
+                        ))}
+                      </select>
                     </td>
 
-                    {/* Date number */}
-                    <td className="px-3 py-2 font-medium text-gray-700 text-center">
-                      {dayDate}
-                    </td>
+                    {dateInfo.map(d => {
+                      const key = cellKey(jobId, d.dateStr)
+                      const value = cells.get(key) ?? ''
+                      const err = errors.get(d.dateStr)
+                      const cellDisabled = disabled || isBlankRow || d.isFullyLocked
 
-                    {/* Job selector */}
-                    <td className="px-2 py-1.5">
-                      {isLocked || (isLeaveDay && !leave?.isHalf) ? (
-                        <span className="text-xs text-gray-400 italic">
-                          {holiday ?? (leave ? `ลา${LEAVE_TYPE_LABEL[leave.type]}` : '—')}
-                        </span>
-                      ) : (
-                        <div>
-                          <select
-                            value={line?.job_id ?? ''}
-                            onChange={e => updateLine(dateStr, 'job_id', e.target.value)}
-                            disabled={disabled || maxHours === 0}
-                            className={cn(
-                              'w-full text-xs rounded border border-gray-200 px-2 py-1.5 bg-white',
-                              'focus:outline-none focus:ring-1 focus:ring-blue-400',
-                              'disabled:bg-gray-50 disabled:text-gray-400'
-                            )}
-                          >
-                            <option value="">— เลือก Job —</option>
-                            {jobs.map(j => (
-                              <option key={j.id} value={j.id}>
-                                {j.job_code} · {j.name_th}
-                              </option>
-                            ))}
-                          </select>
-                          {isLeaveDay && leave?.isHalf && (
-                            <p className="text-[10px] text-green-600 mt-0.5">
-                              ลา{leave.period === 'morning' ? 'เช้า' : 'บ่าย'} 4 ชม. · งานได้อีก {maxHours} ชม.
-                            </p>
+                      const bg = d.holiday ? 'bg-red-50' : d.weekend ? 'bg-gray-50' : d.leave?.isHalf ? 'bg-green-50/40' : ''
+
+                      const lockedTitle = d.holiday ?? (d.leave && !d.leave.isHalf ? `ลา${LEAVE_TYPE_LABEL[d.leave.type]}` : undefined)
+
+                      return (
+                        <td key={d.dateStr} className={cn('p-0.5 text-center', bg)}>
+                          {d.isFullyLocked ? (
+                            <span className="text-gray-300 text-[10px]" title={lockedTitle}>—</span>
+                          ) : (
+                            <input
+                              type="number"
+                              min={0}
+                              max={d.maxHours}
+                              step={0.5}
+                              value={value}
+                              onChange={e => updateCell(jobId, d.dateStr, parseFloat(e.target.value) || 0)}
+                              disabled={cellDisabled}
+                              placeholder="-"
+                              title={err}
+                              className={cn(
+                                'w-8 text-center text-[11px] rounded border px-0.5 py-1',
+                                'focus:outline-none focus:ring-1',
+                                err ? 'border-red-400 focus:ring-red-400 bg-red-50' : 'border-gray-200 focus:ring-blue-400',
+                                'disabled:bg-gray-50 disabled:text-gray-300'
+                              )}
+                            />
                           )}
-                        </div>
-                      )}
-                    </td>
+                        </td>
+                      )
+                    })}
 
-                    {/* Hours input */}
-                    <td className="px-2 py-1.5 text-center">
-                      {isLocked || (isLeaveDay && !leave?.isHalf) ? (
-                        <span className="text-xs text-gray-400">
-                          {locked > 0 ? `${locked} ชม.` : '—'}
-                        </span>
-                      ) : (
-                        <input
-                          type="number"
-                          min={0}
-                          max={maxHours}
-                          step={0.5}
-                          value={line?.hours ?? ''}
-                          onChange={e => updateLine(dateStr, 'hours', parseFloat(e.target.value) || 0)}
-                          disabled={disabled || !line?.job_id}
-                          placeholder="0"
-                          className={cn(
-                            'w-16 text-center text-xs rounded border px-2 py-1.5',
-                            'focus:outline-none focus:ring-1',
-                            err
-                              ? 'border-red-400 focus:ring-red-400 bg-red-50'
-                              : 'border-gray-200 focus:ring-blue-400 bg-white',
-                            'disabled:bg-gray-50 disabled:text-gray-400'
-                          )}
-                        />
-                      )}
-                    </td>
-
-                    {/* Remark */}
-                    <td className="px-2 py-1.5">
-                      {!isLocked && !(isLeaveDay && !leave?.isHalf) && (
+                    <td className="px-2 py-1">
+                      {!isBlankRow && (
                         <input
                           type="text"
-                          value={line?.remark ?? ''}
-                          onChange={e => updateLine(dateStr, 'remark', e.target.value)}
+                          value={rowRemarks.get(jobId) ?? ''}
+                          onChange={e => setRowRemarks(prev => {
+                            const next = new Map(prev)
+                            if (e.target.value) next.set(jobId, e.target.value)
+                            else next.delete(jobId)
+                            return next
+                          })}
                           disabled={disabled}
-                          placeholder="หมายเหตุ"
-                          className="w-full text-xs rounded border border-gray-200 px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50"
+                          placeholder="หมายเหตุ (ทั้งเดือน)"
+                          className="w-full text-[11px] rounded border border-gray-200 px-1.5 py-1 focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50"
                         />
                       )}
                     </td>
 
-                    {/* Error indicator */}
-                    <td className="px-2 py-1.5">
-                      {err && (
-                        <div title={err}>
-                          <AlertCircle className="w-4 h-4 text-red-500" />
-                        </div>
-                      )}
-                      {(isLocked || (isLeaveDay && !leave?.isHalf)) && (
-                        <Lock className="w-3 h-3 text-gray-300" />
+                    <td className="px-2 py-1 text-center font-medium text-blue-700">
+                      {!isBlankRow && rowTotal(jobId) > 0 ? rowTotal(jobId) : ''}
+                    </td>
+
+                    <td className="px-1 py-1 text-center">
+                      {!isBlankRow && !disabled && (
+                        <button
+                          type="button"
+                          onClick={() => removeRow(rowIndex)}
+                          className="text-gray-300 hover:text-red-500"
+                          title="ลบแถวนี้"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       )}
                     </td>
                   </tr>
                 )
               })}
+
+              {/* Leave row — informational, matches the Excel "ลา" row */}
+              {leaveLockedMap.size > 0 && (
+                <tr className="border-b border-gray-100 bg-green-50/40">
+                  <td className="px-2 py-1.5 text-gray-500 sticky left-0 bg-green-50/40 z-10">ลา</td>
+                  {dateInfo.map(d => (
+                    <td key={d.dateStr} className="px-0.5 py-1.5 text-center text-green-700">
+                      {d.locked > 0 ? d.locked : ''}
+                    </td>
+                  ))}
+                  <td />
+                  <td className="px-2 py-1.5 text-center font-medium text-green-700">
+                    {Array.from(leaveLockedMap.values()).reduce((a, b) => a + b, 0)}
+                  </td>
+                  <td />
+                </tr>
+              )}
             </tbody>
 
             {/* Footer totals */}
             <tfoot>
               <tr className="bg-gray-50 border-t-2 border-gray-200 font-medium">
-                <td colSpan={3} className="px-3 py-3 text-sm text-gray-700">รวมชั่วโมงทั้งเดือน</td>
-                <td className="px-2 py-3 text-center text-sm text-blue-700 font-bold">{totalWorkHours}</td>
-                <td colSpan={2}></td>
+                <td className="px-2 py-2.5 text-gray-700 sticky left-0 bg-gray-50 z-10">รวม/วัน</td>
+                {dateInfo.map(d => {
+                  const total = (dayTotals.get(d.dateStr) ?? 0) + d.locked
+                  return (
+                    <td key={d.dateStr} className="px-0.5 py-2.5 text-center text-blue-700">
+                      {total > 0 ? total : ''}
+                    </td>
+                  )
+                })}
+                <td />
+                <td className="px-2 py-2.5 text-center text-blue-700 font-bold">
+                  {totalWorkHours + Array.from(leaveLockedMap.values()).reduce((a, b) => a + b, 0)}
+                </td>
+                <td />
               </tr>
             </tfoot>
           </table>
         </div>
+
+        {!disabled && (
+          <div className="px-3 py-2 border-t border-gray-100">
+            <button
+              type="button"
+              onClick={addBlankRow}
+              className="flex items-center gap-1.5 text-xs text-blue-700 hover:text-blue-800 font-medium"
+            >
+              <Plus className="w-3.5 h-3.5" /> เพิ่มงาน
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Validation error summary */}
       {errors.size > 0 && (
         <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3">
-          <p className="text-sm font-medium text-red-700 mb-1">พบข้อผิดพลาด:</p>
+          <p className="text-sm font-medium text-red-700 mb-1 flex items-center gap-1.5">
+            <AlertCircle className="w-4 h-4" /> พบข้อผิดพลาด:
+          </p>
           {Array.from(errors.entries()).map(([date, msg]) => (
             <p key={date} className="text-xs text-red-600">• {date}: {msg}</p>
           ))}

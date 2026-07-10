@@ -5,7 +5,7 @@
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from '@/components/ui/Toaster'
-import { Plus, Megaphone, Loader2, Image as ImageIcon } from 'lucide-react'
+import { Plus, Megaphone, Loader2, Image as ImageIcon, AlertTriangle } from 'lucide-react'
 import { cn, formatDateTH } from '@/utils'
 
 type Category = 'general' | 'policy' | 'event' | 'emergency'
@@ -45,6 +45,7 @@ export default function HrAnnouncementsPage() {
   const [body, setBody]         = useState('')
   const [category, setCategory] = useState<Category>('general')
   const [companyIds, setCompanyIds] = useState<string[]>([])
+  const [requireAck, setRequireAck] = useState(false)
   const [imageFile, setImageFile]   = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -62,7 +63,7 @@ export default function HrAnnouncementsPage() {
   })
 
   const resetForm = () => {
-    setTitle(''); setBody(''); setCategory('general'); setCompanyIds([])
+    setTitle(''); setBody(''); setCategory('general'); setCompanyIds([]); setRequireAck(false)
     setImageFile(null); setImagePreview(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
@@ -71,7 +72,7 @@ export default function HrAnnouncementsPage() {
     mutationFn: async () => {
       if (!imageFile) throw new Error('กรุณาแนบรูปภาพประกอบประกาศ')
       const form = new FormData()
-      form.append('data', JSON.stringify({ title, body, category, company_ids: companyIds }))
+      form.append('data', JSON.stringify({ title, body, category, company_ids: companyIds, require_ack: requireAck }))
       form.append('image', imageFile)
       const res  = await fetch('/api/hr/announcements', { method: 'POST', body: form })
       const json = await res.json()
@@ -165,6 +166,21 @@ export default function HrAnnouncementsPage() {
             </div>
           </div>
 
+          <label className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <input
+              type="checkbox" className="mt-0.5"
+              checked={requireAck} onChange={e => setRequireAck(e.target.checked)}
+            />
+            <span>
+              <span className="font-medium flex items-center gap-1.5">
+                <AlertTriangle className="w-4 h-4" /> บังคับให้ต้องอ่านและกดรับทราบ
+              </span>
+              <span className="block text-xs text-amber-700 mt-0.5">
+                ประกาศนี้จะเด้งเป็นกล่องข้อความบังคับให้พนักงานอ่านและกดปุ่ม &quot;รับทราบแล้ว&quot; ก่อนใช้งานหน้าอื่นได้ — ใช้เฉพาะเรื่องสำคัญจริงๆ
+              </span>
+            </span>
+          </label>
+
           <div>
             <label className="form-label">รูปภาพประกอบ * (สูงสุด 5MB)</label>
             <input
@@ -214,6 +230,11 @@ export default function HrAnnouncementsPage() {
                   <span className={cn('badge', CATEGORY_COLOR[a.category as Category])}>
                     {CATEGORY_LABEL[a.category as Category]}
                   </span>
+                  {a.require_ack && (
+                    <span className="badge bg-amber-100 text-amber-700 flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3" /> ต้องรับทราบ
+                    </span>
+                  )}
                   <span className="text-xs text-gray-400">{formatDateTH(a.created_at)}</span>
                 </div>
                 <p className="text-sm font-semibold text-gray-900 mt-1">{a.title}</p>

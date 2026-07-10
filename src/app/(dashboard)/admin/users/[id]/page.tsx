@@ -20,7 +20,22 @@ import {
 import Link from 'next/link'
 import { useState, useEffect, useRef } from 'react'
 import type { UserRole, UserStatus, LeaveType } from '@/types/database'
-import { useAuthStore } from '@/store/auth.store'
+
+// Reads the session cookie directly instead of useAuthStore — see the
+// comment in src/app/(dashboard)/admin/users/page.tsx for why: that
+// store's setSession() is never called anywhere, so isAdmin was always
+// false here too, silently disabling every editable field on this page
+// (department/position/phone/email/hire_date/role/status, photo upload,
+// the "บันทึก" button) for every admin, not just read-only for HR as
+// intended.
+function useCurrentRole(): string {
+  if (typeof window === 'undefined') return ''
+  try {
+    const raw = document.cookie.split('; ').find(r => r.startsWith('hsc_session='))
+    if (!raw) return ''
+    return JSON.parse(decodeURIComponent(raw.split('=').slice(1).join('=')))?.role ?? ''
+  } catch { return '' }
+}
 
 const STATUS_LABEL: Record<UserStatus, string> = {
   active: 'ทำงานอยู่', inactive: 'ระงับการใช้งาน', resigned: 'ลาออกแล้ว',
@@ -59,7 +74,7 @@ export default function UserDetailPage() {
   // — so those controls render read-only for HR instead of failing on save
   // with a 403. Leave-balance adjustment is excluded from this: HR is
   // already allowed there (see /api/hr/leave/adjustment).
-  const isAdmin = useAuthStore(s => s.session?.role) === 'admin'
+  const isAdmin = useCurrentRole() === 'admin'
 
   const user           = data?.user
   const balances        = data?.balances ?? []

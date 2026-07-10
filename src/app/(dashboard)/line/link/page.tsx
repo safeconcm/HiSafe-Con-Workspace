@@ -7,6 +7,16 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { MessageCircle, Loader2, CheckCircle2, Copy } from 'lucide-react'
 
+// LINE OA Basic ID — the handle employees search/add by (different from
+// the numeric "Channel ID" used for the Messaging API, which lives in
+// ผู้ดูแล > ตั้งค่า and is not meant for employees). Shared by both
+// companies (see the settings page badge), so hardcoded here rather than
+// added as another per-company setting. Update this if the OA is ever
+// recreated under a different Basic ID.
+const LINE_OA_BASIC_ID  = '@721xnkpf'
+const LINE_OA_ADD_URL   = `https://line.me/R/ti/p/${encodeURIComponent(LINE_OA_BASIC_ID)}`
+const LINE_OA_QR_IMG    = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(LINE_OA_ADD_URL)}`
+
 export default function LineLinkPage() {
   const queryClient = useQueryClient()
   const [code, setCode] = useState<string | null>(null)
@@ -64,10 +74,29 @@ export default function LineLinkPage() {
         ) : (
           <>
             <ol className="list-decimal list-inside space-y-2 text-sm text-gray-700">
-              <li>เพิ่มเพื่อน LINE Official Account ของบริษัท (สแกน QR หรือค้นหาจากที่ HR แจ้งไว้)</li>
+              <li>เพิ่มเพื่อน LINE Official Account ของบริษัท — สแกน QR ด้านล่าง (จากมือถือ) หรือค้นหา ID <span className="font-mono font-medium">{LINE_OA_BASIC_ID}</span></li>
               <li>กดปุ่ม &quot;ขอรหัสเชื่อมต่อ&quot; ด้านล่าง เพื่อรับรหัส 6 หลัก</li>
               <li>พิมพ์รหัสนั้นส่งเป็นข้อความในแชท LINE OA ภายใน 10 นาที</li>
             </ol>
+
+            <div className="flex flex-col sm:flex-row items-center gap-4 rounded-lg border border-gray-200 bg-gray-50 px-5 py-4">
+              <img
+                src={LINE_OA_QR_IMG}
+                alt={`QR code เพิ่มเพื่อน LINE ${LINE_OA_BASIC_ID}`}
+                width={140} height={140}
+                className="rounded-lg bg-white border border-gray-200 shrink-0"
+              />
+              <div className="text-center sm:text-left space-y-1.5">
+                <p className="text-sm text-gray-700">สแกนด้วยกล้องมือถือ (หรือกล้อง LINE) เพื่อเพิ่มเพื่อนทันที</p>
+                <p className="text-xs text-gray-400">ถ้าเปิดหน้านี้จากมือถืออยู่แล้ว กดปุ่มด้านล่างแทนการสแกนได้เลย</p>
+                <a
+                  href={LINE_OA_ADD_URL} target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 text-white px-3 py-1.5 text-sm font-medium hover:bg-green-700"
+                >
+                  <MessageCircle className="w-4 h-4" /> เพิ่มเพื่อน LINE
+                </a>
+              </div>
+            </div>
 
             {code ? (
               <div className="rounded-lg border border-gray-200 bg-gray-50 px-6 py-5 text-center space-y-2">

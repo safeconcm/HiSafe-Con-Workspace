@@ -13,7 +13,10 @@ import {
   serverError, writeAuditLog, isHROrAdmin,
 } from '@/lib/api-helpers'
 
-const EVALUATOR_ROLES = ['supervisor', 'dept_head', 'md']
+// 'supervisor' was dropped per user request (too many evaluator tiers) —
+// still allowed by the DB CHECK constraint (probation_evaluations_evaluator_role_check)
+// for backward compatibility, but the app no longer offers or expects it.
+const EVALUATOR_ROLES = ['dept_head', 'md']
 const RESULTS = ['pass', 'fail', 'extend']
 
 export async function GET(req: NextRequest) {

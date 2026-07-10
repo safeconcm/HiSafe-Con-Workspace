@@ -74,15 +74,22 @@ export interface PayrollUserRow {
 }
 
 export async function computePayroll(
-  companyId: string, year: number, month: number
+  companyId: string, year: number, month: number,
+  // Restricts results to these user_ids — used to scope a supervisor's
+  // "my team" payroll view (see /api/payroll/route.ts) to their direct
+  // reports via organization_nodes, instead of the whole company (HR/
+  // admin still get the unfiltered company-wide view by omitting this).
+  opts?: { userIds?: string[] }
 ): Promise<PayrollUserRow[]> {
   const supabase = createAdminSupabaseClient()
   const workDays = await countCompanyWorkDays(supabase, companyId, year, month)
   const monthStart = `${year}-${String(month).padStart(2, '0')}-01`
   const monthEnd   = `${year}-${String(month).padStart(2, '0')}-${String(daysInMonth(year, month)).padStart(2, '0')}`
 
+  if (opts?.userIds && opts.userIds.length === 0) return []
+
   // 1. Approved timesheets for this company/month, with their work lines
-  const { data: timesheets } = await supabase
+  let timesheetsQuery = supabase
     .from('timesheets')
     .select(`
       id, user_id,
@@ -93,6 +100,8 @@ export async function computePayroll(
     .eq('year', year)
     .eq('month', month)
     .eq('status', 'approved')
+  if (opts?.userIds) timesheetsQuery = timesheetsQuery.in('user_id', opts.userIds)
+  const { data: timesheets } = await timesheetsQuery
 
   // 2. Unpaid leave days per user this month (probation leave — see item 13)
   const { data: unpaidLeave } = await supabase

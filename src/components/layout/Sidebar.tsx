@@ -199,7 +199,7 @@ const NAV_ITEMS: NavItem[] = [
     label: 'ค่าแรง/Payroll',
     href:  '/payroll',
     icon:  Wallet,
-    roles: ['hr', 'admin'],
+    roles: ['hr', 'admin', 'supervisor'],
   },
   // Admin section
   {
