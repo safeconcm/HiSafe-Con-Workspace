@@ -5,7 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { formatDateTime, cn } from '@/utils'
 import {
   Bell, CheckCheck, CalendarDays, Clock,
-  ChevronRight, Loader2, Check,
+  ChevronRight, Loader2, Check, FileText, UserCheck, CalendarClock,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -18,6 +18,9 @@ const EVENT_ICON: Record<string, React.ElementType> = {
   timesheet_submitted:  Clock,
   timesheet_approved:   Clock,
   timesheet_rejected:   Clock,
+  contract_expiring:    FileText,
+  probation_reminder:   UserCheck,
+  leave_expiring:       CalendarClock,
   general:              Bell,
 }
 
@@ -30,6 +33,9 @@ const EVENT_COLOR: Record<string, string> = {
   timesheet_approved:   'bg-green-100 text-green-700',
   timesheet_rejected:   'bg-red-100 text-red-700',
   timesheet_submitted:  'bg-blue-100 text-blue-700',
+  contract_expiring:    'bg-amber-100 text-amber-700',
+  probation_reminder:   'bg-amber-100 text-amber-700',
+  leave_expiring:       'bg-amber-100 text-amber-700',
   general:              'bg-gray-100 text-gray-600',
 }
 
@@ -85,6 +91,13 @@ export default function NotificationsPage() {
       // Need to parse year/month from timesheet — link to detail via id lookup
       return `/timesheet`
     }
+    // contract_expiring and probation_reminder both reference a contract id,
+    // but should land on different pages depending on which one fired.
+    if (n.reference_type === 'contract' && n.event_type === 'probation_reminder') {
+      return `/hr/probation/${n.reference_id}`
+    }
+    if (n.reference_type === 'contract') return `/hr/contracts/${n.reference_id}`
+    if (n.reference_type === 'leave_balance') return `/leave/my`
     return null
   }
 

@@ -14,5 +14,11 @@
     "src/app/api/pdf/timesheet/[id]/route.ts": {
       "maxDuration": 30
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/cron/daily-checks",
+      "schedule": "0 1 * * *"
+    }
+  ]
 }
