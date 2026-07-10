@@ -1,10 +1,10 @@
 'use client'
 // src/app/(dashboard)/approvals/timesheet/page.tsx
-import { usePendingTimesheets }     from '@/hooks/useTimesheet'
-import { TimesheetStatusBadge }     from '@/components/timesheet/TimesheetStatusBadge'
+import { useState } from 'react'
+import { usePendingTimesheets, useApprovedTimesheets } from '@/hooks/useTimesheet'
 import { TimesheetApprovalPanel }   from '@/components/timesheet/TimesheetApprovalPanel'
-import { formatMonthYearTH, fullNameTH } from '@/utils'
-import { Loader2, ClipboardList, ChevronRight, Clock } from 'lucide-react'
+import { formatMonthYearTH, fullNameTH, cn } from '@/utils'
+import { Loader2, ClipboardList, Clock, CheckCircle2 } from 'lucide-react'
 import Link from 'next/link'
 
 function useCurrentUserId() {
@@ -17,22 +17,49 @@ function useCurrentUserId() {
 }
 
 export default function ApprovalsTimesheetPage() {
-  const userId  = useCurrentUserId()
-  const { data, isLoading, refetch } = usePendingTimesheets()
-  // The API (/api/hr/timesheet) already scopes this correctly per role —
-  // supervisors only ever get timesheets assigned to them, HR/Admin get
-  // every pending one — so no extra client-side filtering is needed here.
+  const userId = useCurrentUserId()
+  const [tab, setTab] = useState<'pending' | 'approved'>('pending')
+
+  const pending  = usePendingTimesheets()
+  // Only fetch the approved-history tab's data once the user actually
+  // switches to it — no point querying it on every load of this page.
+  const approved = useApprovedTimesheets()
+
+  const isPending = tab === 'pending'
+  const { data, isLoading, refetch } = isPending ? pending : approved
+  // The API (/api/hr/timesheet) already scopes both statuses correctly per
+  // role — supervisors only ever get their own (current_approver_id for
+  // pending, approved_by_id for history), HR/Admin get the whole company —
+  // so no extra client-side filtering is needed here.
   const timesheets = data?.timesheets ?? []
 
   return (
     <div className="page-container space-y-5">
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <ClipboardList className="w-5 h-5 text-gray-500" />
-        <h1>รออนุมัติ Timesheet</h1>
-        {timesheets.length > 0 && (
+        <h1>อนุมัติ Timesheet</h1>
+        {isPending && timesheets.length > 0 && (
           <span className="badge bg-amber-100 text-amber-800">{timesheets.length} รายการ</span>
         )}
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 bg-white border border-gray-200 rounded-lg p-1 w-fit">
+        <button
+          onClick={() => setTab('pending')}
+          className={cn('px-4 py-1.5 rounded-md text-sm transition-colors',
+            isPending ? 'bg-blue-700 text-white font-medium' : 'text-gray-600 hover:bg-gray-100')}
+        >
+          รออนุมัติ
+        </button>
+        <button
+          onClick={() => setTab('approved')}
+          className={cn('px-4 py-1.5 rounded-md text-sm transition-colors',
+            !isPending ? 'bg-blue-700 text-white font-medium' : 'text-gray-600 hover:bg-gray-100')}
+        >
+          อนุมัติแล้ว
+        </button>
       </div>
 
       {isLoading ? (
@@ -42,7 +69,9 @@ export default function ApprovalsTimesheetPage() {
       ) : !timesheets.length ? (
         <div className="card flex flex-col items-center justify-center py-16 text-center">
           <ClipboardList className="w-10 h-10 text-gray-200 mb-3" />
-          <p className="text-sm text-gray-400">ไม่มีรายการรออนุมัติ</p>
+          <p className="text-sm text-gray-400">
+            {isPending ? 'ไม่มีรายการรออนุมัติ' : 'ยังไม่มีรายการที่อนุมัติแล้ว'}
+          </p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -71,16 +100,23 @@ export default function ApprovalsTimesheetPage() {
                 </Link>
               </div>
 
-              {/* Inline approval panel */}
-              <div className="p-4 bg-amber-50">
-                <TimesheetApprovalPanel
-                  timesheetId={ts.id}
-                  approverId={ts.current_approver_id}
-                  currentUserId={userId}
-                  status={ts.status}
-                  onDone={refetch}
-                />
-              </div>
+              {isPending ? (
+                /* Inline approval panel */
+                <div className="p-4 bg-amber-50">
+                  <TimesheetApprovalPanel
+                    timesheetId={ts.id}
+                    approverId={ts.current_approver_id}
+                    currentUserId={userId}
+                    status={ts.status}
+                    onDone={refetch}
+                  />
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 px-5 py-3 bg-green-50 text-green-700 text-sm">
+                  <CheckCircle2 className="w-4 h-4" />
+                  อนุมัติแล้วเมื่อ {ts.approved_at ? new Date(ts.approved_at).toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'}
+                </div>
+              )}
             </div>
           ))}
         </div>

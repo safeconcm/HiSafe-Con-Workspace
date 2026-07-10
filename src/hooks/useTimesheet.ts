@@ -32,6 +32,17 @@ async function fetchPendingTimesheets() {
   return json.data
 }
 
+// Used by the "อนุมัติแล้ว" history tab on /approvals/timesheet — same
+// endpoint, different status. Scoping (supervisor sees only their own
+// approvals, HR/Admin see the whole company) is handled server-side in
+// /api/hr/timesheet.
+async function fetchApprovedTimesheets() {
+  const res  = await fetch('/api/hr/timesheet?status=approved&limit=50')
+  const json = await res.json()
+  if (!res.ok) throw new Error(json.error ?? 'Failed')
+  return json.data
+}
+
 // ── Hooks ─────────────────────────────────────────────────────
 
 export function useMonthTimesheet(year: number, month: number) {
@@ -63,6 +74,13 @@ export function usePendingTimesheets() {
     queryKey: ['pending-timesheets'],
     queryFn:  fetchPendingTimesheets,
     refetchInterval: 60_000,
+  })
+}
+
+export function useApprovedTimesheets() {
+  return useQuery({
+    queryKey: ['approved-timesheets'],
+    queryFn:  fetchApprovedTimesheets,
   })
 }
 

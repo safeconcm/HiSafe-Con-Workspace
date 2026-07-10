@@ -84,9 +84,16 @@ export async function GET(req: NextRequest) {
       : query.eq('id', '00000000-0000-0000-0000-000000000000') // no reports → guaranteed-empty result
   } else if (!isHROrAdmin(session)) {
     if (session.role === 'supervisor') {
-      // Supervisors see their own + pending items assigned to them
+      // Supervisors see: their own leave, items currently pending on them
+      // (current_approver_id), AND items they've already decided on
+      // (approved_by_id) — that last one matters for the "อนุมัติแล้ว"
+      // history tab on /approvals/leave: current_approver_id gets nulled
+      // out the moment a request is approved (see /api/leave/[id]/approve),
+      // so without approved_by_id here, asking for status=approved always
+      // came back empty for a supervisor even though they were the one who
+      // approved it.
       if (!userId || userId === session.id) {
-        query = query.or(`user_id.eq.${session.id},current_approver_id.eq.${session.id}`)
+        query = query.or(`user_id.eq.${session.id},current_approver_id.eq.${session.id},approved_by_id.eq.${session.id}`)
       } else {
         query = query.eq('user_id', userId)
       }
