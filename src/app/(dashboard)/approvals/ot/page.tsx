@@ -43,9 +43,11 @@ function useCurrentUser() {
   } catch { return { id: '', role: '' } }
 }
 
-async function fetchOT(status?: string) {
-  const qs = status ? `?status=${status}&limit=50` : '?limit=50'
-  const res  = await fetch(`/api/ot${qs}`)
+async function fetchOT(status?: string, ownOnly?: boolean) {
+  const params = new URLSearchParams({ limit: '50' })
+  if (status)  params.set('status', status)
+  if (ownOnly) params.set('own_only', '1')
+  const res  = await fetch(`/api/ot?${params}`)
   const json = await res.json()
   if (!res.ok) throw new Error(json.error)
   return json.data
@@ -70,7 +72,7 @@ export default function OTPage() {
     ot_date: '', start_time: '18:00', end_time: '20:00', job_id: '', reason: '',
   })
 
-  const { data: myData,      isLoading: l1 } = useQuery({ queryKey: ['ot-my'],      queryFn: () => fetchOT() })
+  const { data: myData,      isLoading: l1 } = useQuery({ queryKey: ['ot-my'],      queryFn: () => fetchOT(undefined, true) })
   const { data: pendingData, isLoading: l2 } = useQuery({ queryKey: ['ot-pending'], queryFn: () => fetchOT('pending'), enabled: isSupervisor })
   const { data: jobs = [] }                  = useQuery({ queryKey: ['jobs-current'], queryFn: fetchJobs })
 

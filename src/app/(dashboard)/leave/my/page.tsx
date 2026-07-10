@@ -21,7 +21,7 @@ export default function MyLeavePage() {
   const [status, setStatus] = useState('')
   const [year, setYear]     = useState(new Date().getFullYear())
 
-  const { data, isLoading } = useLeaves({ status: status || undefined, year, limit: 50 })
+  const { data, isLoading } = useLeaves({ status: status || undefined, year, limit: 50, ownOnly: true })
   const leaves = data?.requests ?? []
 
   const years = Array.from({ length: 3 }, (_, i) => new Date().getFullYear() - i)

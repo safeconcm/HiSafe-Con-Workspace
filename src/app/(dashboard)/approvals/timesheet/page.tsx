@@ -19,9 +19,10 @@ function useCurrentUserId() {
 export default function ApprovalsTimesheetPage() {
   const userId  = useCurrentUserId()
   const { data, isLoading, refetch } = usePendingTimesheets()
-  const timesheets = (data?.timesheets ?? []).filter(
-    (ts: any) => ts.current_approver_id === userId || data?.timesheets
-  )
+  // The API (/api/hr/timesheet) already scopes this correctly per role —
+  // supervisors only ever get timesheets assigned to them, HR/Admin get
+  // every pending one — so no extra client-side filtering is needed here.
+  const timesheets = data?.timesheets ?? []
 
   return (
     <div className="page-container space-y-5">

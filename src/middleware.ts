@@ -135,9 +135,17 @@ export async function middleware(request: NextRequest) {
       available_companies: companyRows ?? [],
     }
 
-    // Store in cookie (7 day TTL, HttpOnly, Secure in prod)
+    // Store in cookie (7 day TTL, Secure in prod). NOT httpOnly: several
+    // client components (admin/users, timesheet, leave detail, OT/timesheet
+    // approvals — see the `document.cookie` reads for 'hsc_session') read
+    // this cookie directly in the browser to avoid an extra round-trip for
+    // display-only session info (id/role/company). None of that data is
+    // secret — it's already rendered in the UI (name, email, role badge) —
+    // so there's no meaningful security loss versus the real protection
+    // (Supabase's own auth session cookies, which stay httpOnly/managed by
+    // @supabase/ssr and are untouched here).
     response.cookies.set('hsc_session', JSON.stringify(sessionUser), {
-      httpOnly: true,
+      httpOnly: false,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 7,

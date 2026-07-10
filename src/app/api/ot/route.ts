@@ -19,6 +19,9 @@ export async function GET(req: NextRequest) {
   const year    = searchParams.get('year')
   const page    = parseInt(searchParams.get('page') ?? '1')
   const limit   = parseInt(searchParams.get('limit') ?? '20')
+  // "ของฉัน" tab wants literally only OT this user filed — see the matching
+  // own_only comment in src/app/api/leave/route.ts for why this exists.
+  const ownOnly = searchParams.get('own_only') === '1'
   const from    = (page - 1) * limit
   const supabase = createAdminSupabaseClient()
 
@@ -34,7 +37,9 @@ export async function GET(req: NextRequest) {
     .order('created_at', { ascending: false })
     .range(from, from + limit - 1)
 
-  if (!isHROrAdmin(session)) {
+  if (ownOnly) {
+    query = query.eq('user_id', session.id)
+  } else if (!isHROrAdmin(session)) {
     query = query.or(`user_id.eq.${session.id},current_approver_id.eq.${session.id}`)
   }
   if (status) query = query.eq('status', status)

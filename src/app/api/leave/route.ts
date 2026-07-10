@@ -21,6 +21,12 @@ export async function GET(req: NextRequest) {
   const leaveType = searchParams.get('leave_type')
   const year      = searchParams.get('year')
   const userId    = searchParams.get('user_id')  // HR/Admin: filter by specific user
+  // "My leave" pages (as opposed to "approvals" pages) want literally only
+  // requests this user filed themselves — without this, a supervisor's own
+  // "ใบลาของฉัน" list was polluted with their reports' pending requests,
+  // because the OR-clause below (needed for the approvals page) doesn't
+  // distinguish "show my dashboard" from "show only what I personally filed".
+  const ownOnly   = searchParams.get('own_only') === '1'
   const from      = (page - 1) * limit
 
   const supabase  = createAdminSupabaseClient()
@@ -41,7 +47,9 @@ export async function GET(req: NextRequest) {
     .range(from, from + limit - 1)
 
   // Scope by role
-  if (!isHROrAdmin(session)) {
+  if (ownOnly) {
+    query = query.eq('user_id', session.id)
+  } else if (!isHROrAdmin(session)) {
     if (session.role === 'supervisor') {
       // Supervisors see their own + pending items assigned to them
       if (!userId || userId === session.id) {
