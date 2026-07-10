@@ -286,10 +286,18 @@ export async function dispatchNotifications(params: {
     }))
   )
 
-  const { data: inserted } = await supabase
+  const { data: inserted, error: insertErr } = await supabase
     .from('notifications')
     .insert(rows)
     .select('id, recipient_id, channel')
+
+  // This used to fail completely silently (error was never read) — e.g. an
+  // event_type not yet in the notification_event enum would make the whole
+  // insert fail, but every caller of dispatchNotifications() would see it
+  // as a normal "sent" outcome with zero visible symptoms. Logging isn't a
+  // full fix, but it means a bad deploy shows up in Vercel logs instead of
+  // just quietly notifying nobody.
+  if (insertErr) console.error('[dispatchNotifications] insert failed:', insertErr)
 
   // Best-effort delivery for email/line, attempted inline in the same
   // request — there is no background queue worker in this deployment yet.

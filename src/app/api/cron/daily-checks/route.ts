@@ -136,11 +136,14 @@ export async function GET(req: NextRequest) {
     const recipients = hrAdminByCompany.get(c.company_id) ?? []
     if (!recipients.length) continue
 
-    if (c.probation_reminder_sent_at) {
-      const sentAt = new Date(c.probation_reminder_sent_at)
-      const ageDays = (Date.now() - sentAt.getTime()) / 86_400_000
-      if (ageDays < DEDUPE_DAYS) continue
-    }
+    // Dedupe against the notifications table itself, not just
+    // probation_reminder_sent_at — the column update below used to run
+    // unconditionally after dispatchNotifications(), so a failed send
+    // (e.g. the notification_event enum not yet having this value) would
+    // still mark the reminder as "sent" and block a real one for
+    // DEDUPE_DAYS. Checking actual notification rows means a failed
+    // attempt gets retried on the next run instead of silently blocked.
+    if (await alreadyNotifiedRecently(supabase, 'probation_reminder', c.id, DEDUPE_DAYS)) continue
 
     const u = Array.isArray(c.user) ? c.user[0] : c.user
     const overdue = c.probation_end < today
