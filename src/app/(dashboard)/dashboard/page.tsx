@@ -87,6 +87,12 @@ export default async function DashboardPage() {
   const available = (b: typeof annualBalance): number =>
     b ? Math.max(b.quota_days + b.carried_forward + b.adjusted_days - b.used_days - b.pending_days, 0) : 0
 
+  // HR/Admin manage everyone else's leave & timesheet — in practice they
+  // don't submit their own through the system (small team, no one left to
+  // approve theirs anyway). Hide the personal leave/timesheet widgets for
+  // them here to match the sidebar (see Sidebar.tsx) — decided 2026-07-11.
+  const showPersonalWidgets = ['employee', 'supervisor'].includes(me.role)
+
   return (
     <div className="page-container space-y-6">
 
@@ -120,109 +126,113 @@ export default async function DashboardPage() {
         </div>
       )}
 
-      {/* Leave balance cards */}
-      <div>
-        <h2 className="text-sm font-medium text-gray-500 mb-3">วันลาคงเหลือ {currentYear}</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-          {[
-            { label: 'พักร้อน',  balance: annualBalance,   color: 'text-blue-600',  bg: 'bg-blue-50'  },
-            { label: 'ลาป่วย',   balance: sickBalance,     color: 'text-red-600',   bg: 'bg-red-50'   },
-            { label: 'ลากิจ',    balance: personalBalance, color: 'text-amber-600', bg: 'bg-amber-50' },
-          ].map(item => (
-            <div key={item.label} className="card p-4">
-              <div className={`inline-flex p-2 rounded-lg ${item.bg} mb-2`}>
-                <CalendarDays className={`w-4 h-4 ${item.color}`} />
-              </div>
-              <p className="text-2xl font-bold text-gray-900">
-                {available(item.balance)}
-                <span className="text-sm font-normal text-gray-400 ml-1">วัน</span>
-              </p>
-              <p className="text-xs text-gray-500 mt-0.5">{item.label}</p>
-              {item.balance && (
-                <p className="text-xs text-gray-400 mt-1">
-                  ใช้ไปแล้ว {item.balance.used_days} / {item.balance.quota_days + item.balance.carried_forward} วัน
-                </p>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* This month timesheet */}
-      <div className="card p-4 flex items-center gap-4">
-        <div className="p-2 rounded-lg bg-purple-50">
-          <Clock className="w-5 h-5 text-purple-600" />
-        </div>
-        <div className="flex-1">
-          <p className="text-sm font-medium text-gray-900">Timesheet เดือนนี้</p>
-          <p className="text-xs text-gray-500">
-            {timesheet
-              ? `${timesheet.total_hours} ชั่วโมง · ${
-                  timesheet.status === 'draft' ? 'ยังไม่ส่ง' :
-                  timesheet.status === 'submitted' ? 'รออนุมัติ' :
-                  timesheet.status === 'approved' ? 'อนุมัติแล้ว' : 'ไม่อนุมัติ'
-                }`
-              : 'ยังไม่ได้กรอก'}
-          </p>
-        </div>
-        <Link
-          href={`/timesheet/${currentYear}/${currentMonth}`}
-          className="text-xs text-blue-600 hover:underline"
-        >
-          ดู/แก้ไข →
-        </Link>
-      </div>
-
-      {/* Recent leaves */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-medium text-gray-500">ใบลาล่าสุด</h2>
-          <Link href="/leave/my" className="text-xs text-blue-600 hover:underline">ดูทั้งหมด</Link>
-        </div>
-        {!recentLeaves?.length ? (
-          <div className="card p-6 text-center text-sm text-gray-400">
-            ยังไม่มีประวัติการลา
-          </div>
-        ) : (
-          <div className="card divide-y divide-gray-100">
-            {recentLeaves.map((leave: any) => (
-              <Link
-                key={leave.id}
-                href={`/leave/${leave.id}`}
-                className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900">
-                    {LEAVE_TYPE_LABEL[leave.leave_type as keyof typeof LEAVE_TYPE_LABEL]}
-                    <span className="ml-2 text-gray-400 font-normal text-xs">
-                      {leave.total_days} วัน
-                    </span>
+      {showPersonalWidgets && (
+        <>
+          {/* Leave balance cards */}
+          <div>
+            <h2 className="text-sm font-medium text-gray-500 mb-3">วันลาคงเหลือ {currentYear}</h2>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {[
+                { label: 'พักร้อน',  balance: annualBalance,   color: 'text-blue-600',  bg: 'bg-blue-50'  },
+                { label: 'ลาป่วย',   balance: sickBalance,     color: 'text-red-600',   bg: 'bg-red-50'   },
+                { label: 'ลากิจ',    balance: personalBalance, color: 'text-amber-600', bg: 'bg-amber-50' },
+              ].map(item => (
+                <div key={item.label} className="card p-4">
+                  <div className={`inline-flex p-2 rounded-lg ${item.bg} mb-2`}>
+                    <CalendarDays className={`w-4 h-4 ${item.color}`} />
+                  </div>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {available(item.balance)}
+                    <span className="text-sm font-normal text-gray-400 ml-1">วัน</span>
                   </p>
-                  <p className="text-xs text-gray-500 truncate">
-                    {formatDateTH(leave.start_date)}
-                    {leave.start_date !== leave.end_date && ` – ${formatDateTH(leave.end_date)}`}
-                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5">{item.label}</p>
+                  {item.balance && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      ใช้ไปแล้ว {item.balance.used_days} / {item.balance.quota_days + item.balance.carried_forward} วัน
+                    </p>
+                  )}
                 </div>
-                <span className={`badge ${LEAVE_STATUS_COLOR[leave.status as keyof typeof LEAVE_STATUS_COLOR]}`}>
-                  {LEAVE_STATUS_LABEL[leave.status as keyof typeof LEAVE_STATUS_LABEL]}
-                </span>
-              </Link>
-            ))}
+              ))}
+            </div>
           </div>
-        )}
-      </div>
 
-      {/* Quick actions */}
-      <div className="grid grid-cols-2 gap-3">
-        <Link href="/leave/new" className="card p-4 hover:shadow-md transition-shadow text-center">
-          <CalendarDays className="w-6 h-6 text-blue-600 mx-auto mb-1" />
-          <p className="text-sm font-medium text-gray-800">ยื่นใบลา</p>
-        </Link>
-        <Link href={`/timesheet/${currentYear}/${currentMonth}`} className="card p-4 hover:shadow-md transition-shadow text-center">
-          <Clock className="w-6 h-6 text-purple-600 mx-auto mb-1" />
-          <p className="text-sm font-medium text-gray-800">กรอก Timesheet</p>
-        </Link>
-      </div>
+          {/* This month timesheet */}
+          <div className="card p-4 flex items-center gap-4">
+            <div className="p-2 rounded-lg bg-purple-50">
+              <Clock className="w-5 h-5 text-purple-600" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-medium text-gray-900">Timesheet เดือนนี้</p>
+              <p className="text-xs text-gray-500">
+                {timesheet
+                  ? `${timesheet.total_hours} ชั่วโมง · ${
+                      timesheet.status === 'draft' ? 'ยังไม่ส่ง' :
+                      timesheet.status === 'submitted' ? 'รออนุมัติ' :
+                      timesheet.status === 'approved' ? 'อนุมัติแล้ว' : 'ไม่อนุมัติ'
+                    }`
+                  : 'ยังไม่ได้กรอก'}
+              </p>
+            </div>
+            <Link
+              href={`/timesheet/${currentYear}/${currentMonth}`}
+              className="text-xs text-blue-600 hover:underline"
+            >
+              ดู/แก้ไข →
+            </Link>
+          </div>
+
+          {/* Recent leaves */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-medium text-gray-500">ใบลาล่าสุด</h2>
+              <Link href="/leave/my" className="text-xs text-blue-600 hover:underline">ดูทั้งหมด</Link>
+            </div>
+            {!recentLeaves?.length ? (
+              <div className="card p-6 text-center text-sm text-gray-400">
+                ยังไม่มีประวัติการลา
+              </div>
+            ) : (
+              <div className="card divide-y divide-gray-100">
+                {recentLeaves.map((leave: any) => (
+                  <Link
+                    key={leave.id}
+                    href={`/leave/${leave.id}`}
+                    className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900">
+                        {LEAVE_TYPE_LABEL[leave.leave_type as keyof typeof LEAVE_TYPE_LABEL]}
+                        <span className="ml-2 text-gray-400 font-normal text-xs">
+                          {leave.total_days} วัน
+                        </span>
+                      </p>
+                      <p className="text-xs text-gray-500 truncate">
+                        {formatDateTH(leave.start_date)}
+                        {leave.start_date !== leave.end_date && ` – ${formatDateTH(leave.end_date)}`}
+                      </p>
+                    </div>
+                    <span className={`badge ${LEAVE_STATUS_COLOR[leave.status as keyof typeof LEAVE_STATUS_COLOR]}`}>
+                      {LEAVE_STATUS_LABEL[leave.status as keyof typeof LEAVE_STATUS_LABEL]}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Quick actions */}
+          <div className="grid grid-cols-2 gap-3">
+            <Link href="/leave/new" className="card p-4 hover:shadow-md transition-shadow text-center">
+              <CalendarDays className="w-6 h-6 text-blue-600 mx-auto mb-1" />
+              <p className="text-sm font-medium text-gray-800">ยื่นใบลา</p>
+            </Link>
+            <Link href={`/timesheet/${currentYear}/${currentMonth}`} className="card p-4 hover:shadow-md transition-shadow text-center">
+              <Clock className="w-6 h-6 text-purple-600 mx-auto mb-1" />
+              <p className="text-sm font-medium text-gray-800">กรอก Timesheet</p>
+            </Link>
+          </div>
+        </>
+      )}
     </div>
   )
 }

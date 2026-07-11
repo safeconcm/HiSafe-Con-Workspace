@@ -125,9 +125,16 @@ const NAV_ITEMS: NavItem[] = [
     icon:  User,
   },
   {
+    // HR/Admin don't submit their own leave through the system in practice
+    // (small team — they're the ones approving/managing everyone else's, and
+    // whoever sits at the top of the org tree has no one to approve theirs
+    // anyway, see find_approver()'s NULL-parent auto-approve case). Hidden
+    // for hr/admin rather than route-blocked, so nothing breaks if that
+    // changes later — see conversation 2026-07-11.
     label: 'การลา',
     href:  '/leave/my',
     icon:  CalendarDays,
+    roles: ['employee', 'supervisor'],
     children: [
       { label: 'ใบลาของฉัน',    href: '/leave/my'  },
       { label: 'ยื่นใบลาใหม่',  href: '/leave/new' },
@@ -135,9 +142,12 @@ const NAV_ITEMS: NavItem[] = [
     ],
   },
   {
+    // Same reasoning as 'การลา' above — HR/Admin manage timesheets, they
+    // don't submit their own through the system.
     label: 'Timesheet',
     href:  '/timesheet',
     icon:  Clock,
+    roles: ['employee', 'supervisor'],
   },
   {
     label: 'OT (ล่วงเวลา)',
