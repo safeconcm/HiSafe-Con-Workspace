@@ -29,6 +29,9 @@ export async function GET(req: NextRequest, ctx: Ctx) {
       approver:users!leave_requests_current_approver_id_fkey(
         id, first_name_th, last_name_th
       ),
+      approved_by:users!leave_requests_approved_by_id_fkey(
+        id, first_name_th, last_name_th
+      ),
       approvals:leave_approvals(
         id, action, comment, sequence, acted_at,
         approver:users!leave_approvals_approver_id_fkey(id, first_name_th, last_name_th)
@@ -43,7 +46,27 @@ export async function GET(req: NextRequest, ctx: Ctx) {
   // Employees can only see own
   if (session.role === 'employee' && data.user_id !== session.id) return forbidden()
 
-  return ok(data)
+  // Self-service e-signature: the DB only stores the storage PATH (private
+  // "documents" bucket), which the browser can't fetch directly — turn each
+  // into a short-lived signed URL here so the on-screen signature display
+  // (see LeaveSignatureSection) can just use a plain <img src>. Same private-
+  // bucket reasoning as the PDF route, just signed URLs instead of inlined
+  // data: URIs since a normal browser tab (unlike Puppeteer) can follow one.
+  async function signedUrl(path: string | null): Promise<string | null> {
+    if (!path) return null
+    const { data: signed } = await supabase.storage.from('documents').createSignedUrl(path, 3600)
+    return signed?.signedUrl ?? null
+  }
+  const [signatureEmployeeSignedUrl, signatureApproverSignedUrl] = await Promise.all([
+    signedUrl(data.signature_employee_url ?? null),
+    signedUrl(data.signature_approver_url ?? null),
+  ])
+
+  return ok({
+    ...data,
+    signature_employee_signed_url: signatureEmployeeSignedUrl,
+    signature_approver_signed_url: signatureApproverSignedUrl,
+  })
 }
 
 // ── PATCH ─────────────────────────────────────────────────────

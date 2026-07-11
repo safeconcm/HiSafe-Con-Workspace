@@ -165,12 +165,13 @@ export default function LeaveDetailPage() {
 
       {/* e-Signature */}
       <LeaveSignatureSection
-        leaveId={id}
         status={leave.status}
-        currentUserId={currentUserId}
-        ownerId={leave.user_id}
-        signedEmployee={!!leave.signature_employee_url}
-        signedHr={!!leave.signature_hr_url}
+        employeeName={leave.user ? fullNameTH(leave.user) : ''}
+        employeeSignedUrl={leave.signature_employee_signed_url ?? null}
+        employeeSignedAt={leave.signature_employee_at ?? null}
+        approverName={leave.approved_by ? fullNameTH(leave.approved_by) : null}
+        approverSignedUrl={leave.signature_approver_signed_url ?? null}
+        approverSignedAt={leave.signature_approver_at ?? null}
       />
 
       {/* Cancel */}

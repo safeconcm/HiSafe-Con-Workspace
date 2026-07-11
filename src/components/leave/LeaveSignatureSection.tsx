@@ -1,70 +1,66 @@
 'use client'
 // src/components/leave/LeaveSignatureSection.tsx
-// Embeds e-Signature canvas into leave detail page
-// Shows after leave is approved; allows employee + HR to sign
+// Read-only display of the two self-service e-signatures on a leave
+// request: the requester's (auto-attached the moment they submitted) and
+// the approver's (auto-attached the moment they clicked "อนุมัติ" — no
+// separate signing step, and no distinct "HR" signer; whoever approved is
+// whoever signs here). Each person sets up their own reusable signature
+// once at Profile > ลายเซ็นดิจิทัลของฉัน.
 
-import { useState }            from 'react'
-import { SignatureCanvas }     from '@/components/signature/SignatureCanvas'
-import { useMutation }         from '@tanstack/react-query'
-import { toast }               from '@/components/ui/Toaster'
-import { PenLine, CheckCircle2, Loader2 } from 'lucide-react'
-import { cn }                  from '@/utils'
+import { CheckCircle2, PenLine } from 'lucide-react'
+import { formatDateTime } from '@/utils'
+
+interface SignatureSlot {
+  label:       string
+  name:        string | null
+  signedUrl:   string | null
+  signedAt:    string | null
+  // Shown when there's no signature image yet — different wording for "no
+  // one has acted yet" vs "acted, but they haven't set up a signature".
+  emptyHint:   string
+}
 
 interface Props {
-  leaveId:       string
-  status:        string
-  currentUserId: string
-  ownerId:       string
-  // Whether each role has already signed (from leave.signature_employee_url /
-  // leave.signature_hr_url on the record) — without this, the "signed" badge
-  // was only ever set by the local mutation's onSuccess callback, so it
-  // silently reset to "not signed" on every page reload even though the
-  // signature was actually saved.
-  signedEmployee?: boolean
-  signedHr?:       boolean
+  status:              string
+  employeeName:        string
+  employeeSignedUrl:   string | null
+  employeeSignedAt:    string | null
+  approverName:        string | null
+  approverSignedUrl:   string | null
+  approverSignedAt:    string | null
 }
 
-async function saveSignature(entityId: string, dataUrl: string, role: string) {
-  const res  = await fetch('/api/signature', {
-    method:  'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body:    JSON.stringify({
-      data_url:    dataUrl,
-      entity_type: 'leave_request',
-      entity_id:   entityId,
-      role,
-    }),
-  })
-  const json = await res.json()
-  if (!res.ok) throw new Error(json.error)
-  return json.data
-}
+export function LeaveSignatureSection({
+  status,
+  employeeName,
+  employeeSignedUrl, employeeSignedAt,
+  approverName,
+  approverSignedUrl, approverSignedAt,
+}: Props) {
+  // Nothing to show before an approval decision even starts (still pending
+  // with no employee signature either — most requests will have the
+  // employee's signature the moment they're submitted, so this really only
+  // hides the section for the rare case where the employee has no saved
+  // signature at all yet).
+  if (status === 'draft') return null
 
-export function LeaveSignatureSection({ leaveId, status, currentUserId, ownerId, signedEmployee, signedHr }: Props) {
-  const [showCanvas, setShowCanvas] = useState<string | null>(null)
-  const [signed,     setSigned]     = useState<Record<string, boolean>>({
-    employee: !!signedEmployee,
-    hr:       !!signedHr,
-  })
-
-  const save = useMutation({
-    mutationFn: ({ dataUrl, role }: { dataUrl: string; role: string }) =>
-      saveSignature(leaveId, dataUrl, role),
-    onSuccess: (_, { role }) => {
-      setSigned(s => ({ ...s, [role]: true }))
-      setShowCanvas(null)
-      toast.success('บันทึกลายเซ็นแล้ว')
+  const slots: SignatureSlot[] = [
+    {
+      label:     'ผู้ขอลา',
+      name:      employeeName,
+      signedUrl: employeeSignedUrl,
+      signedAt:  employeeSignedAt,
+      emptyHint: 'พนักงานยังไม่ได้ตั้งค่าลายเซ็น (โปรไฟล์ > ลายเซ็นดิจิทัลของฉัน)',
     },
-    onError: (e: Error) => toast.error('บันทึกไม่สำเร็จ', e.message),
-  })
-
-  // Only show for approved leaves
-  if (status !== 'approved') return null
-
-  const isOwner  = currentUserId === ownerId
-  const sigSlots = [
-    { role: 'employee', label: 'ลายเซ็นพนักงาน',    canSign: isOwner  },
-    { role: 'hr',       label: 'ลายเซ็น HR',          canSign: !isOwner },
+    {
+      label:     'ผู้อนุมัติ',
+      name:      approverName,
+      signedUrl: approverSignedUrl,
+      signedAt:  approverSignedAt,
+      emptyHint: status === 'pending'
+        ? 'รอการอนุมัติ'
+        : 'อนุมัติแล้ว แต่ผู้อนุมัติยังไม่ได้ตั้งค่าลายเซ็น',
+    },
   ]
 
   return (
@@ -75,45 +71,32 @@ export function LeaveSignatureSection({ leaveId, status, currentUserId, ownerId,
       </div>
       <div className="card-body space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          {sigSlots.map(slot => (
-            <div key={slot.role} className="border border-dashed border-gray-200 rounded-xl p-4">
+          {slots.map(slot => (
+            <div key={slot.label} className="border border-dashed border-gray-200 rounded-xl p-4 text-center">
               <p className="text-xs text-gray-500 mb-3 font-medium">{slot.label}</p>
 
-              {signed[slot.role] ? (
-                <div className="flex items-center gap-2 text-green-700 bg-green-50 rounded-lg px-3 py-2">
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span className="text-sm">ลงลายเซ็นแล้ว</span>
+              {slot.signedUrl ? (
+                <div className="space-y-2">
+                  <div className="h-16 flex items-center justify-center border-b border-gray-300 mx-4">
+                    <img src={slot.signedUrl} alt={`ลายเซ็น${slot.label}`} className="max-h-14 max-w-full object-contain" />
+                  </div>
+                  <p className="text-sm font-medium text-gray-900">{slot.name ?? '—'}</p>
+                  {slot.signedAt && (
+                    <p className="text-xs text-gray-400">{formatDateTime(slot.signedAt)}</p>
+                  )}
+                  <div className="flex items-center justify-center gap-1.5 text-green-700 text-xs">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    เซ็นดิจิทัลแล้ว
+                  </div>
                 </div>
-              ) : showCanvas === slot.role ? (
-                <SignatureCanvas
-                  label=""
-                  height={120}
-                  onSave={dataUrl => save.mutate({ dataUrl, role: slot.role })}
-                  onCancel={() => setShowCanvas(null)}
-                />
               ) : (
-                <button
-                  onClick={() => slot.canSign && setShowCanvas(slot.role)}
-                  disabled={!slot.canSign || save.isPending}
-                  className={cn(
-                    'w-full rounded-lg border py-8 text-sm transition-colors',
-                    slot.canSign
-                      ? 'border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 cursor-pointer'
-                      : 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
-                  )}
-                >
-                  {slot.canSign ? (
-                    <><PenLine className="w-4 h-4 mx-auto mb-1" />คลิกเพื่อลงลายเซ็น</>
-                  ) : (
-                    'รอลายเซ็น...'
-                  )}
-                </button>
+                <div className="py-6 text-xs text-gray-400">{slot.emptyHint}</div>
               )}
             </div>
           ))}
         </div>
         <p className="text-xs text-gray-400">
-          ลายเซ็นดิจิทัลบันทึกลงระบบพร้อม timestamp — ใช้แทนลายเซ็นกระดาษได้
+          ลายเซ็นถูกดึงมาจากลายเซ็นที่บันทึกไว้ในโปรไฟล์ของแต่ละคนโดยอัตโนมัติ ไม่ต้องเซ็นซ้ำทุกครั้ง
         </p>
       </div>
     </div>

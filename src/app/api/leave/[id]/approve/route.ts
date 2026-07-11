@@ -62,12 +62,23 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       .eq('line_type', 'leave')
 
   } else {
-    // Normal approve
+    // Normal approve — self-service e-signature: clicking "อนุมัติ" IS the
+    // signing step now (no separate signing action afterward, and no
+    // distinct "HR" signer — whoever approves signs with their own saved
+    // signature from Profile > ลายเซ็นดิจิทัลของฉัน, right here, in this
+    // same request). If the approver hasn't saved a signature yet, the
+    // approval still goes through — the signature block just stays blank
+    // until they set one up.
+    const { data: signer } = await supabase
+      .from('users').select('signature_url').eq('id', session.id).single()
+
     await supabase.from('leave_requests').update({
       status:             'approved',
       approved_by_id:     session.id,
       approved_at:        now,
       current_approver_id: null,
+      signature_approver_url: signer?.signature_url ?? null,
+      signature_approver_at:  signer?.signature_url ? now : null,
     }).eq('id', params.id)
 
     // Move pending_days → used_days (atomic)

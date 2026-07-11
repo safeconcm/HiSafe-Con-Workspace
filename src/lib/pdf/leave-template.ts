@@ -35,10 +35,10 @@ export interface LeaveTemplateData {
     approved_at:   string | null
   } | null
   signatures?: {
-    employee_url?: string | null
-    employee_at?:  string | null
-    hr_url?:       string | null
-    hr_at?:        string | null
+    employee_url?:  string | null
+    employee_at?:   string | null
+    approver_url?:  string | null
+    approver_at?:   string | null
   }
   approvals: {
     action:        string
@@ -222,7 +222,7 @@ export function generateLeaveHTML(data: LeaveTemplateData, appUrl: string): stri
   /* Signature section */
   .signature-section {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-columns: 1fr 1fr;
     gap: 16px;
     margin-top: 14px;
     border-top: 1px solid #e5e7eb;
@@ -396,6 +396,12 @@ export function generateLeaveHTML(data: LeaveTemplateData, appUrl: string): stri
   ` : ''}
 
   <!-- Signature Section -->
+  <!-- Self-service e-signature: each signature image is whoever's own saved
+       signature (Profile > ลายเซ็นดิจิทัลของฉัน), auto-attached the moment
+       they acted — submitting for the employee box, approving for the
+       approver box. Neither is a separate manual signing step, and there is
+       no distinct "HR" signer anymore: the approver box always reflects
+       whoever actually approved (could be a supervisor, HR, or admin). -->
   <div class="signature-section">
     <div class="sig-box">
       ${data.signatures?.employee_url
@@ -410,7 +416,9 @@ export function generateLeaveHTML(data: LeaveTemplateData, appUrl: string): stri
       }</div>
     </div>
     <div class="sig-box">
-      <div class="sig-line"></div>
+      ${data.signatures?.approver_url
+        ? `<div class="sig-image"><img src="${data.signatures.approver_url}" alt="ลายเซ็นผู้อนุมัติ" /></div>`
+        : `<div class="sig-line"></div>`}
       <div class="sig-label">ลงชื่อผู้อนุมัติ</div>
       <div class="sig-name">${
         data.approver
@@ -419,19 +427,9 @@ export function generateLeaveHTML(data: LeaveTemplateData, appUrl: string): stri
       }</div>
       <div class="sig-date">${
         data.approver?.approved_at
-          ? `วันที่ ${formatThaiDate(data.approver.approved_at)}`
-          : '&nbsp;'
-      }</div>
-    </div>
-    <div class="sig-box">
-      ${data.signatures?.hr_url
-        ? `<div class="sig-image"><img src="${data.signatures.hr_url}" alt="ลายเซ็น HR" /></div>`
-        : `<div class="sig-line"></div>`}
-      <div class="sig-label">ลงชื่อ HR รับทราบ</div>
-      <div class="sig-name">${data.signatures?.hr_at ? 'รับทราบแล้ว' : '...'}</div>
-      <div class="sig-date">${
-        data.signatures?.hr_at
-          ? `เซ็นดิจิทัล ${formatThaiDate(data.signatures.hr_at)}`
+          ? (data.signatures?.approver_at
+              ? `เซ็นดิจิทัล ${formatThaiDate(data.signatures.approver_at)}`
+              : `วันที่ ${formatThaiDate(data.approver.approved_at)}`)
           : '&nbsp;'
       }</div>
     </div>

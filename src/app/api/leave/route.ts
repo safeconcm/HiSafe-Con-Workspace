@@ -197,6 +197,15 @@ export async function POST(req: NextRequest) {
     })
   if (approverErr) return serverError(approverErr)
 
+  // 3b. Self-service e-signature — if this employee has already saved a
+  // signature (Profile > ลายเซ็นดิจิทัลของฉัน), auto-attach it right now as
+  // their signature on this request. No separate "please sign" step later:
+  // submitting the request IS signing it, as the requester. If they haven't
+  // saved a signature yet, this just stays null — the leave still submits
+  // fine, the signature block on the PDF/detail page just shows blank.
+  const { data: signer } = await supabase
+    .from('users').select('signature_url').eq('id', session.id).single()
+
   // 4. Insert leave request
   const { data: leaveReq, error: insertErr } = await supabase
     .from('leave_requests')
@@ -214,6 +223,8 @@ export async function POST(req: NextRequest) {
       attachment_url:      attachment_url ?? null,
       current_approver_id: approverId ?? null,   // NULL = CEO → auto-approve
       is_unpaid:           isUnpaid,
+      signature_employee_url: signer?.signature_url ?? null,
+      signature_employee_at:  signer?.signature_url ? new Date().toISOString() : null,
     })
     .select()
     .single()

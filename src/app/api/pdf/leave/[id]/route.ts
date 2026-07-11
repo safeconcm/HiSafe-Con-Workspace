@@ -69,9 +69,9 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     return `data:image/png;base64,${buf.toString('base64')}`
   }
 
-  const [employeeSigUri, hrSigUri] = await Promise.all([
+  const [employeeSigUri, approverSigUri] = await Promise.all([
     signatureDataUri(leave.signature_employee_url ?? null),
-    signatureDataUri(leave.signature_hr_url ?? null),
+    signatureDataUri(leave.signature_approver_url ?? null),
   ])
 
   const templateData: LeaveTemplateData = {
@@ -109,8 +109,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     signatures: {
       employee_url: employeeSigUri,
       employee_at:  leave.signature_employee_at ?? null,
-      hr_url:       hrSigUri,
-      hr_at:        leave.signature_hr_at        ?? null,
+      approver_url: approverSigUri,
+      approver_at:  leave.signature_approver_at  ?? null,
     },
     approvals: ((leave.approvals as any[]) ?? []).map(ap => ({
       action:        ap.action,

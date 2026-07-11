@@ -5,11 +5,12 @@
 // role, email) is Admin-only — see /admin/users/[id].
 
 import { useRef, useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { toast } from '@/components/ui/Toaster'
-import { User, Loader2, Camera, KeyRound, MessageCircle, FileText } from 'lucide-react'
+import { User, Loader2, Camera, KeyRound, MessageCircle, FileText, PenLine, RefreshCw } from 'lucide-react'
 import Link from 'next/link'
-import { ROLE_LABEL, formatDateTH, cn } from '@/utils'
+import { ROLE_LABEL, formatDateTH, formatDateTime, cn } from '@/utils'
+import { SignatureCanvas } from '@/components/signature/SignatureCanvas'
 
 const CONTRACT_STATUS_LABEL: Record<string, string> = {
   draft: 'ร่าง', active: 'ใช้งาน', expired: 'หมดอายุ', terminated: 'ยกเลิก',
@@ -47,6 +48,26 @@ async function fetchProfile(): Promise<ProfileData> {
   return json.data as ProfileData
 }
 
+type SignatureData = { has_signature: boolean; signature_url: string | null; updated_at: string | null }
+
+async function fetchSignature(): Promise<SignatureData> {
+  const res  = await fetch('/api/profile/signature')
+  const json = await res.json()
+  if (!res.ok) throw new Error(json.error)
+  return json.data as SignatureData
+}
+
+async function saveSignature(dataUrl: string): Promise<SignatureData> {
+  const res  = await fetch('/api/profile/signature', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ data_url: dataUrl }),
+  })
+  const json = await res.json()
+  if (!res.ok) throw new Error(json.error)
+  return json.data as SignatureData
+}
+
 export default function ProfilePage() {
   const qc = useQueryClient()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -63,6 +84,24 @@ export default function ProfilePage() {
   const certificates   = data?.certificates ?? []
 
   const phoneValue = phone ?? user?.phone ?? ''
+
+  // Self-service e-signature — set up once here, reused automatically when
+  // this person submits a leave request (as requester) or clicks "อนุมัติ"
+  // on someone else's (as approver). See /api/profile/signature.
+  const [showSigCanvas, setShowSigCanvas] = useState(false)
+  const { data: signature, isLoading: sigLoading } = useQuery({
+    queryKey: ['my-signature'],
+    queryFn: fetchSignature,
+  })
+  const saveSig = useMutation({
+    mutationFn: saveSignature,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['my-signature'] })
+      setShowSigCanvas(false)
+      toast.success('บันทึกลายเซ็นแล้ว', 'จะถูกใช้อัตโนมัติทุกครั้งที่ยื่นลาหรืออนุมัติ')
+    },
+    onError: (e: Error) => toast.error('บันทึกไม่สำเร็จ', e.message),
+  })
 
   const savePhone = async () => {
     setSaving(true)
@@ -173,6 +212,53 @@ export default function ProfilePage() {
             </button>
           </div>
         </div>
+      </div>
+
+      {/* Self-service e-signature */}
+      <div className="card card-body space-y-4">
+        <h3 className="text-sm font-medium text-gray-700 border-b border-gray-100 pb-2 flex items-center gap-2">
+          <PenLine className="w-4 h-4 text-gray-400" /> ลายเซ็นดิจิทัลของฉัน
+        </h3>
+        <p className="text-xs text-gray-400">
+          ตั้งค่าครั้งเดียว ระบบจะใช้ลายเซ็นนี้อัตโนมัติทุกครั้งที่คุณยื่นใบลา (ในฐานะผู้ขอลา)
+          หรือกดอนุมัติใบลาของคนอื่น (ในฐานะผู้อนุมัติ) — ไม่ต้องเซ็นซ้ำทีละเอกสาร
+        </p>
+
+        {sigLoading ? (
+          <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
+        ) : showSigCanvas ? (
+          <SignatureCanvas
+            label=""
+            height={140}
+            onSave={dataUrl => saveSig.mutate(dataUrl)}
+            onCancel={() => setShowSigCanvas(false)}
+          />
+        ) : signature?.has_signature ? (
+          <div className="space-y-3">
+            <div className="border border-gray-200 rounded-xl p-4 flex items-center justify-center bg-gray-50">
+              <img src={signature.signature_url ?? ''} alt="ลายเซ็นของฉัน" className="max-h-16 object-contain" />
+            </div>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-gray-400">
+                {signature.updated_at ? `บันทึกล่าสุด ${formatDateTime(signature.updated_at)}` : ''}
+              </p>
+              <button
+                onClick={() => setShowSigCanvas(true)}
+                className="flex items-center gap-1.5 text-sm text-blue-600 hover:underline"
+              >
+                <RefreshCw className="w-3.5 h-3.5" /> เปลี่ยนลายเซ็น
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowSigCanvas(true)}
+            className="w-full rounded-lg border border-blue-300 bg-blue-50 text-blue-700 hover:bg-blue-100 py-8 text-sm"
+          >
+            <PenLine className="w-4 h-4 mx-auto mb-1" />
+            คลิกเพื่อตั้งค่าลายเซ็นดิจิทัล
+          </button>
+        )}
       </div>
 
       {/* Read-only: own contracts + certificates */}
