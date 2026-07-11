@@ -114,13 +114,16 @@ export function TimesheetGrid({ year, month, jobs, holidays, leaves, workingDays
 
   // ── Row (job) list — initialized from saved work lines' distinct jobs,
   //    sorted by job code (same order as the Excel export), plus a trailing
-  //    blank row so the user can always add another job. ──
+  //    blank row so the user can always add another job. Skipped when
+  //    disabled (read-only views, e.g. the approver's "ดูรายละเอียด" page) —
+  //    an empty "— เลือก Job —" row inviting a new entry makes no sense on a
+  //    view nobody can edit. ──
   const initialRowJobIds = useMemo(() => {
     const ids = Array.from(new Set(
       savedLines.filter(l => l.line_type === 'work').map(l => l.job_id)
     ))
     ids.sort((a, b) => (jobById.get(a)?.job_code ?? '').localeCompare(jobById.get(b)?.job_code ?? ''))
-    return [...ids, NO_JOB]
+    return disabled ? ids : [...ids, NO_JOB]
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [rowJobIds, setRowJobIds] = useState<string[]>(initialRowJobIds)
@@ -475,8 +478,14 @@ export function TimesheetGrid({ year, month, jobs, holidays, leaves, workingDays
         )}
       </div>
 
-      {/* Validation error summary */}
-      {errors.size > 0 && (
+      {/* Validation error summary — only actionable while editing a draft.
+          On a read-only (disabled) view, e.g. the approver's "ดูรายละเอียด"
+          detail page, this over-8h check can still fire against already
+          historical/approved data (a work line and a leave line landing on
+          the same date), and showing a "พบข้อผิดพลาด" banner on an already-
+          approved timesheet reads as an active problem when there's nothing
+          to fix — reported 2026-07-11. */}
+      {!disabled && errors.size > 0 && (
         <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3">
           <p className="text-sm font-medium text-red-700 mb-1 flex items-center gap-1.5">
             <AlertCircle className="w-4 h-4" /> พบข้อผิดพลาด:
