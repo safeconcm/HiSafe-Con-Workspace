@@ -28,6 +28,9 @@ export async function GET(req: NextRequest, ctx: Ctx) {
       approver:users!timesheets_current_approver_id_fkey(
         id, first_name_th, last_name_th
       ),
+      approved_by:users!timesheets_approved_by_id_fkey(
+        id, first_name_th, last_name_th
+      ),
       lines:timesheet_lines(
         id, work_date, job_id, hours, line_type, leave_request_id, remark,
         job:jobs(id, job_code, name_th)
@@ -45,10 +48,16 @@ export async function GET(req: NextRequest, ctx: Ctx) {
 
   // Employee: own only
   if (session.role === 'employee' && data.user_id !== session.id) return forbidden()
-  // Supervisor: own or assigned
+  // Supervisor: own, currently assigned to approve, or the one who already
+  // decided it — current_approver_id gets nulled the moment a decision is
+  // made (see approve/reject routes), so checking only that field would
+  // 403 a supervisor trying to view something they themselves already
+  // approved/rejected. Mirrors the equivalent fix on the leave route.
   if (session.role === 'supervisor' &&
       data.user_id !== session.id &&
-      data.current_approver_id !== session.id) return forbidden()
+      data.current_approver_id !== session.id &&
+      data.approved_by_id !== session.id &&
+      data.rejected_by_id !== session.id) return forbidden()
 
   return ok(data)
 }

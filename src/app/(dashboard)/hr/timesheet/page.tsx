@@ -138,7 +138,7 @@ export default function HRTimesheetPage() {
                     <td><TimesheetStatusBadge status={ts.status} /></td>
                     <td>
                       <Link
-                        href={`/timesheet/${ts.year}/${ts.month}`}
+                        href={`/timesheet/detail/${ts.id}`}
                         className="text-gray-400 hover:text-gray-700"
                       >
                         <ChevronRight className="w-4 h-4" />
@@ -162,7 +162,7 @@ export default function HRTimesheetPage() {
             {timesheets.map((ts: any) => (
               <Link
                 key={ts.id}
-                href={`/timesheet/${ts.year}/${ts.month}`}
+                href={`/timesheet/detail/${ts.id}`}
                 className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50"
               >
                 <div className="flex-1 min-w-0">

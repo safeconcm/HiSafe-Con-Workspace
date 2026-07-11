@@ -1,0 +1,189 @@
+'use client'
+// src/app/(dashboard)/timesheet/detail/[id]/page.tsx
+// Read-only "view details" page for a SPECIFIC timesheet, addressed by id.
+// Exists because /timesheet/[year]/[month] is the self-service editable page
+// — it always resolves "my own timesheet for this year/month" from the
+// session, ignoring which row was actually clicked. That made every
+// "ดูรายละเอียด" link on /approvals/timesheet and /hr/timesheet silently
+// redirect a supervisor/HR viewer to their OWN timesheet for that month
+// instead of the employee's they meant to review — reported 2026-07-11
+// (SC-002 clicking into SC-003's approved July 2026 timesheet landed on
+// SC-002's own). This page fetches by timesheet id via GET /api/timesheet/:id
+// (already authorized for the assigned/approving supervisor, HR, and admin —
+// see that route) so it always shows the right person's data regardless of
+// who's looking.
+
+import { useParams, useRouter } from 'next/navigation'
+import { useTimesheetDetail } from '@/hooks/useTimesheet'
+import { TimesheetStatusBadge } from '@/components/timesheet/TimesheetStatusBadge'
+import { TimesheetApprovalPanel } from '@/components/timesheet/TimesheetApprovalPanel'
+import { LeaveTimeline } from '@/components/leave/LeaveTimeline'
+import { formatMonthYearTH, formatDateTH, fullNameTH } from '@/utils'
+import { ArrowLeft, Loader2, Download, FileSpreadsheet, Clock } from 'lucide-react'
+import Link from 'next/link'
+
+function useCurrentUserId() {
+  if (typeof window === 'undefined') return ''
+  try {
+    const raw = document.cookie.split('; ').find(r => r.startsWith('hsc_session='))
+    if (!raw) return ''
+    return JSON.parse(decodeURIComponent(raw.split('=').slice(1).join('=')))?.id ?? ''
+  } catch { return '' }
+}
+
+export default function TimesheetDetailPage() {
+  const params = useParams()
+  const router = useRouter()
+  const id = params.id as string
+  const userId = useCurrentUserId()
+
+  const { data: ts, isLoading } = useTimesheetDetail(id)
+
+  if (isLoading) return (
+    <div className="flex justify-center py-20">
+      <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+    </div>
+  )
+
+  if (!ts) return (
+    <div className="page-container max-w-4xl">
+      <div className="card p-8 text-center text-gray-400 text-sm">
+        ไม่พบข้อมูล Timesheet
+      </div>
+    </div>
+  )
+
+  const lines = [...(ts.lines ?? [])].sort((a: any, b: any) => a.work_date.localeCompare(b.work_date))
+
+  return (
+    <div className="page-container max-w-4xl space-y-5">
+
+      {/* Header */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <button onClick={() => router.back()} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <div>
+          <h1 className="text-xl font-semibold">{formatMonthYearTH(ts.year, ts.month)}</h1>
+          <p className="text-sm text-gray-500">
+            {fullNameTH(ts.user)} · {ts.user?.employee_code} · {ts.user?.department}
+          </p>
+        </div>
+        <TimesheetStatusBadge status={ts.status} />
+
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => window.open(`/api/pdf/timesheet/${ts.id}`, '_blank')}
+            className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50"
+          >
+            <Download className="w-4 h-4" />
+            PDF
+          </button>
+          <button
+            type="button"
+            onClick={() => window.open(`/api/timesheet/${ts.id}/export?format=xlsx`, '_blank')}
+            className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50"
+          >
+            <FileSpreadsheet className="w-4 h-4" />
+            Excel
+          </button>
+        </div>
+      </div>
+
+      {/* Rejection reason */}
+      {ts.status === 'rejected' && ts.rejection_reason && (
+        <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+          <span className="font-medium">ถูกส่งคืน:</span> {ts.rejection_reason}
+        </div>
+      )}
+
+      {/* Approval action panel — no-ops itself unless status is submitted
+          and the viewer is the current assigned approver */}
+      <TimesheetApprovalPanel
+        timesheetId={ts.id}
+        approverId={ts.current_approver_id}
+        currentUserId={userId}
+        status={ts.status}
+        onDone={() => router.refresh()}
+      />
+
+      {/* Summary */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <div className="card p-4 text-center">
+          <p className="text-2xl font-bold text-blue-700">{ts.total_hours}</p>
+          <p className="text-xs text-gray-500 mt-0.5">ชั่วโมงรวม</p>
+        </div>
+        <div className="card p-4 text-center">
+          <p className="text-2xl font-bold text-gray-700">{lines.length}</p>
+          <p className="text-xs text-gray-500 mt-0.5">รายการ</p>
+        </div>
+        {ts.status === 'approved' && ts.approved_by && (
+          <div className="card p-4 text-center">
+            <p className="text-sm font-medium text-gray-900">{fullNameTH(ts.approved_by)}</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              อนุมัติเมื่อ {ts.approved_at ? formatDateTH(ts.approved_at) : '-'}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Line detail table */}
+      <div className="card overflow-hidden">
+        <div className="card-header">
+          <h3 className="text-sm font-medium text-gray-700">รายละเอียดรายวัน</h3>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>วันที่</th>
+                <th>งาน</th>
+                <th className="text-center">ชั่วโมง</th>
+                <th>หมายเหตุ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lines.map((l: any) => (
+                <tr key={l.id}>
+                  <td className="whitespace-nowrap">{formatDateTH(l.work_date)}</td>
+                  <td>
+                    {l.line_type === 'leave'
+                      ? <span className="text-amber-700">ลา</span>
+                      : (l.job ? `${l.job.job_code} · ${l.job.name_th}` : '-')}
+                  </td>
+                  <td className="text-center">
+                    <span className="inline-flex items-center gap-1 text-gray-700">
+                      <Clock className="w-3 h-3 text-gray-400" />
+                      {l.hours}
+                    </span>
+                  </td>
+                  <td className="text-gray-500">{l.remark ?? '-'}</td>
+                </tr>
+              ))}
+              {!lines.length && (
+                <tr>
+                  <td colSpan={4} className="text-center py-10 text-gray-400 text-sm">
+                    ยังไม่มีรายการ
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Approval history */}
+      {ts.approvals?.length > 0 && (
+        <div className="card">
+          <div className="card-header">
+            <h3 className="text-sm font-medium text-gray-700">ประวัติการอนุมัติ</h3>
+          </div>
+          <div className="card-body">
+            <LeaveTimeline approvals={ts.approvals} status={ts.status} />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

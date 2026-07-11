@@ -93,7 +93,7 @@ export default function ApprovalsTimesheetPage() {
                   </div>
                 </div>
                 <Link
-                  href={`/timesheet/${ts.year}/${ts.month}`}
+                  href={`/timesheet/detail/${ts.id}`}
                   className="text-xs text-blue-600 hover:underline shrink-0"
                 >
                   ดูรายละเอียด
