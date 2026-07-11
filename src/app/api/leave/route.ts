@@ -298,13 +298,30 @@ export async function POST(req: NextRequest) {
       })
     }
   } else {
-    // 7. Notify approver
+    // 7. Notify approver — unchanged, this is the existing "needs your
+    // action" notification the approver has always gotten.
     await dispatchNotifications({
       company_id:     session.company_id,
       recipient_ids:  [approverId],
       event_type:     'leave_submitted',
       title:          'มีใบลารออนุมัติ',
       body:           `${session.first_name_th} ${session.last_name_th} ยื่นลา ${totalDays} วัน กรุณาพิจารณา`,
+      reference_id:   leaveReq.id,
+      reference_type: 'leave_request',
+    })
+
+    // 7b. Also notify the submitter themselves with a "pending approval"
+    // confirmation — separate call (same event_type, so it stays inside the
+    // existing LINE_NOTIFY_EVENTS allowlist) so the approver's message copy
+    // above is untouched. Added per user request 2026-07-12: submitter
+    // should see their own request is รออนุมัติ, not just silence until the
+    // approver decides.
+    await dispatchNotifications({
+      company_id:     session.company_id,
+      recipient_ids:  [session.id],
+      event_type:     'leave_submitted',
+      title:          'ส่งใบลาสำเร็จ รออนุมัติ',
+      body:           `ใบลา ${totalDays} วัน (${start_date} ถึง ${end_date}) ของคุณถูกส่งแล้ว สถานะ: รออนุมัติ`,
       reference_id:   leaveReq.id,
       reference_type: 'leave_request',
     })

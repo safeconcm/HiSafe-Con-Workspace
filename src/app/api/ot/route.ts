@@ -123,7 +123,7 @@ export async function POST(req: NextRequest) {
       event_type: 'ot_submitted',
       title: 'มีคำขอ OT รออนุมัติ',
       body:  `${session.first_name_th} ${session.last_name_th} ขอทำ OT ${totalHours} ชม. วันที่ ${ot_date}`,
-      reference_id: ot.id, reference_type: 'leave_request',
+      reference_id: ot.id, reference_type: 'ot_request',
     })
   }
 

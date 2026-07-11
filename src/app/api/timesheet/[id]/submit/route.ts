@@ -91,13 +91,26 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
       })
     }
   } else {
-    // Notify approver
+    // Notify approver — unchanged, existing "needs your action" notification.
     await dispatchNotifications({
       company_id:    session.company_id,
       recipient_ids: [approverId],
       event_type:    'timesheet_submitted',
       title:         'มี Timesheet รออนุมัติ',
       body:          `${session.first_name_th} ${session.last_name_th} ส่ง Timesheet เดือน ${ts.month}/${ts.year}`,
+      reference_id:  params.id,
+      reference_type: 'timesheet',
+    })
+
+    // Also notify the submitter with a "pending approval" confirmation —
+    // separate call so the approver's message above is untouched. Added
+    // per user request 2026-07-12 (same pattern as leave submission).
+    await dispatchNotifications({
+      company_id:    session.company_id,
+      recipient_ids: [session.id],
+      event_type:    'timesheet_submitted',
+      title:         'ส่ง Timesheet สำเร็จ รออนุมัติ',
+      body:          `Timesheet เดือน ${ts.month}/${ts.year} ของคุณถูกส่งแล้ว สถานะ: รออนุมัติ`,
       reference_id:  params.id,
       reference_type: 'timesheet',
     })
