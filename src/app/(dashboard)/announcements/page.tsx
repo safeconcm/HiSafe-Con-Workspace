@@ -1,12 +1,21 @@
 'use client'
 // src/app/(dashboard)/announcements/page.tsx
 // Employee-facing view of company announcements/news.
+// Organized into tabs (ทั้งหมด / ยังไม่อ่าน / ต้องรับทราบ) so people can
+// jump straight to what needs their attention instead of scrolling a flat
+// list. "ยังไม่อ่าน" / read status here is the same underlying
+// announcement_reads tracking used by the must-read popup and the
+// lightweight new-announcement toast (see NewAnnouncementPopup) — reading
+// an announcement anywhere (popup, or the "อ่านแล้ว" button below) clears
+// it everywhere.
 
-import { useQuery } from '@tanstack/react-query'
-import { Megaphone, Loader2 } from 'lucide-react'
+import { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Megaphone, Loader2, Check, AlertTriangle } from 'lucide-react'
 import { cn, formatDateTH } from '@/utils'
 
 type Category = 'general' | 'policy' | 'event' | 'emergency'
+type Tab = 'all' | 'unread' | 'must_ack'
 
 const CATEGORY_LABEL: Record<Category, string> = {
   general:   'ทั่วไป',
@@ -21,18 +30,57 @@ const CATEGORY_COLOR: Record<Category, string> = {
   emergency: 'bg-red-100 text-red-700',
 }
 
-async function fetchAnnouncements() {
+type AnnouncementRow = {
+  id: string
+  category: Category
+  title: string
+  body: string
+  image_url: string | null
+  require_ack: boolean
+  created_at: string
+  is_read: boolean
+}
+
+async function fetchAnnouncements(): Promise<AnnouncementRow[]> {
   const res  = await fetch('/api/announcements')
   const json = await res.json()
   if (!res.ok) throw new Error(json.error)
   return json.data?.announcements ?? []
 }
 
+async function markRead(id: string) {
+  const res = await fetch(`/api/announcements/${id}/ack`, { method: 'POST' })
+  if (!res.ok) throw new Error('Failed')
+}
+
 export default function AnnouncementsPage() {
+  const [tab, setTab] = useState<Tab>('all')
+  const qc = useQueryClient()
+
   const { data: announcements = [], isLoading } = useQuery({
     queryKey: ['announcements'],
     queryFn:  fetchAnnouncements,
   })
+
+  const readMutation = useMutation({
+    mutationFn: markRead,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['announcements'] }),
+  })
+
+  const unreadCount  = announcements.filter(a => !a.is_read).length
+  const mustAckCount = announcements.filter(a => a.require_ack && !a.is_read).length
+
+  const filtered = announcements.filter(a => {
+    if (tab === 'unread')   return !a.is_read
+    if (tab === 'must_ack') return a.require_ack
+    return true
+  })
+
+  const TABS: { key: Tab; label: string; count?: number }[] = [
+    { key: 'all',      label: 'ทั้งหมด' },
+    { key: 'unread',   label: 'ยังไม่อ่าน',  count: unreadCount },
+    { key: 'must_ack', label: 'ต้องรับทราบ', count: mustAckCount },
+  ]
 
   return (
     <div className="page-container space-y-5 max-w-3xl">
@@ -41,30 +89,76 @@ export default function AnnouncementsPage() {
         <h1>ประกาศ / ข่าวสาร</h1>
       </div>
 
+      {/* Tabs */}
+      <div className="flex gap-1 border-b border-gray-200">
+        {TABS.map(t => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={cn(
+              'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors',
+              tab === t.key
+                ? 'border-blue-700 text-blue-700'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            )}
+          >
+            {t.label}
+            {!!t.count && (
+              <span className={cn(
+                'text-[11px] rounded-full px-1.5 py-0.5 leading-none',
+                tab === t.key ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'
+              )}>
+                {t.count}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
       {isLoading ? (
         <div className="flex justify-center py-16">
           <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
         </div>
       ) : (
         <div className="space-y-4">
-          {(announcements as any[]).map((a: any) => (
-            <div key={a.id} className="card overflow-hidden">
-              <img src={a.image_url} alt={a.title} className="w-full max-h-64 object-cover" />
+          {filtered.map(a => (
+            <div key={a.id} className={cn('card overflow-hidden', !a.is_read && 'ring-1 ring-blue-200')}>
+              {a.image_url && (
+                <img src={a.image_url} alt={a.title} className="w-full max-h-64 object-cover" />
+              )}
               <div className="card-body">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className={cn('badge', CATEGORY_COLOR[a.category as Category])}>
-                    {CATEGORY_LABEL[a.category as Category]}
+                  <span className={cn('badge', CATEGORY_COLOR[a.category])}>
+                    {CATEGORY_LABEL[a.category]}
                   </span>
+                  {a.require_ack && (
+                    <span className="badge bg-amber-100 text-amber-700 flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3" /> ต้องรับทราบ
+                    </span>
+                  )}
+                  {!a.is_read && (
+                    <span className="w-2 h-2 rounded-full bg-blue-500" title="ยังไม่อ่าน" />
+                  )}
                   <span className="text-xs text-gray-400">{formatDateTH(a.created_at)}</span>
                 </div>
                 <p className="text-base font-semibold text-gray-900 mt-2">{a.title}</p>
                 <p className="text-sm text-gray-600 mt-1 whitespace-pre-line">{a.body}</p>
+
+                {!a.is_read && (
+                  <button
+                    onClick={() => readMutation.mutate(a.id)}
+                    disabled={readMutation.isPending}
+                    className="mt-3 flex items-center gap-1.5 text-xs text-blue-600 hover:underline disabled:opacity-60"
+                  >
+                    <Check className="w-3.5 h-3.5" /> อ่านแล้ว
+                  </button>
+                )}
               </div>
             </div>
           ))}
-          {!announcements.length && (
+          {!filtered.length && (
             <div className="card card-body text-center text-gray-400 py-12 text-sm">
-              ยังไม่มีประกาศ
+              {tab === 'unread' ? 'อ่านครบทุกประกาศแล้ว' : tab === 'must_ack' ? 'ไม่มีประกาศที่ต้องรับทราบ' : 'ยังไม่มีประกาศ'}
             </div>
           )}
         </div>

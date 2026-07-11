@@ -9,6 +9,7 @@ import { Plus, Megaphone, Loader2, Image as ImageIcon, AlertTriangle } from 'luc
 import { cn, formatDateTH } from '@/utils'
 
 type Category = 'general' | 'policy' | 'event' | 'emergency'
+type Tab = 'all' | 'must_ack'
 
 const CATEGORY_LABEL: Record<Category, string> = {
   general:   'ทั่วไป',
@@ -40,6 +41,7 @@ async function fetchCompanies() {
 }
 
 export default function HrAnnouncementsPage() {
+  const [tab, setTab]           = useState<Tab>('all')
   const [showForm, setShowForm] = useState(false)
   const [title, setTitle]       = useState('')
   const [body, setBody]         = useState('')
@@ -99,6 +101,9 @@ export default function HrAnnouncementsPage() {
 
   const canSubmit = title.trim() && body.trim() && companyIds.length > 0 && imageFile
 
+  const mustAckCount = (announcements as any[]).filter(a => a.require_ack).length
+  const filtered = (announcements as any[]).filter(a => tab === 'all' || a.require_ack)
+
   return (
     <div className="page-container space-y-5">
 
@@ -114,6 +119,34 @@ export default function HrAnnouncementsPage() {
           <Plus className="w-4 h-4" />
           สร้างประกาศ
         </button>
+      </div>
+
+      <div className="flex gap-1 border-b border-gray-200">
+        {([
+          { key: 'all',      label: 'ทั้งหมด' },
+          { key: 'must_ack', label: 'ต้องรับทราบ', count: mustAckCount },
+        ] as { key: Tab; label: string; count?: number }[]).map(t => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={cn(
+              'flex items-center gap-1.5 px-4 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors',
+              tab === t.key
+                ? 'border-blue-700 text-blue-700'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+            )}
+          >
+            {t.label}
+            {!!t.count && (
+              <span className={cn(
+                'text-[11px] rounded-full px-1.5 py-0.5 leading-none',
+                tab === t.key ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'
+              )}>
+                {t.count}
+              </span>
+            )}
+          </button>
+        ))}
       </div>
 
       {showForm && (
@@ -222,7 +255,7 @@ export default function HrAnnouncementsPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {(announcements as any[]).map((a: any) => (
+          {filtered.map((a: any) => (
             <div key={a.id} className="card card-body flex gap-4">
               <img src={a.image_url} alt={a.title} className="w-24 h-24 rounded-lg object-cover shrink-0" />
               <div className="min-w-0 flex-1">
@@ -242,9 +275,9 @@ export default function HrAnnouncementsPage() {
               </div>
             </div>
           ))}
-          {!announcements.length && (
+          {!filtered.length && (
             <div className="card card-body text-center text-gray-400 py-12 text-sm">
-              ยังไม่มีประกาศ
+              {tab === 'must_ack' ? 'ไม่มีประกาศที่ต้องรับทราบ' : 'ยังไม่มีประกาศ'}
             </div>
           )}
         </div>

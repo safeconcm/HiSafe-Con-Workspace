@@ -19,5 +19,23 @@ export async function GET(req: NextRequest) {
     .contains('company_ids', [session.company_id])
     .order('created_at', { ascending: false })
   if (error) return serverError(error)
-  return ok({ announcements: data })
+
+  // Attach this user's own read/ack status per announcement — powers the
+  // "ยังไม่อ่าน" / "ต้องรับทราบ" tabs on the announcements page. Same
+  // announcement_reads table used by both the must-read ack flow and the
+  // lightweight unseen-toast flow (see /api/announcements/unseen).
+  const ids = (data ?? []).map(a => a.id)
+  let readIds = new Set<string>()
+  if (ids.length) {
+    const { data: reads, error: readsErr } = await supabase
+      .from('announcement_reads')
+      .select('announcement_id')
+      .eq('user_id', session.id)
+      .in('announcement_id', ids)
+    if (readsErr) return serverError(readsErr)
+    readIds = new Set((reads ?? []).map(r => r.announcement_id))
+  }
+
+  const announcements = (data ?? []).map(a => ({ ...a, is_read: readIds.has(a.id) }))
+  return ok({ announcements })
 }

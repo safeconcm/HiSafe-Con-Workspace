@@ -2,6 +2,7 @@
 import { Sidebar } from '@/components/layout/Sidebar'
 import { Topbar }  from '@/components/layout/Topbar'
 import { MustReadPopup } from '@/components/layout/MustReadPopup'
+import { NewAnnouncementPopup } from '@/components/layout/NewAnnouncementPopup'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
@@ -70,6 +71,7 @@ export default async function DashboardLayout({
   return (
     <div data-company={sessionUser.company_code} className="flex h-screen overflow-hidden bg-gray-50">
       <MustReadPopup />
+      <NewAnnouncementPopup />
       <Sidebar session={sessionUser} company={companyRow} />
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
         <Topbar session={sessionUser} />
