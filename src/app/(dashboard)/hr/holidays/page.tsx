@@ -4,7 +4,7 @@ import { useState }    from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { formatDateTH } from '@/utils'
 import { toast }        from '@/components/ui/Toaster'
-import { Plus, Trash2, CalendarDays, Loader2 } from 'lucide-react'
+import { Plus, Trash2, CalendarDays, Loader2, RefreshCw } from 'lucide-react'
 import { cn }           from '@/utils'
 
 type HolidayType = 'national' | 'company' | 'special'
@@ -68,6 +68,38 @@ export default function HolidaysPage() {
     },
   })
 
+  const sync = useMutation({
+    mutationFn: async (targetYear: number) => {
+      const res  = await fetch('/api/hr/holidays/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ year: targetYear }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error)
+      return json.data
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ['holidays', year] })
+      const parts = [`เพิ่มใหม่ ${data.inserted} วัน`]
+      if (data.reactivated) parts.push(`กู้คืน ${data.reactivated} วัน`)
+      if (data.skipped)     parts.push(`ข้าม ${data.skipped} วัน (มีอยู่แล้ว)`)
+      toast.success('ซิงค์วันหยุดสำเร็จ', parts.join(', '))
+      if (data.lunar_confidence === null) {
+        toast.error(
+          'ไม่มีข้อมูลวันหยุดพระ',
+          `ยังไม่มีข้อมูลวันมาฆบูชา/วิสาขบูชา/อาสาฬหบูชา/เข้าพรรษาสำหรับปี ${data.year} กรุณาเพิ่มด้วยตนเองเมื่อทราบวันที่แน่นอน`
+        )
+      } else if (data.lunar_confidence === 'estimated') {
+        toast.error(
+          'วันหยุดพระเป็นการประมาณ',
+          `วันมาฆบูชา/วิสาขบูชา/อาสาฬหบูชา/เข้าพรรษาปี ${data.year} เป็นการประมาณล่วงหน้า ควรตรวจสอบกับประกาศราชการอีกครั้ง`
+        )
+      }
+    },
+    onError: (e: Error) => toast.error('เกิดข้อผิดพลาด', e.message),
+  })
+
   const years = Array.from({ length: 3 }, (_, i) => new Date().getFullYear() + i - 1)
 
   return (
@@ -87,6 +119,17 @@ export default function HolidaysPage() {
             {years.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
           <button
+            onClick={() => sync.mutate(year)}
+            disabled={sync.isPending}
+            title="เพิ่มวันหยุดนักขัตฤกษ์ของไทยสำหรับปีนี้อัตโนมัติ (จะไม่แก้ไข/ลบวันหยุดที่มีอยู่แล้ว)"
+            className="flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+          >
+            {sync.isPending
+              ? <Loader2 className="w-4 h-4 animate-spin" />
+              : <RefreshCw className="w-4 h-4" />}
+            ซิงค์วันหยุดไทย
+          </button>
+          <button
             onClick={() => setForm(true)}
             className="flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800"
           >
@@ -95,6 +138,11 @@ export default function HolidaysPage() {
           </button>
         </div>
       </div>
+
+      <p className="text-xs text-gray-400 -mt-2">
+        "ซิงค์วันหยุดไทย" จะเพิ่มวันหยุดนักขัตฤกษ์ประจำปี (รวมวันหยุดชดเชย) ให้อัตโนมัติตามปีที่เลือกไว้ด้านบน
+        โดยไม่แก้ไขวันหยุดที่มีอยู่แล้ว วันหยุดกรณีพิเศษที่ประกาศเพิ่มเติมโดยรัฐบาล (เช่น วันหยุดชดเชยพิเศษ) ยังต้องเพิ่มด้วยตนเอง
+      </p>
 
       {/* Add form */}
       {showForm && (
