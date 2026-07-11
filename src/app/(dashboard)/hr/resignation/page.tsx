@@ -4,7 +4,13 @@ import { useState }  from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast }     from '@/components/ui/Toaster'
 import { cn, fullNameTH } from '@/utils'
-import { LogOut, Loader2, CheckCircle2, Clock } from 'lucide-react'
+import { LogOut, Loader2, CheckCircle2, Clock, Circle, ChevronDown, ChevronUp } from 'lucide-react'
+
+interface ClearanceItem {
+  key: string
+  label: string
+  done: boolean
+}
 
 const STATUS_COLOR: Record<string,string> = {
   pending:'bg-amber-100 text-amber-800', acknowledged:'bg-blue-100 text-blue-700',
@@ -17,6 +23,7 @@ const STATUS_LABEL: Record<string,string> = {
 
 export default function ResignationPage() {
   const [status, setStatus] = useState('')
+  const [expanded, setExpanded] = useState<string | null>(null)
   const qc = useQueryClient()
 
   const { data, isLoading } = useQuery({
@@ -49,6 +56,20 @@ export default function ResignationPage() {
     onError: (e: Error) => toast.error('เกิดข้อผิดพลาด', e.message),
   })
 
+  const toggleClearance = useMutation({
+    mutationFn: async ({ id, key }: { id: string; key: string }) => {
+      const res  = await fetch(`/api/hr/resignation/${id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ toggle_key: key }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error)
+      return json.data
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['resignations'] }),
+    onError: (e: Error) => toast.error('เกิดข้อผิดพลาด', e.message),
+  })
+
   return (
     <div className="page-container space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -75,7 +96,12 @@ export default function ResignationPage() {
         <div className="card p-10 text-center text-gray-400 text-sm">ไม่มีรายการลาออก</div>
       ) : (
         <div className="space-y-4">
-          {items.map((r: any) => (
+          {items.map((r: any) => {
+            const clearanceItems: ClearanceItem[] = r.clearance_items ?? []
+            const doneCount = clearanceItems.filter(i => i.done).length
+            const isOpen = expanded === r.id
+
+            return (
             <div key={r.id} className="card overflow-hidden">
               <div className="flex items-center gap-4 px-5 py-4 border-b border-gray-100">
                 <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center text-red-700 font-semibold shrink-0">
@@ -98,6 +124,43 @@ export default function ResignationPage() {
               {r.reason && (
                 <div className="px-5 py-2.5 text-sm text-gray-600 border-b border-gray-100">{r.reason}</div>
               )}
+
+              {/* Clearance checklist toggle */}
+              {clearanceItems.length > 0 && (
+                <button
+                  onClick={() => setExpanded(isOpen ? null : r.id)}
+                  className="w-full flex items-center gap-3 px-5 py-3 border-b border-gray-100 hover:bg-gray-50 text-sm"
+                >
+                  <span className="text-gray-600">เช็คลิสต์เคลียร์งาน</span>
+                  <span className="text-xs text-gray-400">{doneCount}/{clearanceItems.length} ข้อ</span>
+                  <div className="w-20 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="h-full bg-blue-600 rounded-full" style={{ width: `${(doneCount / clearanceItems.length) * 100}%` }} />
+                  </div>
+                  <span className="ml-auto">{isOpen ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}</span>
+                </button>
+              )}
+              {isOpen && (
+                <div className="px-5 py-4 space-y-1.5 border-b border-gray-100 bg-gray-50">
+                  {clearanceItems.map(item => (
+                    <button
+                      key={item.key}
+                      onClick={() => toggleClearance.mutate({ id: r.id, key: item.key })}
+                      disabled={toggleClearance.isPending || r.status === 'completed'}
+                      className={cn(
+                        'w-full flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-left transition-colors',
+                        item.done ? 'bg-green-50 text-green-800' : 'bg-white text-gray-700 hover:bg-gray-100',
+                        r.status === 'completed' && 'opacity-70 cursor-default'
+                      )}
+                    >
+                      {item.done
+                        ? <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
+                        : <Circle className="w-4 h-4 text-gray-300 shrink-0" />}
+                      <span className={item.done ? 'line-through decoration-green-400' : ''}>{item.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
               <div className="px-5 py-3 flex items-center gap-2">
                 {r.status === 'pending' && (
                   <button onClick={() => action.mutate({ id: r.id, act: 'acknowledge' })}
@@ -114,7 +177,14 @@ export default function ResignationPage() {
                   </button>
                 )}
                 {r.status === 'approved' && (
-                  <button onClick={() => action.mutate({ id: r.id, act: 'complete' })}
+                  <button
+                    onClick={() => {
+                      if (doneCount < clearanceItems.length &&
+                          !confirm(`ยังเคลียร์งานไม่ครบ (${doneCount}/${clearanceItems.length} ข้อ) ต้องการทำเครื่องหมายเสร็จสิ้นเลยหรือไม่?`)) {
+                        return
+                      }
+                      action.mutate({ id: r.id, act: 'complete' })
+                    }}
                     disabled={action.isPending}
                     className="flex items-center gap-1.5 rounded-lg bg-gray-700 text-white px-4 py-2 text-sm font-medium hover:bg-gray-800 disabled:opacity-60">
                     <CheckCircle2 className="w-4 h-4" />เสร็จสิ้น + ออกใบรับรอง
@@ -122,7 +192,7 @@ export default function ResignationPage() {
                 )}
               </div>
             </div>
-          ))}
+          )})}
         </div>
       )}
     </div>

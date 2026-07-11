@@ -5,6 +5,7 @@ import {
   ok, created, badRequest, unauthorized, forbidden,
   serverError, writeAuditLog, dispatchNotifications, isHROrAdmin,
 } from '@/lib/api-helpers'
+import { defaultClearanceItems } from '@/lib/onboarding-items'
 
 export async function GET(req: NextRequest) {
   const session = getSessionFromHeaders(req)
@@ -71,7 +72,11 @@ export async function POST(req: NextRequest) {
     last_work_date,
     reason:            reason ?? null,
     reason_category:   body.reason_category ?? null,
-    clearance_items:   body.clearance_items ?? [],
+    // Seed the standard clearance checklist so HR has something to work
+    // through immediately (equipment return, access revocation, etc.) —
+    // this jsonb column already existed but was never populated with
+    // anything by default, so it always rendered as an empty, unusable list.
+    clearance_items:   body.clearance_items ?? defaultClearanceItems(),
   }).select().single()
 
   if (error) return serverError(error)

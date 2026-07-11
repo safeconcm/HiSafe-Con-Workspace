@@ -58,6 +58,18 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       resign_date: existing.last_work_date,
     }).eq('id', existing.user_id)
     updates.certificate_issued = body.certificate_issued ?? false
+  } else if (body.toggle_key) {
+    // Flip a single clearance item's done state — mirrors the same
+    // toggle_key pattern used for onboarding checklists (see
+    // /api/hr/onboarding/[id]) so the UI doesn't need to resend the whole
+    // items array just to check one box.
+    const now2 = now
+    const items = (existing.clearance_items as any[]).map(item =>
+      item.key === body.toggle_key
+        ? { ...item, done: !item.done, done_by: !item.done ? session.id : null, done_at: !item.done ? now2 : null }
+        : item
+    )
+    updates.clearance_items = items
   } else {
     // General update
     const allowed = ['clearance_items','clearance_done','exit_interview',

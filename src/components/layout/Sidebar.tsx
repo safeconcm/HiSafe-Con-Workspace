@@ -186,6 +186,7 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'Audit Log',       href: '/hr/audit-logs'      },
       { label: 'สัญญาจ้าง',      href: '/hr/contracts'       },
       { label: 'ทดลองงาน',       href: '/hr/probation'       },
+      { label: 'เช็คลิสต์ onboard', href: '/hr/onboarding'   },
       { label: 'ใบรับรองงาน',    href: '/hr/certificates'    },
       { label: 'การลาออก',       href: '/hr/resignation'     },
       { label: 'สมัครงาน',       href: '/hr/recruitment'     },
