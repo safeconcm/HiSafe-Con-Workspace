@@ -117,11 +117,18 @@ export async function POST(req: NextRequest) {
   //    its own company's SMTP/LINE settings (not just the creator's). ──
   try {
     for (const companyId of companyIds) {
+      // NOTE: this previously filtered on `.eq('is_active', true)`, a column
+      // that doesn't exist on `users` (the actual column is `status`, an
+      // enum — see middleware.ts's `.eq('status', 'active')` for the same
+      // check done correctly). PostgREST errors on an unknown column, so
+      // `recipients` came back null every time and this silently notified
+      // nobody at all — not just on LINE, in-app and email were broken too.
+      // Found while debugging "ส่งประกาศ ไม่เด้งขึ้น LINE" (2026-07-11).
       const { data: recipients } = await supabase
         .from('users')
         .select('id')
         .eq('company_id', companyId)
-        .eq('is_active', true)
+        .eq('status', 'active')
       const recipientIds = (recipients ?? []).map((u) => u.id)
       if (recipientIds.length === 0) continue
 
