@@ -10,7 +10,15 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { pickActiveRow, ACTIVE_COMPANY_COOKIE } from '@/lib/company-context'
 
 // Routes that don't require authentication
-const PUBLIC_ROUTES = ['/login', '/forgot-password', '/reset-password', '/api/auth/callback', '/api/auth/logout', '/manifest.json', '/sw.js', '/apply', '/api/public']
+// '/api/cron' is here because Vercel's scheduled invocations call it
+// server-to-server with an `Authorization: Bearer $CRON_SECRET` header and
+// no Supabase session cookie at all — without this exemption, middleware's
+// "no authUser → redirect to /login" branch below would intercept every
+// real cron trigger before it ever reached the route's own CRON_SECRET
+// check (see /api/cron/daily-checks/route.ts), silently breaking the
+// scheduled job while still looking fine under manual/browser testing
+// (which carries a logged-in session cookie and never exercises this path).
+const PUBLIC_ROUTES = ['/login', '/forgot-password', '/reset-password', '/api/auth/callback', '/api/auth/logout', '/manifest.json', '/sw.js', '/apply', '/api/public', '/api/cron']
 
 // Routes that require specific roles. Matched by longest-prefix-wins (see the
 // route-guard loop below), so more specific paths must be listed — order in
