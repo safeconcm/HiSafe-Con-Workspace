@@ -5,14 +5,35 @@ import { useQuery }       from '@tanstack/react-query'
 import { formatDateTime, cn } from '@/utils'
 import { ShieldCheck, Search, Loader2, ChevronDown, ChevronRight } from 'lucide-react'
 
+// Kept in sync with every `entity_type:` value written by writeAuditLog()
+// across src/app/api/** — if a new entity type is added to the app, add its
+// Thai label here too so the filter dropdown stays complete (any type
+// missing from this map still displays fine in the table, just falls back
+// to its raw name and won't show up in the "ประเภท Entity" filter list).
 const ENTITY_LABELS: Record<string, string> = {
-  leave_request:     'ใบลา',
-  timesheet:         'Timesheet',
-  leave_balance:     'ยอดวันลา',
-  user:              'ผู้ใช้',
-  job:               'Job',
-  holiday:           'วันหยุด',
-  organization_node: 'Org',
+  leave_request:            'ใบลา',
+  timesheet:                'Timesheet',
+  leave_balance:            'ยอดวันลา',
+  leave_policy:              'นโยบายการลา',
+  user:                      'ผู้ใช้',
+  job:                       'Job',
+  job_opening:               'ตำแหน่งงาน',
+  job_application:           'ใบสมัครงาน',
+  applicant:                 'ผู้สมัคร',
+  holiday:                   'วันหยุด',
+  organization_node:         'Org',
+  salary_record:             'เงินเดือน',
+  company:                   'บริษัท',
+  company_work_schedule:     'ตารางทำงานบริษัท',
+  company_workday_override:  'วันทำงาน (เฉพาะวัน)',
+  resignation:               'ใบลาออก',
+  probation_evaluation:      'ประเมินทดลองงาน',
+  ot_request:                'OT',
+  onboarding_checklist:      'Onboarding',
+  contract:                  'สัญญาจ้าง',
+  certificate:               'หนังสือรับรอง',
+  announcement:              'ประกาศ',
+  hr_inquiry:                'คำถาม HR',
 }
 
 const ACTION_COLOR: Record<string, string> = {
