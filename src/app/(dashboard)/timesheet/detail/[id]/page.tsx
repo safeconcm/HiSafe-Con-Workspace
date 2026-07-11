@@ -12,14 +12,24 @@
 // (already authorized for the assigned/approving supervisor, HR, and admin —
 // see that route) so it always shows the right person's data regardless of
 // who's looking.
+//
+// The daily detail renders via TimesheetGrid (the same Job×Date matrix used
+// by the personal month editor), disabled, instead of a flat per-line table
+// — the flat table read as one row per day (up to ~26 rows) which the user
+// flagged as too long compared to the compact grid they're used to seeing
+// (see conversation 2026-07-11, "รูปแบบที่แสดง มันก็ยาวเกินไป ควรจะเอารูปแบบแสดง
+// Timesheet เดิมมาแสดง"). GET /api/timesheet/:id now returns the same
+// { timesheet, jobs, holidays, leaves, workingDays } shape as the
+// by-month endpoint so this page can feed TimesheetGrid directly.
 
 import { useParams, useRouter } from 'next/navigation'
 import { useTimesheetDetail } from '@/hooks/useTimesheet'
+import { TimesheetGrid } from '@/components/timesheet/TimesheetGrid'
 import { TimesheetStatusBadge } from '@/components/timesheet/TimesheetStatusBadge'
 import { TimesheetApprovalPanel } from '@/components/timesheet/TimesheetApprovalPanel'
 import { LeaveTimeline } from '@/components/leave/LeaveTimeline'
 import { formatMonthYearTH, formatDateTH, fullNameTH } from '@/utils'
-import { ArrowLeft, Loader2, Download, FileSpreadsheet, Clock } from 'lucide-react'
+import { ArrowLeft, Loader2, Download, FileSpreadsheet } from 'lucide-react'
 
 function useCurrentUserId() {
   if (typeof window === 'undefined') return ''
@@ -30,19 +40,26 @@ function useCurrentUserId() {
   } catch { return '' }
 }
 
+// TimesheetGrid calls onChange once on mount (and whenever its internal
+// state changes) to report the edited lines back up — irrelevant here since
+// the grid is always rendered disabled, so this just swallows it.
+function noopChange() {}
+
 export default function TimesheetDetailPage() {
   const params = useParams()
   const router = useRouter()
   const id = params.id as string
   const userId = useCurrentUserId()
 
-  const { data: ts, isLoading } = useTimesheetDetail(id)
+  const { data, isLoading } = useTimesheetDetail(id)
 
   if (isLoading) return (
     <div className="flex justify-center py-20">
       <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
     </div>
   )
+
+  const ts = data?.timesheet
 
   if (!ts) return (
     <div className="page-container max-w-4xl">
@@ -52,7 +69,11 @@ export default function TimesheetDetailPage() {
     </div>
   )
 
-  const lines = [...(ts.lines ?? [])].sort((a: any, b: any) => a.work_date.localeCompare(b.work_date))
+  const jobs        = data?.jobs        ?? []
+  const holidays     = data?.holidays    ?? []
+  const leaves       = data?.leaves      ?? []
+  const workingDays  = data?.workingDays ?? {}
+  const lines        = ts.lines          ?? []
 
   return (
     <div className="page-container max-w-4xl space-y-5">
@@ -127,50 +148,19 @@ export default function TimesheetDetailPage() {
         )}
       </div>
 
-      {/* Line detail table */}
-      <div className="card overflow-hidden">
-        <div className="card-header">
-          <h3 className="text-sm font-medium text-gray-700">รายละเอียดรายวัน</h3>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>วันที่</th>
-                <th>งาน</th>
-                <th className="text-center">ชั่วโมง</th>
-                <th>หมายเหตุ</th>
-              </tr>
-            </thead>
-            <tbody>
-              {lines.map((l: any) => (
-                <tr key={l.id}>
-                  <td className="whitespace-nowrap">{formatDateTH(l.work_date)}</td>
-                  <td>
-                    {l.line_type === 'leave'
-                      ? <span className="text-amber-700">ลา</span>
-                      : (l.job ? `${l.job.job_code} · ${l.job.name_th}` : '-')}
-                  </td>
-                  <td className="text-center">
-                    <span className="inline-flex items-center gap-1 text-gray-700">
-                      <Clock className="w-3 h-3 text-gray-400" />
-                      {l.hours}
-                    </span>
-                  </td>
-                  <td className="text-gray-500">{l.remark ?? '-'}</td>
-                </tr>
-              ))}
-              {!lines.length && (
-                <tr>
-                  <td colSpan={4} className="text-center py-10 text-gray-400 text-sm">
-                    ยังไม่มีรายการ
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+      {/* Daily detail — same Job×Date grid as the personal month editor,
+          always disabled here since this page is read-only. */}
+      <TimesheetGrid
+        year={ts.year}
+        month={ts.month}
+        jobs={jobs}
+        holidays={holidays}
+        leaves={leaves}
+        workingDays={workingDays}
+        savedLines={lines}
+        disabled
+        onChange={noopChange}
+      />
 
       {/* Approval history */}
       {ts.approvals?.length > 0 && (

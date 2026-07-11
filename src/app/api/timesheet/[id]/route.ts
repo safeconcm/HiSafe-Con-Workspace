@@ -8,6 +8,7 @@ import {
   ok, badRequest, unauthorized, forbidden,
   notFound, serverError, writeAuditLog, isHROrAdmin,
 } from '@/lib/api-helpers'
+import { getWorkingDayMapForMonth } from '@/lib/work-schedule'
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -59,7 +60,48 @@ export async function GET(req: NextRequest, ctx: Ctx) {
       data.approved_by_id !== session.id &&
       data.rejected_by_id !== session.id) return forbidden()
 
-  return ok(data)
+  // Fetch the same jobs/holidays/leaves/workingDays context the personal
+  // month editor (/api/timesheet?year&month) and the PDF renderer
+  // (/api/pdf/timesheet/[id]) already assemble, so the "ดูรายละเอียด" viewer
+  // can render the daily detail as the familiar Job×Date grid
+  // (TimesheetGrid, disabled) instead of a long flat per-line table — see
+  // conversation 2026-07-11 ("รูปแบบที่แสดง มันก็ยาวเกินไป ควรจะเอารูปแบบแสดง
+  // Timesheet เดิมมาแสดง").
+  const monthPad = String(data.month).padStart(2, '0')
+
+  const { data: holidays } = await supabase
+    .from('holidays')
+    .select('holiday_date, name_th')
+    .eq('company_id', session.company_id)
+    .gte('holiday_date', `${data.year}-${monthPad}-01`)
+    .lte('holiday_date', `${data.year}-${monthPad}-31`)
+    .eq('is_active', true)
+
+  const { data: leaves } = await supabase
+    .from('leave_requests')
+    .select('id, leave_type, start_date, end_date, is_half_day, half_day_period, total_days')
+    .eq('user_id', data.user_id)
+    .eq('status', 'approved')
+    .lte('start_date', `${data.year}-${monthPad}-31`)
+    .gte('end_date',   `${data.year}-${monthPad}-01`)
+
+  const { data: jobs } = await supabase
+    .from('jobs')
+    .select('id, job_code, name_th, name_en')
+    .eq('company_id', session.company_id)
+    .eq('year', data.year)
+    .eq('status', 'active')
+    .order('job_code')
+
+  const workingDayMap = await getWorkingDayMapForMonth(supabase, session.company_id, data.year, data.month)
+
+  return ok({
+    timesheet: data,
+    holidays: holidays ?? [],
+    leaves: leaves ?? [],
+    jobs: jobs ?? [],
+    workingDays: Object.fromEntries(workingDayMap),
+  })
 }
 
 // ── PATCH — save timesheet lines ─────────────────────────────

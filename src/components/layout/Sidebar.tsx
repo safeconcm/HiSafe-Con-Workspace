@@ -254,8 +254,19 @@ export function Sidebar({ session, company }: SidebarProps) {
     setOpenMenus(prev => ({ ...prev, [label]: !prev[label] }))
   }
 
-  const isActive = (href: string) =>
-    pathname === href || pathname.startsWith(href + '/')
+  const isActive = (href: string) => {
+    if (pathname === href) return true
+    // /timesheet/detail/[id] is a generic read-only viewer opened from
+    // Approvals/HR (see timesheet/detail/[id]/page.tsx) — it isn't part of
+    // the personal "Timesheet" section this nav item points to
+    // (/timesheet/[year]/[month]), so it must NOT match this prefix.
+    // Otherwise a supervisor reviewing an employee's approved timesheet saw
+    // "Timesheet" highlighted as if they'd navigated into their own monthly
+    // editor, which read as "the system took me back to my own timesheet"
+    // even though the content shown was correct — reported 2026-07-11.
+    if (href === '/timesheet' && pathname.startsWith('/timesheet/detail')) return false
+    return pathname.startsWith(href + '/')
+  }
 
   const visibleItems = NAV_ITEMS.filter(
     item =>
