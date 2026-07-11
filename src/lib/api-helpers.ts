@@ -249,6 +249,25 @@ export async function writeAuditLog(params: {
 
 // ── Notification dispatcher ──────────────────────────────────
 
+// Which event_types are allowed to push through LINE. In-app + email still
+// fire for every event (they're free and don't clutter anything), but LINE
+// pushes count against the OA's monthly quota and — more importantly — get
+// read as phone notifications, so keeping this list short matters. Curated
+// per user request 2026-07-11 ("การแจ้งเตือนผ่าน LINE ไม่ให้เยอะและซับซ้อน"),
+// "มาตรฐาน" scope: leave/OT approval results (to the employee) + new
+// leave/OT requests (to the approving supervisor) + inquiry replies (to the
+// employee who asked). Deliberately excludes: timesheet submit/approve/
+// reject (routine, checked in-app monthly), announcements, contract/
+// probation/leave-expiry reminders (HR-internal, checked via dashboard),
+// inquiry_submitted (to HR), and leave_balance_adjusted/cancelled — those
+// stay in_app + email only. Adding a new event to LINE later is just adding
+// its event_type string here.
+const LINE_NOTIFY_EVENTS = new Set<string>([
+  'leave_submitted', 'leave_approved', 'leave_rejected',
+  'ot_submitted', 'ot_approved', 'ot_rejected',
+  'inquiry_reply',
+])
+
 export async function dispatchNotifications(params: {
   company_id: string
   recipient_ids: string[]
@@ -268,7 +287,9 @@ export async function dispatchNotifications(params: {
     .in('id', params.recipient_ids)
   const byId = new Map((recipients ?? []).map((u) => [u.id, u]))
 
-  const channels = ['in_app', 'email', 'line'] as const
+  const channels: ('in_app' | 'email' | 'line')[] = LINE_NOTIFY_EVENTS.has(params.event_type)
+    ? ['in_app', 'email', 'line']
+    : ['in_app', 'email']
   const nowIso = new Date().toISOString()
   const rows = params.recipient_ids.flatMap((recipient_id) =>
     channels.map((channel) => ({

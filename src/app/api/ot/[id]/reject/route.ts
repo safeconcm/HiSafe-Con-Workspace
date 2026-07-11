@@ -36,7 +36,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
   await dispatchNotifications({
     company_id: session.company_id, recipient_ids: [ot.user_id],
-    event_type: 'general', title: 'คำขอ OT ไม่ได้รับการอนุมัติ',
+    event_type: 'ot_rejected', title: 'คำขอ OT ไม่ได้รับการอนุมัติ',
     body: `OT วันที่ ${ot.ot_date} ไม่ได้รับอนุมัติ เหตุผล: ${body.rejection_reason}`,
     reference_id: params.id, reference_type: 'leave_request',
   })

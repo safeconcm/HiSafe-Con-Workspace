@@ -34,7 +34,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
 
   await dispatchNotifications({
     company_id: session.company_id, recipient_ids: [ot.user_id],
-    event_type: 'general', title: 'คำขอ OT ได้รับการอนุมัติ',
+    event_type: 'ot_approved', title: 'คำขอ OT ได้รับการอนุมัติ',
     body: `OT วันที่ ${ot.ot_date} จำนวน ${ot.total_hours} ชม. ได้รับการอนุมัติแล้ว`,
     reference_id: params.id, reference_type: 'leave_request',
   })

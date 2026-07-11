@@ -120,7 +120,7 @@ export async function POST(req: NextRequest) {
   } else {
     await dispatchNotifications({
       company_id: session.company_id, recipient_ids: [approverId],
-      event_type: 'general',
+      event_type: 'ot_submitted',
       title: 'มีคำขอ OT รออนุมัติ',
       body:  `${session.first_name_th} ${session.last_name_th} ขอทำ OT ${totalHours} ชม. วันที่ ${ot_date}`,
       reference_id: ot.id, reference_type: 'leave_request',
