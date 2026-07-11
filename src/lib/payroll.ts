@@ -73,6 +73,67 @@ export interface PayrollUserRow {
   net_pay: number
 }
 
+export interface UserRate {
+  salary_type: string
+  base_salary: number
+  daily_rate: number
+  hourly_rate: number
+}
+
+// Resolves a user's daily/hourly rate as of a given month-end — shared by
+// computePayroll() below and by the OT-cost calculation in the executive
+// summary report (see /api/hr/reports?type=exec_summary), so both places
+// use the exact same salary lookup + monthly-rate math instead of two
+// copies that could silently drift apart.
+export async function getUserRate(
+  supabase: ReturnType<typeof createAdminSupabaseClient>,
+  userId: string, monthEnd: string, workDays: number
+): Promise<UserRate> {
+  const { data: salaryRow } = await supabase
+    .from('salary_records')
+    .select('base_salary, salary_type')
+    .eq('user_id', userId)
+    .lte('effective_date', monthEnd)
+    .order('effective_date', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  let base_salary = salaryRow?.base_salary
+  let salary_type = salaryRow?.salary_type
+  if (base_salary === undefined || base_salary === null) {
+    const { data: contract } = await supabase
+      .from('contracts')
+      .select('base_salary, salary_type')
+      .eq('user_id', userId)
+      .eq('status', 'active')
+      .order('start_date', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    base_salary = contract?.base_salary ?? 0
+    salary_type = contract?.salary_type ?? 'monthly'
+  }
+
+  let daily_rate = 0
+  let hourly_rate = 0
+  if (salary_type === 'daily') {
+    daily_rate = Number(base_salary)
+    hourly_rate = daily_rate / 8
+  } else if (salary_type === 'hourly') {
+    hourly_rate = Number(base_salary)
+    daily_rate = hourly_rate * 8
+  } else {
+    daily_rate = workDays > 0 ? Number(base_salary) / workDays : 0
+    hourly_rate = daily_rate / 8
+  }
+
+  return {
+    salary_type: salary_type ?? 'monthly',
+    base_salary: Number(base_salary),
+    daily_rate: Math.round(daily_rate * 100) / 100,
+    hourly_rate: Math.round(hourly_rate * 100) / 100,
+  }
+}
+
 export async function computePayroll(
   companyId: string, year: number, month: number,
   // Restricts results to these user_ids — used to scope a supervisor's
@@ -125,42 +186,8 @@ export async function computePayroll(
     if (!user) continue
 
     // Latest salary as of this month (fallback to active contract if no salary_records yet)
-    const { data: salaryRow } = await supabase
-      .from('salary_records')
-      .select('base_salary, salary_type')
-      .eq('user_id', ts.user_id)
-      .lte('effective_date', monthEnd)
-      .order('effective_date', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    let base_salary = salaryRow?.base_salary
-    let salary_type = salaryRow?.salary_type
-    if (base_salary === undefined || base_salary === null) {
-      const { data: contract } = await supabase
-        .from('contracts')
-        .select('base_salary, salary_type')
-        .eq('user_id', ts.user_id)
-        .eq('status', 'active')
-        .order('start_date', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      base_salary = contract?.base_salary ?? 0
-      salary_type = contract?.salary_type ?? 'monthly'
-    }
-
-    let daily_rate = 0
-    let hourly_rate = 0
-    if (salary_type === 'daily') {
-      daily_rate = Number(base_salary)
-      hourly_rate = daily_rate / 8
-    } else if (salary_type === 'hourly') {
-      hourly_rate = Number(base_salary)
-      daily_rate = hourly_rate * 8
-    } else {
-      daily_rate = workDays > 0 ? Number(base_salary) / workDays : 0
-      hourly_rate = daily_rate / 8
-    }
+    const { salary_type, base_salary, daily_rate, hourly_rate } =
+      await getUserRate(supabase, ts.user_id, monthEnd, workDays)
 
     const jobMap = new Map<string, PayrollJobLine>()
     let total_hours = 0

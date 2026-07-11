@@ -4,8 +4,10 @@
 import { useState }  from 'react'
 import { useQuery }  from '@tanstack/react-query'
 import { cn, LEAVE_TYPE_LABEL, formatDays } from '@/utils'
-import { Loader2, Download, TrendingUp, Users, CalendarDays, Clock } from 'lucide-react'
+import { Loader2, Download, TrendingUp, Users, CalendarDays, Clock, Wallet, Activity } from 'lucide-react'
 import type { LeaveType } from '@/types/database'
+
+const THB = new Intl.NumberFormat('th-TH', { style: 'currency', currency: 'THB', maximumFractionDigits: 0 })
 
 const TH_MONTHS_SHORT = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.',
   'ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
@@ -38,6 +40,44 @@ async function fetchReport(type: string, year: number) {
   const json = await res.json()
   if (!res.ok) throw new Error(json.error)
   return json.data?.data ?? []
+}
+
+async function fetchExecSummary(year: number) {
+  const res  = await fetch(`/api/hr/reports?type=exec_summary&year=${year}`)
+  const json = await res.json()
+  if (!res.ok) throw new Error(json.error)
+  return json.data ?? { data: [], headcount: 0 }
+}
+
+// Generic single-series monthly bar chart, used for the three executive
+// KPI trends (labor cost / OT cost / sick rate) — same visual language as
+// the leave/timesheet bar charts below, just one color instead of stacked.
+function MetricBarChart({
+  data, dataKey, color, format,
+}: { data: any[]; dataKey: string; color: string; format: (v: number) => string }) {
+  const maxVal = Math.max(...data.map(d => d[dataKey] ?? 0), 1)
+  return (
+    <div className="flex items-end gap-1.5 h-28">
+      {data.map(d => {
+        const val = d[dataKey] ?? 0
+        const h = maxVal > 0 ? (val / maxVal) * 88 : 0
+        return (
+          <div key={d.month} className="flex-1 flex flex-col items-center gap-0.5 min-w-0">
+            <div className="w-full flex flex-col justify-end" style={{ height: '88px' }}>
+              <div
+                title={`${TH_MONTHS_SHORT[d.month - 1]}: ${format(val)}`}
+                style={{ height: `${h}px`, background: color, minHeight: val ? '2px' : '0' }}
+                className="w-full rounded-sm transition-all"
+              />
+            </div>
+            <span className="text-[9px] text-gray-400 truncate w-full text-center">
+              {TH_MONTHS_SHORT[d.month - 1]}
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 // Simple bar chart component (no external lib needed)
@@ -224,8 +264,14 @@ export default function HRReportsPage() {
   const { data: heatmapData, isLoading: l2 } = useQuery({ queryKey: ['report-heatmap', year], queryFn: () => fetchReport('heatmap',           year) })
   const { data: deptData,    isLoading: l3 } = useQuery({ queryKey: ['report-dept',    year], queryFn: () => fetchReport('dept_summary',       year) })
   const { data: tsData,      isLoading: l4 } = useQuery({ queryKey: ['report-ts',      year], queryFn: () => fetchReport('timesheet_summary',  year) })
+  const { data: execData,    isLoading: l5 } = useQuery({ queryKey: ['report-exec',    year], queryFn: () => fetchExecSummary(year) })
 
-  const isLoading = l1 || l2 || l3 || l4
+  const isLoading = l1 || l2 || l3 || l4 || l5
+  const execMonths: any[] = execData?.data ?? []
+  // Most recent month that has any labor-cost data (falls back to current
+  // month) — used for the 3 KPI cards up top.
+  const latestExec = [...execMonths].reverse().find(m => m.labor_total_cost > 0 || m.ot_cost > 0 || m.sick_days > 0)
+    ?? execMonths[now.getMonth()] ?? execMonths[execMonths.length - 1]
 
   const handleExport = () => {
     window.open(`/api/hr/leave/export?year=${year}&format=excel`, '_blank')
@@ -255,6 +301,79 @@ export default function HRReportsPage() {
         <div className="flex justify-center py-20"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>
       ) : (
         <div className="space-y-5">
+
+          {/* Executive summary — consolidates payroll/leave/OT into one view */}
+          <div>
+            <h2 className="text-sm font-semibold text-gray-500 mb-2.5">สรุปภาพรวมสำหรับผู้บริหาร</h2>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+              <div className="card p-4">
+                <div className="inline-flex p-2 rounded-lg mb-2 bg-red-50">
+                  <Activity className="w-4 h-4 text-red-600" />
+                </div>
+                <p className="text-2xl font-bold text-gray-900">{latestExec ? `${latestExec.sick_rate_pct}%` : '—'}</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  อัตราการลาป่วย {latestExec ? `เดือน ${TH_MONTHS_SHORT[latestExec.month - 1]}` : ''}
+                </p>
+              </div>
+              <div className="card p-4">
+                <div className="inline-flex p-2 rounded-lg mb-2 bg-amber-50">
+                  <Clock className="w-4 h-4 text-amber-600" />
+                </div>
+                <p className="text-2xl font-bold text-gray-900">{latestExec ? THB.format(latestExec.ot_cost) : '—'}</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  ค่า OT รวม {latestExec ? `เดือน ${TH_MONTHS_SHORT[latestExec.month - 1]}` : ''} (ประมาณการ)
+                </p>
+              </div>
+              <div className="card p-4">
+                <div className="inline-flex p-2 rounded-lg mb-2 bg-blue-50">
+                  <Wallet className="w-4 h-4 text-blue-600" />
+                </div>
+                <p className="text-2xl font-bold text-gray-900">{latestExec ? THB.format(latestExec.labor_total_cost) : '—'}</p>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  ต้นทุนแรงงานรวม {latestExec ? `เดือน ${TH_MONTHS_SHORT[latestExec.month - 1]}` : ''} (ค่าแรง + OT)
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+              <div className="card">
+                <div className="card-header">
+                  <h3 className="text-sm font-medium text-gray-700">เทรนด์ต้นทุนแรงงานรวมรายเดือน ปี {year}</h3>
+                </div>
+                <div className="card-body">
+                  {execMonths.some(m => m.labor_total_cost > 0)
+                    ? <MetricBarChart data={execMonths} dataKey="labor_total_cost" color="#1D4ED8" format={v => THB.format(v)} />
+                    : <p className="text-sm text-gray-400 text-center py-6">ไม่มีข้อมูล</p>}
+                </div>
+              </div>
+              <div className="card">
+                <div className="card-header">
+                  <h3 className="text-sm font-medium text-gray-700">ค่า OT รวมรายเดือน ปี {year}</h3>
+                </div>
+                <div className="card-body">
+                  {execMonths.some(m => m.ot_cost > 0)
+                    ? <MetricBarChart data={execMonths} dataKey="ot_cost" color="#D97706" format={v => THB.format(v)} />
+                    : <p className="text-sm text-gray-400 text-center py-6">ไม่มีข้อมูล</p>}
+                </div>
+              </div>
+              <div className="card">
+                <div className="card-header">
+                  <h3 className="text-sm font-medium text-gray-700">อัตราการลาป่วยรายเดือน ปี {year}</h3>
+                </div>
+                <div className="card-body">
+                  {execMonths.some(m => m.sick_rate_pct > 0)
+                    ? <MetricBarChart data={execMonths} dataKey="sick_rate_pct" color="#DC2626" format={v => `${v}%`} />
+                    : <p className="text-sm text-gray-400 text-center py-6">ไม่มีข้อมูล</p>}
+                </div>
+              </div>
+            </div>
+            <p className="text-xs text-gray-400 mt-2">
+              ค่า OT เป็นตัวเลขประมาณการ (อัตราจ่าย 1.5 เท่าสำหรับ OT วันทำงาน และ 3 เท่าสำหรับวันหยุด/นักขัตฤกษ์ คูณกับค่าแรงต่อชั่วโมงของพนักงาน)
+              ต้นทุนแรงงานรวม = ค่าแรงจาก Timesheet ที่อนุมัติแล้ว + ค่า OT ประมาณการ ·
+              อัตราการลาป่วย = วันลาป่วยที่อนุมัติ ÷ (จำนวนพนักงาน active × วันทำงานในเดือน) × 100
+            </p>
+          </div>
 
           {/* Row 1: Leave bar + Timesheet bar */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
