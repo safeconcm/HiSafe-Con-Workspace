@@ -248,7 +248,6 @@ export function generateTimesheetHTML(data: TimesheetTemplateData, appUrl: strin
     <img src="${logoSrc}" alt="${data.company.name_th}" class="header-logo" onerror="this.style.display='none'" />
     <div class="header-center">
       <h1>${letterheadName(data.company)}</h1>
-      <p>${data.company.name_en}</p>
       ${letterheadMetaHTML(data.company)}
     </div>
     <div class="doc-id">

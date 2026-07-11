@@ -23,9 +23,14 @@ export interface CompanyLetterheadInfo {
 // The name to show as the big <h1> — prefer the full registered legal name
 // ("บริษัท เซฟคอน จำกัด") over the short display name ("เซฟคอน") used
 // elsewhere in the app's UI, since a document letterhead conventionally
-// shows the full name.
+// shows the full name. The English name is appended on the same line
+// ("บริษัท เซฟคอน จำกัด Safecon Co.,Ltd.") rather than as a separate <p>
+// underneath — per user feedback 2026-07-11, both should render as one
+// line, same size/color, not a big bold Thai line with a small gray
+// English line below it.
 export function letterheadName(company: CompanyLetterheadInfo): string {
-  return company.legal_name_th || company.name_th
+  const thaiName = company.legal_name_th || company.name_th
+  return company.name_en ? `${thaiName} ${company.name_en}` : thaiName
 }
 
 // Returns the extra <p class="meta"> lines (address, then tax id/phone/
