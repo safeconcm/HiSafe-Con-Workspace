@@ -43,6 +43,7 @@ export function getSessionFromHeaders(req: NextRequest): SessionUser | null {
     last_name_th: '',
     role: role as SessionUser['role'],
     avatar_url: null,
+    is_executive: false,
   }
 }
 

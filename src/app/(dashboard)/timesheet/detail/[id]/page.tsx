@@ -20,7 +20,6 @@ import { TimesheetApprovalPanel } from '@/components/timesheet/TimesheetApproval
 import { LeaveTimeline } from '@/components/leave/LeaveTimeline'
 import { formatMonthYearTH, formatDateTH, fullNameTH } from '@/utils'
 import { ArrowLeft, Loader2, Download, FileSpreadsheet, Clock } from 'lucide-react'
-import Link from 'next/link'
 
 function useCurrentUserId() {
   if (typeof window === 'undefined') return ''
