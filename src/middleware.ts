@@ -18,7 +18,16 @@ import { pickActiveRow, ACTIVE_COMPANY_COOKIE } from '@/lib/company-context'
 // check (see /api/cron/daily-checks/route.ts), silently breaking the
 // scheduled job while still looking fine under manual/browser testing
 // (which carries a logged-in session cookie and never exercises this path).
-const PUBLIC_ROUTES = ['/login', '/forgot-password', '/reset-password', '/api/auth/callback', '/api/auth/logout', '/manifest.json', '/sw.js', '/apply', '/api/public', '/api/cron']
+// '/api/line/webhook' is here for the same reason as '/api/cron' above —
+// LINE's Messaging API platform calls this server-to-server with no
+// Supabase session cookie at all. Before this exemption, every webhook
+// delivery hit the "no authUser → redirect to /login" branch below, so the
+// route's own HMAC signature check (see /api/line/webhook/route.ts) never
+// even ran — the 6-digit account-link code was never marked used, and the
+// LINE OA fell back to its own default "can't reply to messages" canned
+// response instead of ours. Found while debugging why LINE linking silently
+// never completed (conversation 2026-07-11).
+const PUBLIC_ROUTES = ['/login', '/forgot-password', '/reset-password', '/api/auth/callback', '/api/auth/logout', '/manifest.json', '/sw.js', '/apply', '/api/public', '/api/cron', '/api/line/webhook']
 
 // Routes that require specific roles. Matched by longest-prefix-wins (see the
 // route-guard loop below), so more specific paths must be listed — order in
