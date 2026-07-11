@@ -52,7 +52,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 
   // Fetch company
   const { data: company } = await supabase
-    .from('companies').select('code, name_th, name_en, logo_url')
+    .from('companies').select('code, name_th, name_en, logo_url, legal_name_th, address_th, tax_id, phone, contact_email')
     .eq('id', session.company_id).single()
 
   // Signatures are stored as storage PATHs (not public URLs — "documents"
@@ -80,6 +80,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       name_th:  company?.name_th  ?? '',
       name_en:  company?.name_en  ?? '',
       logo_url: company?.logo_url ?? null,
+      legal_name_th: company?.legal_name_th ?? null,
+      address_th:    company?.address_th    ?? null,
+      tax_id:        company?.tax_id        ?? null,
+      phone:         company?.phone         ?? null,
+      contact_email: company?.contact_email ?? null,
     },
     employee: {
       employee_code: (leave.user as any)?.employee_code ?? '',

@@ -12,6 +12,11 @@ export interface ContractTemplateData {
     code:    string
     name_th: string
     name_en: string
+    legal_name_th?: string | null
+    address_th?: string | null
+    tax_id?: string | null
+    phone?: string | null
+    contact_email?: string | null
   }
   employee: {
     employee_code: string
@@ -48,6 +53,8 @@ export interface ContractTemplateData {
     last_name_th:  string
   } | null
 }
+
+import { letterheadName, letterheadMetaHTML } from './company-letterhead'
 
 const CONTRACT_TYPE_TH: Record<string, string> = {
   permanent:  'พนักงานประจำ (ไม่มีกำหนดระยะเวลา)',
@@ -122,6 +129,7 @@ export function generateContractHTML(data: ContractTemplateData, appUrl: string)
   .header-center { text-align: center; flex: 1; }
   .header-center h1 { font-size: 16px; font-weight: 700; color: #1e3a8a; }
   .header-center p { font-size: 10px; color: #555; margin-top: 2px; }
+  .header-center .meta { font-size: 8px; color: #777; margin-top: 1px; }
   .doc-id { font-size: 9px; color: #888; text-align: right; min-width: 140px; }
 
   .doc-title { text-align: center; font-size: 17px; font-weight: 700; color: #1e3a8a; margin-bottom: 2px; letter-spacing: 1px; }
@@ -194,8 +202,9 @@ export function generateContractHTML(data: ContractTemplateData, appUrl: string)
   <div class="header">
     <img src="${logoSrc}" alt="${data.company.name_th}" class="header-logo" onerror="this.style.display='none'" />
     <div class="header-center">
-      <h1>${data.company.name_th}</h1>
+      <h1>${letterheadName(data.company)}</h1>
       <p>${data.company.name_en}</p>
+      ${letterheadMetaHTML(data.company)}
     </div>
     <div class="doc-id">
       <div>เลขที่สัญญา: ${c.contract_no}</div>

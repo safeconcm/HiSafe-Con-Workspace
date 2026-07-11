@@ -7,6 +7,8 @@
 // on a single A4 page instead of the previous one-row-per-day list, which
 // ran to multiple pages for a full month.
 
+import { letterheadName, letterheadMetaHTML } from './company-letterhead'
+
 const TH_MONTHS = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน',
   'กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม']
 const TH_DAYS = ['อา','จ','อ','พ','พฤ','ศ','ส']
@@ -17,7 +19,18 @@ function formatThaiDate(dateStr: string): string {
 }
 
 export interface TimesheetTemplateData {
-  company: { code: string; name_th: string; name_en: string }
+  company: {
+    code: string; name_th: string; name_en: string
+    // Full letterhead fields (companies.legal_name_th/address_th/tax_id/
+    // phone/contact_email) — optional/nullable so nothing breaks for a
+    // company row that hasn't had these filled in yet. See conversation
+    // 2026-07-11 ("ที่ต้องใส่ในหัวกระดาษเอกสารต่าง ทุกเอกสาร").
+    legal_name_th?: string | null
+    address_th?: string | null
+    tax_id?: string | null
+    phone?: string | null
+    contact_email?: string | null
+  }
   employee: {
     employee_code: string; first_name_th: string; last_name_th: string
     position_th: string | null; department: string | null
@@ -163,6 +176,7 @@ export function generateTimesheetHTML(data: TimesheetTemplateData, appUrl: strin
   .header-center { text-align: center; flex: 1; }
   .header-center h1 { font-size: 15px; font-weight: 700; color: #1e3a8a; }
   .header-center p { font-size: 10px; color: #555; }
+  .header-center .meta { font-size: 8px; color: #777; margin-top: 1px; }
   .doc-id { font-size: 9px; color: #888; text-align: right; min-width: 120px; }
   .doc-title {
     text-align: center; font-size: 14px; font-weight: 700; color: #1e3a8a;
@@ -233,8 +247,9 @@ export function generateTimesheetHTML(data: TimesheetTemplateData, appUrl: strin
   <div class="header">
     <img src="${logoSrc}" alt="${data.company.name_th}" class="header-logo" onerror="this.style.display='none'" />
     <div class="header-center">
-      <h1>${data.company.name_th}</h1>
+      <h1>${letterheadName(data.company)}</h1>
       <p>${data.company.name_en}</p>
+      ${letterheadMetaHTML(data.company)}
     </div>
     <div class="doc-id">
       <div>เลขที่: TS-${data.timesheet.id.slice(-8).toUpperCase()}</div>

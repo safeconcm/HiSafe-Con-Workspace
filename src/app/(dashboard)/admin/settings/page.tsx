@@ -56,6 +56,9 @@ export default function AdminSettingsPage() {
   const qc = useQueryClient()
   const { data: company, isLoading } = useQuery({ queryKey: ['admin-settings'], queryFn: fetchSettings })
 
+  const [letterhead, setLetterhead] = useState({
+    legal_name_th: '', address_th: '', tax_id: '', phone: '', contact_email: '',
+  })
   const [smtp, setSmtp] = useState({
     smtp_host: '', smtp_port: '587', smtp_user: '', smtp_password: '',
     smtp_from: '', smtp_from_name: '',
@@ -66,6 +69,13 @@ export default function AdminSettingsPage() {
 
   useEffect(() => {
     if (!company) return
+    setLetterhead({
+      legal_name_th: company.legal_name_th ?? '',
+      address_th:    company.address_th    ?? '',
+      tax_id:        company.tax_id        ?? '',
+      phone:         company.phone         ?? '',
+      contact_email: company.contact_email ?? '',
+    })
     setSmtp({
       smtp_host:      company.smtp_host      ?? '',
       smtp_port:      String(company.smtp_port ?? 587),
@@ -92,6 +102,7 @@ export default function AdminSettingsPage() {
 
   const handleSave = () => {
     save.mutate({
+      ...letterhead,
       ...smtp,
       smtp_port: parseInt(smtp.smtp_port),
       ...line,
@@ -123,6 +134,45 @@ export default function AdminSettingsPage() {
             <p className="text-base font-semibold text-gray-900">{company?.name_th}</p>
             <p className="text-sm text-gray-500">{company?.name_en}</p>
             <p className="text-xs text-gray-400 mt-0.5">รหัสบริษัท: {company?.code}</p>
+          </div>
+        </div>
+
+        {/* Letterhead — shown on every PDF document (Timesheet, ใบลา,
+            หนังสือรับรอง, สัญญาจ้าง, สรุปข้อมูลพนักงาน) via
+            src/lib/pdf/company-letterhead.ts. See conversation 2026-07-11. */}
+        <div className="pt-2 border-t border-gray-100 space-y-3">
+          <p className="text-xs font-medium text-gray-500">ข้อมูลหัวกระดาษเอกสาร (PDF)</p>
+          <div>
+            <label className="form-label">ชื่อบริษัทเต็ม (ที่ใช้ในเอกสาร)</label>
+            <input value={letterhead.legal_name_th}
+              onChange={e => setLetterhead(l => ({ ...l, legal_name_th: e.target.value }))}
+              className="form-input" placeholder="บริษัท เซฟคอน จำกัด" />
+          </div>
+          <div>
+            <label className="form-label">ที่อยู่บริษัท</label>
+            <input value={letterhead.address_th}
+              onChange={e => setLetterhead(l => ({ ...l, address_th: e.target.value }))}
+              className="form-input" placeholder="82/22 หมู่ที่ 1 ตำบลบางเลน อำเภอบางใหญ่ จังหวัดนนทบุรี 11140" />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className="form-label">เลขประจำตัวผู้เสียภาษี</label>
+              <input value={letterhead.tax_id}
+                onChange={e => setLetterhead(l => ({ ...l, tax_id: e.target.value }))}
+                className="form-input" placeholder="0125567035461" />
+            </div>
+            <div>
+              <label className="form-label">เบอร์โทร</label>
+              <input value={letterhead.phone}
+                onChange={e => setLetterhead(l => ({ ...l, phone: e.target.value }))}
+                className="form-input" placeholder="081-665-6521" />
+            </div>
+          </div>
+          <div>
+            <label className="form-label">อีเมลติดต่อ</label>
+            <input value={letterhead.contact_email}
+              onChange={e => setLetterhead(l => ({ ...l, contact_email: e.target.value }))}
+              className="form-input" placeholder="Safecon.sc@gmail.com" />
           </div>
         </div>
       </div>

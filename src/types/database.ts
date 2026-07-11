@@ -43,6 +43,14 @@ export interface Company {
   name_th: string
   name_en: string
   logo_url: string | null
+  // Letterhead fields for PDF documents (see src/lib/pdf/company-letterhead.ts)
+  // — distinct from name_th, which stays the short display name used in
+  // nav/UI (e.g. "เซฟคอน" vs. the full "บริษัท เซฟคอน จำกัด").
+  legal_name_th: string | null
+  address_th: string | null
+  tax_id: string | null
+  phone: string | null
+  contact_email: string | null
   line_oa_channel_id: string | null
   line_oa_channel_secret: string | null
   line_oa_access_token: string | null

@@ -38,7 +38,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   if (error || !user) return notFound('User')
 
   const { data: company } = await supabase
-    .from('companies').select('code, name_th, name_en')
+    .from('companies').select('code, name_th, name_en, legal_name_th, address_th, tax_id, phone, contact_email')
     .eq('id', session.company_id).single()
 
   // Reporting line — same best-effort separate-query pattern as
@@ -72,7 +72,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const contract = (contracts ?? []).find(c => c.status === 'active') ?? (contracts ?? [])[0] ?? null
 
   const templateData: EmployeeSummaryTemplateData = {
-    company: { code: company?.code ?? '', name_th: company?.name_th ?? '', name_en: company?.name_en ?? '' },
+    company: {
+      code: company?.code ?? '', name_th: company?.name_th ?? '', name_en: company?.name_en ?? '',
+      legal_name_th: company?.legal_name_th ?? null, address_th: company?.address_th ?? null,
+      tax_id: company?.tax_id ?? null, phone: company?.phone ?? null, contact_email: company?.contact_email ?? null,
+    },
     employee: {
       employee_code: user.employee_code,
       first_name_th: user.first_name_th,

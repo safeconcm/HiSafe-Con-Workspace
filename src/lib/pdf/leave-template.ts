@@ -8,6 +8,11 @@ export interface LeaveTemplateData {
     name_th:  string
     name_en:  string
     logo_url: string | null
+    legal_name_th?: string | null
+    address_th?: string | null
+    tax_id?: string | null
+    phone?: string | null
+    contact_email?: string | null
   }
   employee: {
     employee_code: string
@@ -47,6 +52,8 @@ export interface LeaveTemplateData {
     acted_at:      string
   }[]
 }
+
+import { letterheadName, letterheadMetaHTML } from './company-letterhead'
 
 const LEAVE_TYPE_TH: Record<string, string> = {
   annual:    'พักร้อน',
@@ -119,6 +126,7 @@ export function generateLeaveHTML(data: LeaveTemplateData, appUrl: string): stri
     color: #1e3a8a;
   }
   .header-center p { font-size: 10px; color: #555; margin-top: 2px; }
+  .header-center .meta { font-size: 8px; color: #777; margin-top: 1px; }
   .doc-id {
     font-size: 9px;
     color: #888;
@@ -292,8 +300,9 @@ export function generateLeaveHTML(data: LeaveTemplateData, appUrl: string): stri
   <div class="header">
     <img src="${logoSrc}" alt="${data.company.name_th}" class="header-logo" onerror="this.style.display='none'" />
     <div class="header-center">
-      <h1>${data.company.name_th}</h1>
+      <h1>${letterheadName(data.company)}</h1>
       <p>${data.company.name_en}</p>
+      ${letterheadMetaHTML(data.company)}
     </div>
     <div class="doc-id">
       <div>เลขที่: LV-${data.leave.id.slice(-8).toUpperCase()}</div>

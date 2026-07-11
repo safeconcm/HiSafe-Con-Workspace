@@ -15,6 +15,11 @@ export interface EmployeeSummaryTemplateData {
     code:    string
     name_th: string
     name_en: string
+    legal_name_th?: string | null
+    address_th?: string | null
+    tax_id?: string | null
+    phone?: string | null
+    contact_email?: string | null
   }
   employee: {
     employee_code: string
@@ -53,6 +58,8 @@ export interface EmployeeSummaryTemplateData {
   }[]
   generated_at: string
 }
+
+import { letterheadName, letterheadMetaHTML } from './company-letterhead'
 
 const ROLE_TH: Record<string, string> = {
   employee: 'พนักงาน', supervisor: 'หัวหน้างาน', hr: 'ฝ่ายบุคคล', admin: 'ผู้ดูแลระบบ',
@@ -126,6 +133,7 @@ export function generateEmployeeSummaryHTML(data: EmployeeSummaryTemplateData, a
   .header-center { text-align: center; flex: 1; }
   .header-center h1 { font-size: 16px; font-weight: 700; color: #1e3a8a; }
   .header-center p { font-size: 10px; color: #555; margin-top: 2px; }
+  .header-center .meta { font-size: 8px; color: #777; margin-top: 1px; }
   .doc-id { font-size: 9px; color: #888; text-align: right; min-width: 130px; }
 
   .doc-title {
@@ -189,8 +197,9 @@ export function generateEmployeeSummaryHTML(data: EmployeeSummaryTemplateData, a
   <div class="header">
     <img src="${logoSrc}" alt="${data.company.name_th}" class="header-logo" onerror="this.style.display='none'" />
     <div class="header-center">
-      <h1>${data.company.name_th}</h1>
+      <h1>${letterheadName(data.company)}</h1>
       <p>${data.company.name_en}</p>
+      ${letterheadMetaHTML(data.company)}
     </div>
     <div class="doc-id">
       <div>รหัสพนักงาน: ${e.employee_code}</div>

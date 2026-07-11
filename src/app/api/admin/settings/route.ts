@@ -23,6 +23,7 @@ export async function GET(req: NextRequest) {
     .from('companies')
     .select(`
       id,code,name_th,name_en,logo_url,
+      legal_name_th,address_th,tax_id,phone,contact_email,
       smtp_host,smtp_port,smtp_user,smtp_password,smtp_from,smtp_from_name,
       line_oa_channel_id,line_oa_channel_secret,line_oa_access_token
     `)
@@ -40,6 +41,7 @@ export async function PATCH(req: NextRequest) {
 
   const body    = await req.json().catch(() => ({}))
   const allowed = [
+    'legal_name_th','address_th','tax_id','phone','contact_email',
     'smtp_host','smtp_port','smtp_user','smtp_password','smtp_from','smtp_from_name',
     'line_oa_channel_id','line_oa_channel_secret','line_oa_access_token',
   ]
