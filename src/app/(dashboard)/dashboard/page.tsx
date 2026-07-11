@@ -23,7 +23,7 @@ export default async function DashboardPage() {
   // company, so resolve the currently active one (see company-context.ts)
   const { data: meRows } = await admin
     .from('users')
-    .select('id, company_id, role, first_name_th')
+    .select('id, company_id, role, first_name_th, is_executive')
     .eq('auth_user_id', authUser.id)
     .eq('status', 'active')
 
@@ -87,11 +87,13 @@ export default async function DashboardPage() {
   const available = (b: typeof annualBalance): number =>
     b ? Math.max(b.quota_days + b.carried_forward + b.adjusted_days - b.used_days - b.pending_days, 0) : 0
 
-  // HR/Admin manage everyone else's leave & timesheet — in practice they
-  // don't submit their own through the system (small team, no one left to
-  // approve theirs anyway). Hide the personal leave/timesheet widgets for
-  // them here to match the sidebar (see Sidebar.tsx) — decided 2026-07-11.
-  const showPersonalWidgets = ['employee', 'supervisor'].includes(me.role)
+  // HR/Admin manage everyone else's leave & timesheet, and executive
+  // supervisors (e.g. the MD, see users.is_executive) don't submit their own
+  // through the system either — in practice they're the ones
+  // approving/managing everyone else's. Hide the personal leave/timesheet
+  // widgets for both cases here to match the sidebar (see Sidebar.tsx) —
+  // decided 2026-07-11.
+  const showPersonalWidgets = ['employee', 'supervisor'].includes(me.role) && !me.is_executive
 
   return (
     <div className="page-container space-y-6">

@@ -103,7 +103,7 @@ export async function middleware(request: NextRequest) {
     const { data: userRows, error: userRowError } = await supabase
       .from('users')
       .select(
-        'id, company_id, employee_code, email, first_name_th, last_name_th, role, avatar_url'
+        'id, company_id, employee_code, email, first_name_th, last_name_th, role, avatar_url, is_executive'
       )
       .eq('auth_user_id', authUser.id)
       .eq('status', 'active')
@@ -140,6 +140,7 @@ export async function middleware(request: NextRequest) {
       last_name_th: userRow.last_name_th,
       role: userRow.role,
       avatar_url: userRow.avatar_url,
+      is_executive: userRow.is_executive ?? false,
       available_companies: companyRows ?? [],
     }
 

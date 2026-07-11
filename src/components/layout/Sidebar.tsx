@@ -110,6 +110,11 @@ interface NavItem {
   href: string
   icon: React.ElementType
   roles?: string[]
+  // Hide for executive users (session.is_executive) even if their role
+  // would otherwise show this item — e.g. an MD holding role='supervisor'
+  // for approval/permission purposes, but who doesn't submit personal
+  // leave/timesheet like a regular department-manager supervisor would.
+  hideForExecutive?: boolean
   children?: { label: string; href: string }[]
 }
 
@@ -135,6 +140,7 @@ const NAV_ITEMS: NavItem[] = [
     href:  '/leave/my',
     icon:  CalendarDays,
     roles: ['employee', 'supervisor'],
+    hideForExecutive: true,
     children: [
       { label: 'ใบลาของฉัน',    href: '/leave/my'  },
       { label: 'ยื่นใบลาใหม่',  href: '/leave/new' },
@@ -148,6 +154,7 @@ const NAV_ITEMS: NavItem[] = [
     href:  '/timesheet',
     icon:  Clock,
     roles: ['employee', 'supervisor'],
+    hideForExecutive: true,
   },
   {
     label: 'OT (ล่วงเวลา)',
@@ -251,7 +258,9 @@ export function Sidebar({ session, company }: SidebarProps) {
     pathname === href || pathname.startsWith(href + '/')
 
   const visibleItems = NAV_ITEMS.filter(
-    item => !item.roles || item.roles.includes(session.role)
+    item =>
+      (!item.roles || item.roles.includes(session.role)) &&
+      !(item.hideForExecutive && session.is_executive)
   )
 
   return (

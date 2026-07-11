@@ -27,7 +27,7 @@ export default async function DashboardLayout({
   // An admin may be linked to more than one company (see company-context.ts)
   const { data: userRows, error: userRowError } = await admin
     .from('users')
-    .select('id, company_id, employee_code, email, first_name_th, last_name_th, role, avatar_url, must_change_password')
+    .select('id, company_id, employee_code, email, first_name_th, last_name_th, role, avatar_url, must_change_password, is_executive')
     .eq('auth_user_id', authUser.id)
     .eq('status', 'active')
 
@@ -65,6 +65,7 @@ export default async function DashboardLayout({
     last_name_th:  userRow.last_name_th,
     role:          userRow.role,
     avatar_url:    userRow.avatar_url,
+    is_executive:  userRow.is_executive ?? false,
     available_companies: companyRows ?? [],
   }
 

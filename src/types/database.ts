@@ -299,6 +299,13 @@ export interface SessionUser {
   last_name_th: string
   role: UserRole
   avatar_url: string | null
+  // True for management/executive users (e.g. the MD) who hold a
+  // people-management role (supervisor/hr/admin) but, per company policy,
+  // don't submit their own leave/timesheet through the system. Independent
+  // of `role` — a supervisor can be a regular department manager (has
+  // personal leave/timesheet) or an executive (doesn't), see Sidebar.tsx /
+  // dashboard/page.tsx.
+  is_executive: boolean
   // Companies this auth user has an active profile in (for admins linked
   // to more than one company). Length 1 for normal single-company users.
   available_companies?: { id: string; code: string; name_th: string; logo_url: string | null }[]
