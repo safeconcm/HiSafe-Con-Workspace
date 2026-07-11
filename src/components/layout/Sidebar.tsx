@@ -5,7 +5,8 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, CalendarDays, Clock, Briefcase,
   Bell, Users, Building2, Settings, ChevronDown,
-  ClipboardList, BarChart3, ShieldCheck, LogOut, Wallet, MessageCircle, Megaphone, User
+  ClipboardList, BarChart3, ShieldCheck, LogOut, Wallet, MessageCircle, Megaphone, User,
+  MessageCircleQuestion,
 } from 'lucide-react'
 import { cn, fullNameTH } from '@/utils'
 import type { SessionUser } from '@/types/database'
@@ -160,6 +161,11 @@ const NAV_ITEMS: NavItem[] = [
     icon:  Bell,
   },
   {
+    label: 'ติดต่อ HR',
+    href:  '/inquiries',
+    icon:  MessageCircleQuestion,
+  },
+  {
     label: 'ประกาศ / ข่าวสาร',
     href:  '/announcements',
     icon:  Megaphone,
@@ -177,6 +183,7 @@ const NAV_ITEMS: NavItem[] = [
     roles: ['hr', 'admin'],
     children: [
       { label: 'ภาพรวม HR',      href: '/hr/dashboard'       },
+      { label: 'คำถามจากพนักงาน', href: '/inquiries'         },
       { label: 'จัดการใบลา',     href: '/hr/leave'           },
       { label: 'นโยบายการลา',    href: '/hr/leave-policies'  },
       { label: 'Timesheet ทั้งหมด', href: '/hr/timesheet'   },

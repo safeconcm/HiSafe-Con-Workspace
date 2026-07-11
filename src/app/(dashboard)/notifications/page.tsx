@@ -6,6 +6,7 @@ import { formatDateTime, cn } from '@/utils'
 import {
   Bell, CheckCheck, CalendarDays, Clock,
   ChevronRight, Loader2, Check, FileText, UserCheck, CalendarClock,
+  MessageCircleQuestion,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -21,6 +22,8 @@ const EVENT_ICON: Record<string, React.ElementType> = {
   contract_expiring:    FileText,
   probation_reminder:   UserCheck,
   leave_expiring:       CalendarClock,
+  inquiry_submitted:    MessageCircleQuestion,
+  inquiry_reply:        MessageCircleQuestion,
   general:              Bell,
 }
 
@@ -36,6 +39,8 @@ const EVENT_COLOR: Record<string, string> = {
   contract_expiring:    'bg-amber-100 text-amber-700',
   probation_reminder:   'bg-amber-100 text-amber-700',
   leave_expiring:       'bg-amber-100 text-amber-700',
+  inquiry_submitted:    'bg-indigo-100 text-indigo-700',
+  inquiry_reply:        'bg-indigo-100 text-indigo-700',
   general:              'bg-gray-100 text-gray-600',
 }
 
@@ -98,6 +103,7 @@ export default function NotificationsPage() {
     }
     if (n.reference_type === 'contract') return `/hr/contracts/${n.reference_id}`
     if (n.reference_type === 'leave_balance') return `/leave/my`
+    if (n.reference_type === 'inquiry') return `/inquiries`
     return null
   }
 
