@@ -1,15 +1,20 @@
 'use client'
 // src/app/(auth)/login/page.tsx
 // Email/Password + Google OAuth + Remember Me
-// Single full-bleed hero scene (city skyline + crane, cursor-follow spotlight,
-// parallax glow) with the login form floating as a card on top — reflows to
-// one column on mobile/tablet instead of a hard 50/50 split.
+// Single full-bleed hero scene (cursor-follow spotlight, parallax brand-color
+// glows) with the login form floating as a card on top — reflows to one
+// column on mobile/tablet instead of a hard 50/50 split.
 //
 // Redesign notes (2026-07): visual-only pass (Option B — "Modern SaaS").
 // Auth logic below (handleEmailLogin, handleGoogle, error-code mapping,
 // remember-me, redirect handling) is byte-for-byte the same behavior as
 // before — only markup/classes changed, plus extraction into Button/Input/
-// Card primitives and a standalone CitySkyline component.
+// Card primitives.
+//
+// CONNEX rebrand pass (2026-07-12): dropped the CitySkyline (city+crane)
+// illustration per user feedback ("ดูไม่อินเตอร์") — kept the plain dark
+// gradient + spotlight + brand-color blobs, which reads cleaner as a modern
+// SaaS hero without a construction-specific illustration.
 
 import { useState, useEffect, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -20,7 +25,6 @@ import { Eye, EyeOff, Mail, Users } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
 import { Card } from '@/components/ui/Card'
-import { CitySkyline } from '@/components/auth/CitySkyline'
 
 function GoogleIcon() {
   return (
@@ -140,18 +144,18 @@ function LoginForm() {
 
       {/* Two brand-color glows — Highcon blue (top-left) and Safecon green
           (bottom-right) — so the background reads as "both companies," not
-          a generic amber accent unrelated to either brand. Amber is kept
-          only as a small highlight (crane lights, badge) elsewhere. */}
+          a generic amber accent unrelated to either brand. Sized up slightly
+          (28rem -> 34rem) to keep the scene feeling full now that the
+          CitySkyline illustration is gone — see hero-horizon-glow in
+          globals.css for the remaining amber warmth low in the frame. */}
       <div
-        className="absolute -top-24 -left-16 w-[28rem] h-[28rem] rounded-full bg-[#0C447C]/25 blur-3xl animate-blob pointer-events-none"
+        className="absolute -top-32 -left-24 w-[34rem] h-[34rem] rounded-full bg-[#0C447C]/25 blur-3xl animate-blob pointer-events-none"
         style={{ transform: `translate(${(mouse.x - 50) * 0.15}px, ${(mouse.y - 50) * 0.1}px)` }}
       />
       <div
-        className="absolute -bottom-16 -right-10 w-[28rem] h-[28rem] rounded-full bg-[#3B6D11]/20 blur-3xl animate-blob pointer-events-none"
+        className="absolute -bottom-24 -right-16 w-[34rem] h-[34rem] rounded-full bg-[#3B6D11]/20 blur-3xl animate-blob pointer-events-none"
         style={{ animationDelay: '-7s', transform: `translate(${(mouse.x - 50) * -0.1}px, ${(mouse.y - 50) * -0.08}px)` }}
       />
-
-      <CitySkyline className="absolute bottom-0 inset-x-0 w-full h-[38%] sm:h-[42%] lg:h-[46%] opacity-90 pointer-events-none" />
 
       {/* ── Foreground content: brand block + form card ────────────────── */}
       <div className="relative z-10 min-h-screen flex flex-col lg:flex-row items-center justify-center gap-10 lg:gap-20 max-w-6xl mx-auto px-6 py-14 lg:py-10">
@@ -171,8 +175,7 @@ function LoginForm() {
             CONNEX
           </h1>
           <p className="text-slate-300 mt-4 text-sm sm:text-base leading-relaxed max-w-sm mx-auto lg:mx-0">
-            HR Platform สำหรับทีม Highcon และ Safecon
-            ระบบจัดการงานบุคคล เอกสาร และการอนุมัติ
+            Smart Platform เชื่อมต่อทุกการทำงานในระบบ
           </p>
         </div>
 
@@ -275,7 +278,7 @@ function LoginForm() {
             </form>
 
             <p className="text-center text-[11px] text-gray-400 mt-8 font-mono tracking-widest uppercase">
-              &copy; 2026 Highcon Co., Ltd. &amp; Safecon Co., Ltd.
+              &copy; 2026 CONNEX
             </p>
           </Card>
         </div>

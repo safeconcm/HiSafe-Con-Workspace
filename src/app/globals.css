@@ -128,13 +128,18 @@
 .animate-dash         { stroke-dasharray: 400; animation: dash-draw 2.4s ease-out forwards; }
 
 .cursor-spotlight {
-  background: radial-gradient(500px circle at var(--mx, 50%) var(--my, 30%), rgba(255,255,255,0.10), transparent 62%);
+  /* Narrowed 50% (was 500px) per 2026-07-12 feedback — the glow read as too
+     bright/wide against the plain gradient background once the skyline
+     illustration was removed. */
+  background: radial-gradient(250px circle at var(--mx, 50%) var(--my, 30%), rgba(255,255,255,0.10), transparent 62%);
   transition: background .15s ease-out;
 }
 
-/* Warm horizon glow sitting behind the skyline illustration on the login hero */
+/* Warm ambient glow low in the scene — kept after the skyline illustration
+   was removed (2026-07-12) since it still reads well against the plain
+   gradient background, just centered lower rather than "behind a skyline". */
 .hero-horizon-glow {
-  background: radial-gradient(80% 60% at 50% 100%, rgba(251,191,36,0.16), transparent 70%);
+  background: radial-gradient(70% 50% at 50% 100%, rgba(251,191,36,0.12), transparent 70%);
 }
 
 .auth-input {
