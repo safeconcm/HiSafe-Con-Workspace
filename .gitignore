@@ -47,3 +47,8 @@ next-env.d.ts
 
 # local scratch scripts (not part of the app)
 test-letterhead*.mjs
+
+# source logo file dropped at repo root during asset handoff (2026-07-12) —
+# the actual asset lives at public/logos/connex-logo.png, this is just the
+# original upload and isn't meant to be committed
+/CONNEX3_LogoAPP.PNG

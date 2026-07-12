@@ -15,6 +15,12 @@
 // illustration per user feedback ("ดูไม่อินเตอร์") — kept the plain dark
 // gradient + spotlight + brand-color blobs, which reads cleaner as a modern
 // SaaS hero without a construction-specific illustration.
+//
+// CONNEX logo swap (2026-07-12): replaced the two-company-logo row
+// (safecon.png + highcon.png) with a single CONNEX lockup image
+// (public/logos/connex-logo.png) — login page only, per user request.
+// Dropped the separate "CONNEX" <h1> since the wordmark is already baked
+// into the logo image, avoiding a redundant duplicate on screen.
 
 import { useState, useEffect, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -160,22 +166,18 @@ function LoginForm() {
       {/* ── Foreground content: brand block + form card ────────────────── */}
       <div className="relative z-10 min-h-screen flex flex-col lg:flex-row items-center justify-center gap-10 lg:gap-20 max-w-6xl mx-auto px-6 py-14 lg:py-10">
 
-        {/* Brand block */}
+        {/* Brand block — single CONNEX lockup (logo already contains the
+            wordmark, 2026-07-12), replacing the previous two-company-logo
+            row + separate "CONNEX" heading. */}
         <div className="w-full max-w-md text-center lg:text-left animate-fade-in-up">
-          <div className="flex items-center justify-center lg:justify-start gap-3 mx-auto lg:mx-0 mb-6 w-fit">
-            <div className="flex items-center justify-center bg-white rounded-xl h-16 px-5 shadow-lg shadow-black/20">
-              <Image src="/logos/safecon.png" alt="Safecon" width={120} height={48} className="object-contain h-8 w-auto" />
-            </div>
-            <div className="flex items-center justify-center bg-white rounded-xl h-16 px-5 shadow-lg shadow-black/20">
-              <Image src="/logos/highcon.png" alt="Highcon" width={80} height={80} className="object-contain h-11 w-auto" />
+          <div className="flex items-center justify-center lg:justify-start mx-auto lg:mx-0 mb-6 w-fit">
+            <div className="flex items-center justify-center bg-white rounded-2xl p-5 shadow-lg shadow-black/20">
+              <Image src="/logos/connex-logo.png" alt="CONNEX" width={292} height={306} className="object-contain h-28 sm:h-32 w-auto" />
             </div>
           </div>
 
-          <h1 className="text-3xl sm:text-4xl xl:text-5xl font-bold text-white leading-tight tracking-tight">
-            CONNEX
-          </h1>
           <p className="text-slate-300 mt-4 text-sm sm:text-base leading-relaxed max-w-sm mx-auto lg:mx-0">
-            Smart Platform เชื่อมต่อทุกการทำงานในระบบ
+            Smart Platform เชื่อมต่อทุกการทำงานในระบบเดียว
           </p>
         </div>
 
