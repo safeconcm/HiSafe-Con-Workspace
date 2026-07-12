@@ -160,12 +160,34 @@ export async function DELETE(req: NextRequest, ctx: Ctx) {
     // Release pending days (atomic)
     if (existing.status === 'pending') {
       const year = new Date(existing.start_date).getFullYear()
-      await supabase.rpc('decrement_pending_days', {
+      const { error: decErr } = await supabase.rpc('decrement_pending_days', {
         p_user_id:    session.id,
         p_leave_type: existing.leave_type,
         p_year:       year,
         p_days:       existing.total_days,
       })
+      if (decErr) {
+        // Fallback: direct update (mirrors the increment fallback in
+        // POST /api/leave) — without this, an RPC failure here silently
+        // leaves pending_days stuck forever, since the leave request itself
+        // still gets marked 'cancelled' either way. This is exactly what
+        // happened before decrement_pending_days existed in the DB (bug
+        // fixed 2026-07-12): the request cancelled fine but the reserved
+        // days were never released back to the employee's balance.
+        const { data: balRow } = await supabase.from('leave_balances')
+          .select('pending_days')
+          .eq('user_id', session.id)
+          .eq('leave_type', existing.leave_type)
+          .eq('year', year)
+          .single()
+        if (balRow) {
+          await supabase.from('leave_balances')
+            .update({ pending_days: Math.max(((balRow as any).pending_days ?? 0) - existing.total_days, 0) })
+            .eq('user_id', session.id)
+            .eq('leave_type', existing.leave_type)
+            .eq('year', year)
+        }
+      }
     }
   } else if (existing.status === 'approved') {
     // Need re-approval for cancellation

@@ -17,6 +17,11 @@ interface LeaveListParams {
   // src/app/api/leave/route.ts. Used by the "ใบลาของฉัน" page so a
   // supervisor's own list isn't mixed with their reports' pending requests.
   ownOnly?: boolean
+  // "Only requests I need to act on / have decided on" — see approver_only
+  // comment in src/app/api/leave/route.ts. Used by /approvals/leave so a
+  // supervisor's own submitted leave never shows up in their own approval
+  // queue.
+  approverOnly?: boolean
 }
 
 interface CreateLeaveBody {
@@ -39,7 +44,8 @@ async function fetchLeaves(params: LeaveListParams) {
   if (params.leave_type) qs.set('leave_type', params.leave_type)
   if (params.year)       qs.set('year',       String(params.year))
   if (params.user_id)    qs.set('user_id',    params.user_id)
-  if (params.ownOnly)    qs.set('own_only',   '1')
+  if (params.ownOnly)      qs.set('own_only',      '1')
+  if (params.approverOnly) qs.set('approver_only', '1')
 
   const res  = await fetch(`/api/leave?${qs}`)
   const json = await res.json()

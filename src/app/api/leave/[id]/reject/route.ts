@@ -41,10 +41,28 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   }).eq('id', params.id)
 
   // Release pending days (atomic)
-  await supabase.rpc('decrement_pending_days', {
+  const { error: decErr } = await supabase.rpc('decrement_pending_days', {
     p_user_id: leave.user_id, p_leave_type: leave.leave_type,
     p_year: year, p_days: leave.total_days,
   })
+  if (decErr) {
+    // Fallback: direct update — same reasoning as the cancel (DELETE)
+    // endpoint fix 2026-07-12: without this, an RPC failure leaves
+    // pending_days stuck even though the request is already rejected.
+    const { data: balRow } = await supabase.from('leave_balances')
+      .select('pending_days')
+      .eq('user_id', leave.user_id)
+      .eq('leave_type', leave.leave_type)
+      .eq('year', year)
+      .single()
+    if (balRow) {
+      await supabase.from('leave_balances')
+        .update({ pending_days: Math.max(((balRow as any).pending_days ?? 0) - leave.total_days, 0) })
+        .eq('user_id', leave.user_id)
+        .eq('leave_type', leave.leave_type)
+        .eq('year', year)
+    }
+  }
 
   // Record rejection
   await supabase.from('leave_approvals').insert({

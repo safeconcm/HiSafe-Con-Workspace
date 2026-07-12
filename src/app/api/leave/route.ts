@@ -39,6 +39,15 @@ export async function GET(req: NextRequest) {
   // calendar. Resolve the team via organization_nodes instead — the same
   // parent/child tree already used by the team payroll view (/api/payroll).
   const teamOnly  = searchParams.get('team_only') === '1'
+  // "Approvals" page (/approvals/leave) wants only leave requests this
+  // supervisor needs to act on (current_approver_id) or has already decided
+  // on (approved_by_id) — NOT their own submitted requests. Without this,
+  // the general supervisor OR-clause below (user_id.eq.me OR
+  // current_approver_id.eq.me OR approved_by_id.eq.me) let a supervisor's
+  // own pending leave request leak into their own "รออนุมัติ" approval
+  // queue, since that clause's user_id branch matches regardless of who's
+  // actually assigned to approve it (bug reported 2026-07-12, SC-002).
+  const approverOnly = searchParams.get('approver_only') === '1'
   const from      = (page - 1) * limit
 
   const supabase  = createAdminSupabaseClient()
@@ -86,15 +95,20 @@ export async function GET(req: NextRequest) {
       : query.eq('id', '00000000-0000-0000-0000-000000000000') // no reports → guaranteed-empty result
   } else if (!isHROrAdmin(session)) {
     if (session.role === 'supervisor') {
-      // Supervisors see: their own leave, items currently pending on them
-      // (current_approver_id), AND items they've already decided on
-      // (approved_by_id) — that last one matters for the "อนุมัติแล้ว"
-      // history tab on /approvals/leave: current_approver_id gets nulled
-      // out the moment a request is approved (see /api/leave/[id]/approve),
-      // so without approved_by_id here, asking for status=approved always
-      // came back empty for a supervisor even though they were the one who
-      // approved it.
-      if (!userId || userId === session.id) {
+      if (approverOnly) {
+        // Approvals queue only — see approverOnly comment above. Deliberately
+        // excludes user_id.eq.me so a supervisor's own submitted requests
+        // never show up here; those belong on "ใบลาของฉัน" (own_only).
+        query = query.or(`current_approver_id.eq.${session.id},approved_by_id.eq.${session.id}`)
+      } else if (!userId || userId === session.id) {
+        // Supervisors see: their own leave, items currently pending on them
+        // (current_approver_id), AND items they've already decided on
+        // (approved_by_id) — that last one matters for the "อนุมัติแล้ว"
+        // history tab on /approvals/leave: current_approver_id gets nulled
+        // out the moment a request is approved (see /api/leave/[id]/approve),
+        // so without approved_by_id here, asking for status=approved always
+        // came back empty for a supervisor even though they were the one who
+        // approved it.
         query = query.or(`user_id.eq.${session.id},current_approver_id.eq.${session.id},approved_by_id.eq.${session.id}`)
       } else {
         query = query.eq('user_id', userId)

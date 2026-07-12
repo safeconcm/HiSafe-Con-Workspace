@@ -14,10 +14,14 @@ export default function ApprovalsLeavePage() {
   // correctly per role: supervisors get items assigned to them
   // (current_approver_id) for "รออนุมัติ" and items they personally
   // decided on (approved_by_id) for "อนุมัติแล้ว"; HR/Admin get the
-  // whole company either way.
+  // whole company either way. approverOnly excludes the supervisor's own
+  // submitted leave requests from this queue — see approver_only comment
+  // in src/app/api/leave/route.ts (bug fix 2026-07-12: a supervisor's own
+  // pending leave was showing up in their own "รออนุมัติ" list).
   const { data, isLoading } = useLeaves({
     status: isPending ? 'pending' : 'approved',
     limit: 50,
+    approverOnly: true,
   })
 
   const leaves = data?.requests ?? []
