@@ -32,6 +32,7 @@ export async function GET(req: NextRequest) {
     .from('announcements')
     .select('id, company_ids, category, title, body, attachment_url, attachment_type, attachment_name, require_ack, created_by, created_at, users:created_by(first_name_th, last_name_th)')
     .contains('company_ids', [session.company_id])
+    .is('deleted_at', null)
     .order('created_at', { ascending: false })
   if (error) return serverError(error)
   return ok({ announcements: data })

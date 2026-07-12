@@ -183,7 +183,7 @@ const NAV_ITEMS: NavItem[] = [
     icon:  MessageCircleQuestion,
   },
   {
-    label: 'ประกาศ / ข่าวสาร',
+    label: 'อัปเดต',
     href:  '/announcements',
     icon:  Megaphone,
   },
@@ -216,7 +216,7 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'สมัครงาน',       href: '/hr/recruitment'     },
       { label: 'ใบสมัครออนไลน์', href: '/hr/job-applications' },
       { label: 'เงินเดือน',       href: '/hr/salary'          },
-      { label: 'จัดการประกาศ',   href: '/hr/announcements'   },
+      { label: 'จัดการอัปเดต',   href: '/hr/announcements'   },
       { label: 'ข้อมูลพนักงานทั้งหมด', href: '/admin/users'  },
     ],
   },

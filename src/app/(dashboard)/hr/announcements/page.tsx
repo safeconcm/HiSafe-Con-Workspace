@@ -5,7 +5,7 @@
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from '@/components/ui/Toaster'
-import { Plus, Megaphone, Loader2, ImageIcon, FileText, AlertTriangle } from 'lucide-react'
+import { Plus, Megaphone, Loader2, ImageIcon, FileText, AlertTriangle, Trash2 } from 'lucide-react'
 import { cn, formatDateTH, stripAnnouncementMarkdown } from '@/utils'
 import { createClient } from '@/lib/supabase/client'
 
@@ -210,6 +210,23 @@ export default function HrAnnouncementsPage() {
     onError: (e: Error) => toast.error('เกิดข้อผิดพลาด', e.message),
   })
 
+  // Soft-delete only — does not touch each user's already-received
+  // in-app/email/LINE notification history, see the route's own comment.
+  // Added 2026-07-12 so test/mistaken posts can be cleaned up during the
+  // trial period without needing to ask an engineer.
+  const removeAnnouncement = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/hr/announcements/${id}`, { method: 'DELETE' })
+      const json = await safeJson(res)
+      if (!res.ok) throw new Error(json?.error || `ลบไม่สำเร็จ (${res.status})`)
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['hr-announcements'] })
+      toast.success('ลบประกาศแล้ว')
+    },
+    onError: (e: Error) => toast.error('ลบไม่สำเร็จ', e.message),
+  })
+
   const onFileChange = async (file: File | null) => {
     if (!file) {
       setAttachFile(null); setAttachPreview(null); setSizeInfo(null)
@@ -242,7 +259,7 @@ export default function HrAnnouncementsPage() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2">
           <Megaphone className="w-5 h-5 text-gray-500" />
-          <h1>ประกาศ / ข่าวสาร</h1>
+          <h1>อัปเดต</h1>
         </div>
         <button
           onClick={() => setShowForm(v => !v)}
@@ -425,6 +442,16 @@ export default function HrAnnouncementsPage() {
                     </span>
                   )}
                   <span className="text-xs text-gray-400">{formatDateTH(a.created_at)}</span>
+                  <button
+                    onClick={() => {
+                      if (confirm(`ลบประกาศ "${a.title}" ใช่ไหม?`)) removeAnnouncement.mutate(a.id)
+                    }}
+                    disabled={removeAnnouncement.isPending}
+                    className="ml-auto p-1 text-gray-400 hover:text-red-600 transition-colors disabled:opacity-50"
+                    title="ลบประกาศ"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
                 <p className="text-sm font-semibold text-gray-900 mt-1">{a.title}</p>
                 <p className="text-sm text-gray-600 mt-1 line-clamp-2 whitespace-pre-line">{stripAnnouncementMarkdown(a.body)}</p>

@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
     .select('id, category, title, body, attachment_url, attachment_type, attachment_name, created_at')
     .contains('company_ids', [session.company_id])
     .eq('require_ack', false)
+    .is('deleted_at', null)
     .order('created_at', { ascending: true })
   if (error) return serverError(error)
   if (!candidates || candidates.length === 0) return ok({ announcements: [] })

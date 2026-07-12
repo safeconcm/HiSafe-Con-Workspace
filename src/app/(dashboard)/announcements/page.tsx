@@ -113,7 +113,7 @@ export default function AnnouncementsPage() {
     <div className="page-container space-y-5 max-w-3xl">
       <div className="flex items-center gap-2">
         <Megaphone className="w-5 h-5 text-gray-500" />
-        <h1>ประกาศ / ข่าวสาร</h1>
+        <h1>อัปเดต</h1>
       </div>
 
       {/* Tabs */}
