@@ -37,6 +37,51 @@ const ACCEPT_ATTR = [
 
 const isImageType = (type: string | null | undefined) => !!type && type.startsWith('image/')
 
+// Client-side image compression before upload — user feedback 2026-07-12
+// ("ถ้าไฟล์ที่แนบในประกาศมันใหญ่ ระบบสามารถบังคับบีบอัดได้ไหม"). Only
+// applied to images: resizes anything wider/taller than 1920px down to fit,
+// and re-encodes JPEG/WEBP at 80% quality. PNG is resized but stays PNG
+// (lossless) since we can't tell if it needs its alpha channel. GIFs are
+// left untouched — re-encoding through a canvas would flatten an animated
+// GIF to a single frame. PDF/Word/Excel aren't touched at all: they're
+// already-compressed container formats, so re-compressing them client-side
+// would need a much heavier tool for very little size benefit.
+async function compressImageIfNeeded(file: File): Promise<File> {
+  if (!isImageType(file.type) || file.type === 'image/gif') return file
+
+  const MAX_DIM = 1920
+  const QUALITY = 0.8
+
+  const bitmap = await createImageBitmap(file).catch(() => null)
+  if (!bitmap) return file // unsupported/corrupt image — fall back to the original
+
+  const scale = Math.min(1, MAX_DIM / Math.max(bitmap.width, bitmap.height))
+  const w = Math.max(1, Math.round(bitmap.width * scale))
+  const h = Math.max(1, Math.round(bitmap.height * scale))
+
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return file
+  ctx.drawImage(bitmap, 0, 0, w, h)
+
+  const outType = file.type === 'image/png' ? 'image/png' : 'image/jpeg'
+  const blob: Blob | null = await new Promise(resolve => canvas.toBlob(resolve, outType, QUALITY))
+  if (!blob || blob.size >= file.size) return file // compression didn't actually help — keep original
+
+  const newName = outType === 'image/jpeg' && !/\.jpe?g$/i.test(file.name)
+    ? file.name.replace(/\.[^.]+$/, '') + '.jpg'
+    : file.name
+
+  return new File([blob], newName, { type: outType })
+}
+
+function formatBytes(n: number) {
+  if (n < 1024 * 1024) return `${Math.round(n / 1024)} KB`
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`
+}
+
 type Company = { id: string; code: string; name_th: string }
 
 // A response that isn't valid JSON (e.g. a plain-text 413 "Request Entity
@@ -114,6 +159,8 @@ export default function HrAnnouncementsPage() {
   const [requireAck, setRequireAck] = useState(false)
   const [attachFile, setAttachFile]       = useState<File | null>(null)
   const [attachPreview, setAttachPreview] = useState<string | null>(null)
+  const [compressing, setCompressing]     = useState(false)
+  const [sizeInfo, setSizeInfo] = useState<{ before: number; after: number } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const qc = useQueryClient()
@@ -130,7 +177,7 @@ export default function HrAnnouncementsPage() {
 
   const resetForm = () => {
     setTitle(''); setBody(''); setCategory('general'); setCompanyIds([]); setRequireAck(false)
-    setAttachFile(null); setAttachPreview(null)
+    setAttachFile(null); setAttachPreview(null); setSizeInfo(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
@@ -163,9 +210,20 @@ export default function HrAnnouncementsPage() {
     onError: (e: Error) => toast.error('เกิดข้อผิดพลาด', e.message),
   })
 
-  const onFileChange = (file: File | null) => {
-    setAttachFile(file)
-    setAttachPreview(file ? URL.createObjectURL(file) : null)
+  const onFileChange = async (file: File | null) => {
+    if (!file) {
+      setAttachFile(null); setAttachPreview(null); setSizeInfo(null)
+      return
+    }
+    setCompressing(true)
+    try {
+      const processed = await compressImageIfNeeded(file)
+      setAttachFile(processed)
+      setAttachPreview(URL.createObjectURL(processed))
+      setSizeInfo(processed.size < file.size ? { before: file.size, after: processed.size } : null)
+    } finally {
+      setCompressing(false)
+    }
   }
 
   const toggleCompany = (id: string) => {
@@ -294,17 +352,28 @@ export default function HrAnnouncementsPage() {
               ref={fileInputRef}
               type="file" accept={ACCEPT_ATTR}
               onChange={e => onFileChange(e.target.files?.[0] ?? null)}
+              disabled={compressing}
               className="form-input"
             />
-            {attachPreview && attachFile && (
+            {compressing && (
+              <div className="mt-3 flex items-center gap-2 text-xs text-gray-400">
+                <Loader2 className="w-4 h-4 animate-spin" /> กำลังบีบอัดรูปภาพ...
+              </div>
+            )}
+            {!compressing && attachPreview && attachFile && (
               <div className="mt-3">
                 <AttachmentThumb
                   url={attachPreview} type={attachFile.type} name={attachFile.name}
                   className="w-32 h-32"
                 />
+                {sizeInfo && (
+                  <p className="mt-1.5 text-xs text-emerald-600">
+                    บีบอัดรูปจาก {formatBytes(sizeInfo.before)} เหลือ {formatBytes(sizeInfo.after)}
+                  </p>
+                )}
               </div>
             )}
-            {!attachPreview && (
+            {!compressing && !attachPreview && (
               <div className="mt-3 flex items-center gap-2 text-xs text-gray-400">
                 <ImageIcon className="w-4 h-4" /> ยังไม่ได้แนบไฟล์ (ไม่แนบก็เผยแพร่ได้)
               </div>
@@ -318,7 +387,7 @@ export default function HrAnnouncementsPage() {
             >ยกเลิก</button>
             <button
               onClick={() => create.mutate()}
-              disabled={!canSubmit || create.isPending}
+              disabled={!canSubmit || create.isPending || compressing}
               className="rounded-lg bg-blue-700 text-white px-4 py-2 text-sm font-medium hover:bg-blue-800 disabled:opacity-60"
             >
               {create.isPending && <Loader2 className="w-4 h-4 animate-spin inline mr-2" />}
