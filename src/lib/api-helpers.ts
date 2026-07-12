@@ -270,6 +270,27 @@ const LINE_NOTIFY_EVENTS = new Set<string>([
   'inquiry_reply',
 ])
 
+// Maps a notification's reference_type to the page a tap should land on —
+// added per user request 2026-07-12 ("แนบลิ้งให้ user กดเข้าไปอ่านได้").
+// LINE auto-links plain-text URLs (tappable, no extra work needed), so this
+// just needs to produce the right absolute URL per type. Some types (OT,
+// inquiries) don't have a per-record detail page, so they link to the
+// shared list/approvals page instead — still gets the person to the right
+// screen, just not scrolled to the exact row.
+function buildNotificationLink(referenceType?: string | null, referenceId?: string | null): string | null {
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000').replace(/\/$/, '')
+  switch (referenceType) {
+    case 'leave_request': return referenceId ? `${appUrl}/leave/${referenceId}` : null
+    case 'timesheet':     return referenceId ? `${appUrl}/timesheet/detail/${referenceId}` : null
+    case 'ot_request':    return `${appUrl}/approvals/ot`
+    case 'inquiry':       return `${appUrl}/inquiries`
+    case 'announcement':  return `${appUrl}/announcements`
+    default: return null
+  }
+}
+
+const isImageAttachment = (type: string | null | undefined) => !!type && type.startsWith('image/')
+
 export async function dispatchNotifications(params: {
   company_id: string
   recipient_ids: string[]
@@ -288,6 +309,22 @@ export async function dispatchNotifications(params: {
     .select('id, email, line_user_id')
     .in('id', params.recipient_ids)
   const byId = new Map((recipients ?? []).map((u) => [u.id, u]))
+
+  // For announcement LINE pushes specifically, look up the attachment once
+  // (same for every recipient) so we can send a Buttons-template card with
+  // the image as a thumbnail instead of plain text. Only fetched when it
+  // could actually matter — avoids an extra query on every other event type.
+  let announcementImageUrl: string | null = null
+  if (params.event_type === 'announcement' && params.reference_id) {
+    const { data: ann } = await supabase
+      .from('announcements')
+      .select('attachment_url, attachment_type')
+      .eq('id', params.reference_id)
+      .maybeSingle()
+    if (ann?.attachment_url && isImageAttachment(ann.attachment_type)) {
+      announcementImageUrl = ann.attachment_url
+    }
+  }
 
   const channels: ('in_app' | 'email' | 'line')[] = LINE_NOTIFY_EVENTS.has(params.event_type)
     ? ['in_app', 'email', 'line']
@@ -359,11 +396,24 @@ export async function dispatchNotifications(params: {
           .eq('id', row.id)
         continue
       }
-      const result = await sendLineMessage({
-        company_id: params.company_id,
-        line_user_id: user.line_user_id,
-        text: `${params.title}\n${params.body}`,
-      })
+      const link = buildNotificationLink(params.reference_type, params.reference_id)
+      const result = announcementImageUrl && link
+        ? await sendLineMessage({
+            company_id: params.company_id,
+            line_user_id: user.line_user_id,
+            text: `${params.title}\n${params.body}`,
+            richCard: {
+              imageUrl: announcementImageUrl,
+              title: params.title.replace(/^\[ประกาศ\]\s*/, '').slice(0, 40),
+              linkUrl: link,
+              linkLabel: 'อ่านประกาศ',
+            },
+          })
+        : await sendLineMessage({
+            company_id: params.company_id,
+            line_user_id: user.line_user_id,
+            text: link ? `${params.title}\n${params.body}\n\n👉 ${link}` : `${params.title}\n${params.body}`,
+          })
       await supabase.from('notifications')
         .update(result.ok
           ? { status: 'sent', sent_at: new Date().toISOString() }
