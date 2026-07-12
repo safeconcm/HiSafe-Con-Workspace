@@ -478,7 +478,17 @@ export async function dispatchNotifications(params: {
         : await sendLineMessage({
             company_id: params.company_id,
             line_user_id: user.line_user_id,
-            text: link ? `${params.title}\n${params.body}\n\n👉 ${link}` : `${params.title}\n${params.body}`,
+            // Inquiry Q&A messages skip the link — added per user request
+            // 2026-07-12 ("การรับส่งคำถาม คำตอบ ผ่านระบบ ควรแสดงแต่ข้อความ...
+            // ไม่ต้องแนบลิ้งมา"). The link only ever went to the generic
+            // /inquiries list (no per-thread page exists), so it wasn't
+            // pointing anywhere more specific than what the person already
+            // has open. Every other event type reaching this fallback branch
+            // (there are currently none — leave/OT/timesheet/announcement
+            // all have their own richCard branch above) keeps the link.
+            text: (link && params.reference_type !== 'inquiry')
+              ? `${params.title}\n${params.body}\n\n👉 ${link}`
+              : `${params.title}\n${params.body}`,
           })
       await supabase.from('notifications')
         .update(result.ok
