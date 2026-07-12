@@ -178,8 +178,11 @@ function LoginForm() {
 
           {/* Sized up + heavier weight (2026-07-12 feedback: "ดูไม่ค่อยสมส่วน
               ...ดูเล็ก บางไป") so it reads as a proper tagline next to the
-              larger single-logo lockup, instead of fine print underneath it. */}
-          <p className="text-slate-200 mt-5 text-lg sm:text-xl lg:text-2xl font-medium leading-snug tracking-wide max-w-md mx-auto lg:mx-0">
+              larger single-logo lockup, instead of fine print underneath it.
+              Dialed back ~10% + dropped the extra letter-spacing (2026-07-12,
+              follow-up) — the first pass was wrapping to 2 lines on phone
+              screens ("...ในระบบ" / "เดียว" split awkwardly). */}
+          <p className="text-slate-200 mt-5 text-base sm:text-lg lg:text-xl font-medium leading-snug max-w-md mx-auto lg:mx-0">
             Smart Platform เชื่อมต่อทุกการทำงานในระบบเดียว
           </p>
         </div>
