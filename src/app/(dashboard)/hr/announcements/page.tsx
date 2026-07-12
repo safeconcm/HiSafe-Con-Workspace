@@ -6,7 +6,7 @@ import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from '@/components/ui/Toaster'
 import { Plus, Megaphone, Loader2, ImageIcon, FileText, AlertTriangle } from 'lucide-react'
-import { cn, formatDateTH } from '@/utils'
+import { cn, formatDateTH, stripAnnouncementMarkdown } from '@/utils'
 import { createClient } from '@/lib/supabase/client'
 
 type Category = 'general' | 'policy' | 'event' | 'emergency'
@@ -299,6 +299,9 @@ export default function HrAnnouncementsPage() {
               value={body} onChange={e => setBody(e.target.value)}
               rows={4} className="form-input" placeholder="รายละเอียดประกาศ"
             />
+            <p className="text-xs text-gray-400 mt-1">
+              จัดรูปแบบได้: **ตัวหนา**, ==ไฮไลต์==, ขึ้นบรรทัดด้วย &quot;- &quot; ทำ bullet list หรือ &quot;1. &quot; ทำลิสต์ลำดับเลข (แสดงในอีเมลและหน้าประกาศ ยกเว้นการ์ด LINE ที่ยังเป็นข้อความล้วน)
+            </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -424,7 +427,7 @@ export default function HrAnnouncementsPage() {
                   <span className="text-xs text-gray-400">{formatDateTH(a.created_at)}</span>
                 </div>
                 <p className="text-sm font-semibold text-gray-900 mt-1">{a.title}</p>
-                <p className="text-sm text-gray-600 mt-1 line-clamp-2 whitespace-pre-line">{a.body}</p>
+                <p className="text-sm text-gray-600 mt-1 line-clamp-2 whitespace-pre-line">{stripAnnouncementMarkdown(a.body)}</p>
               </div>
             </div>
           ))}

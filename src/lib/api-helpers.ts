@@ -13,6 +13,7 @@ import type { SessionUser } from '@/types/database'
 import type { ApiResponse } from '@/types/api'
 import { sendCompanyEmail } from '@/lib/mailer'
 import { sendLineMessage } from '@/lib/line'
+import { renderAnnouncementBody, stripAnnouncementMarkdown } from '@/utils'
 
 // ── Session ──────────────────────────────────────────────────
 
@@ -508,7 +509,11 @@ export async function dispatchNotifications(params: {
             <p style="font-size:14px;margin:0 0 12px;">เรียน ${escapeHtml(greetingName)}</p>
             <h2 style="margin:0 0 12px;font-size:18px;">${escapeHtml(emailTitle)}</h2>
             ${thumbnailTag}
-            <p style="white-space:pre-wrap;line-height:1.6;font-size:14px;">${escapeHtml(params.body)}</p>
+            <div style="line-height:1.6;font-size:14px;">${
+              params.event_type === 'announcement'
+                ? renderAnnouncementBody(params.body)
+                : `<p style="white-space:pre-wrap;margin:0;">${escapeHtml(params.body)}</p>`
+            }</div>
             ${announcementAttachmentName ? `<p style="font-size:13px;color:#4b5563;margin-top:12px;">สิ่งที่แนบมาด้วย: ${escapeHtml(announcementAttachmentName)}</p>` : ''}
             ${emailClosing ? `<p style="white-space:pre-wrap;line-height:1.6;font-size:14px;margin-top:16px;">${escapeHtml(emailClosing)}</p>` : ''}
             ${plainLink ? `<p style="margin-top:20px;"><a href="${plainLink}" style="background:#2563eb;color:#ffffff;padding:10px 18px;border-radius:6px;text-decoration:none;font-size:14px;display:inline-block;">${escapeHtml(emailLinkLabel)}</a></p>` : ''}
@@ -538,6 +543,12 @@ export async function dispatchNotifications(params: {
       }
       const rawLink = buildNotificationLink(params.reference_type, params.reference_id)
       const link = rawLink ? withExternalBrowser(rawLink) : null
+      // LINE can't render the markdown-lite formatting added for email/
+      // in-app (**bold**, ==highlight==, lists) — strip the markers instead
+      // of showing them raw so the card/chat text still reads cleanly.
+      const lineBody = params.event_type === 'announcement'
+        ? stripAnnouncementMarkdown(params.body)
+        : params.body
       // `text` here feeds the altText (chat-list/push preview, 400-char
       // budget — title+body reads well there). The card's own visible line
       // is set separately via `cardText` (60-char budget shared with the
@@ -548,27 +559,27 @@ export async function dispatchNotifications(params: {
         ? await sendLineMessage({
             company_id: params.company_id,
             line_user_id: user.line_user_id,
-            text: `${params.title}\n${params.body}`,
+            text: `${params.title}\n${lineBody}`,
             richCard: {
               imageUrl: announcementImageUrl,
               title: params.title.replace(/^\[ประกาศ\]\s*/, '').slice(0, 40),
               linkUrl: link,
               linkLabel: 'อ่านประกาศ',
-              cardText: params.body,
+              cardText: lineBody,
             },
           })
         : cardMeta && companyLogoUrl && link
         ? await sendLineMessage({
             company_id: params.company_id,
             line_user_id: user.line_user_id,
-            text: `${params.title}\n${params.body}`,
+            text: `${params.title}\n${lineBody}`,
             richCard: {
               imageUrl: companyLogoUrl,
               title: cardMeta.title,
               linkUrl: link,
               linkLabel: cardMeta.linkLabel,
               imageSize: 'contain',
-              cardText: params.body,
+              cardText: lineBody,
             },
           })
         : await sendLineMessage({
@@ -583,8 +594,8 @@ export async function dispatchNotifications(params: {
             // (there are currently none — leave/OT/timesheet/announcement
             // all have their own richCard branch above) keeps the link.
             text: (link && params.reference_type !== 'inquiry')
-              ? `${params.title}\n${params.body}\n\n👉 ${link}`
-              : `${params.title}\n${params.body}`,
+              ? `${params.title}\n${lineBody}\n\n👉 ${link}`
+              : `${params.title}\n${lineBody}`,
           })
       await supabase.from('notifications')
         .update(result.ok

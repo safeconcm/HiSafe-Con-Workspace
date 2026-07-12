@@ -18,7 +18,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Megaphone, Loader2, Check, AlertTriangle, ChevronDown, FileText } from 'lucide-react'
-import { cn, formatDateTH } from '@/utils'
+import { cn, formatDateTH, renderAnnouncementBody, stripAnnouncementMarkdown } from '@/utils'
 
 type Category = 'general' | 'policy' | 'event' | 'emergency'
 type Tab = 'all' | 'unread' | 'must_ack'
@@ -179,9 +179,21 @@ export default function AnnouncementsPage() {
                     <ChevronDown className={cn('w-4 h-4 text-gray-400 ml-auto transition-transform shrink-0', isOpen && 'rotate-180')} />
                   </div>
                   <p className="text-base font-semibold text-gray-900 mt-2">{a.title}</p>
-                  <p className={cn('text-sm text-gray-600 mt-1 whitespace-pre-line', !isOpen && 'line-clamp-2')}>
-                    {a.body}
-                  </p>
+                  {isOpen ? (
+                    // Renders the same markdown-lite formatting (**bold**,
+                    // ==highlight==, lists) as the notification email — see
+                    // renderAnnouncementBody in @/utils. Safe to inject:
+                    // the body text is HTML-escaped first, only our own
+                    // fixed-pattern tags are added on top.
+                    <div
+                      className="text-sm text-gray-600 mt-1"
+                      dangerouslySetInnerHTML={{ __html: renderAnnouncementBody(a.body) }}
+                    />
+                  ) : (
+                    <p className="text-sm text-gray-600 mt-1 whitespace-pre-line line-clamp-2">
+                      {stripAnnouncementMarkdown(a.body)}
+                    </p>
+                  )}
 
                   {isOpen && hasFile && (
                     <a

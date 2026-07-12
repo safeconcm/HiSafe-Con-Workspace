@@ -11,6 +11,55 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
 
+// ── Announcement body formatting (markdown-lite) ─────────────
+// Deliberately minimal — not a general markdown parser. Supports just what
+// was asked for: **bold**, ==highlight==, "- " bullet lists, "1. " numbered
+// lists, and line breaks. Added 2026-07-12 as the "try the easy way first"
+// option (vs. a full rich-text editor) for HR announcement bodies, which
+// are still typed in a plain textarea — no new UI, HR just types the
+// syntax. Escaping happens first so the body text itself can never inject
+// arbitrary HTML/script; only our own fixed-pattern tags are added after.
+function escapeForMarkdown(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
+function renderMarkdownInline(s: string): string {
+  return s
+    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+    .replace(/==(.+?)==/g, '<mark style="background:#fef08a;padding:0 2px;">$1</mark>')
+}
+
+export function renderAnnouncementBody(text: string): string {
+  const lines = escapeForMarkdown(text).split('\n')
+  const out: string[] = []
+  let listType: 'ul' | 'ol' | null = null
+  const closeList = () => {
+    if (listType) { out.push(`</${listType}>`); listType = null }
+  }
+  for (const line of lines) {
+    const bullet = line.match(/^-\s+(.*)/)
+    const numbered = line.match(/^\d+\.\s+(.*)/)
+    if (bullet) {
+      if (listType !== 'ul') { closeList(); out.push('<ul style="margin:4px 0;padding-left:20px;">'); listType = 'ul' }
+      out.push(`<li>${renderMarkdownInline(bullet[1])}</li>`)
+    } else if (numbered) {
+      if (listType !== 'ol') { closeList(); out.push('<ol style="margin:4px 0;padding-left:20px;">'); listType = 'ol' }
+      out.push(`<li>${renderMarkdownInline(numbered[1])}</li>`)
+    } else {
+      closeList()
+      out.push(line === '' ? '<br/>' : `<p style="margin:0 0 4px;">${renderMarkdownInline(line)}</p>`)
+    }
+  }
+  closeList()
+  return out.join('')
+}
+
+// For plain-text contexts that can't render HTML (LINE messages, collapsed
+// list previews) — strips the same markers instead of showing them raw.
+export function stripAnnouncementMarkdown(text: string): string {
+  return text.replace(/\*\*(.+?)\*\*/g, '$1').replace(/==(.+?)==/g, '$1')
+}
+
 // ── Date formatting ──────────────────────────────────────────
 
 export function formatDateTH(dateStr: string | Date): string {
