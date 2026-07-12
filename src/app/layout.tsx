@@ -17,7 +17,10 @@ export const metadata: Metadata = {
     template: '%s | CONNEX',
     default: 'CONNEX',
   },
-  description: 'ระบบจัดการการลาและ Timesheet สำหรับ Safecon และ Highcon',
+  // Also used as the fallback link-preview description by chat apps (LINE,
+  // etc.) that don't find an explicit og:description — updated 2026-07-12
+  // to match the current CONNEX tagline instead of the pre-rebrand copy.
+  description: 'Smart Platform เชื่อมต่อทุกการทำงานในระบบเดียว',
   manifest: '/manifest.json',
   themeColor: '#1e3a8a',
   appleWebApp: { capable: true, title: 'CONNEX', statusBarStyle: 'default' },

@@ -176,7 +176,10 @@ function LoginForm() {
             </div>
           </div>
 
-          <p className="text-slate-300 mt-4 text-sm sm:text-base leading-relaxed max-w-sm mx-auto lg:mx-0">
+          {/* Sized up + heavier weight (2026-07-12 feedback: "ดูไม่ค่อยสมส่วน
+              ...ดูเล็ก บางไป") so it reads as a proper tagline next to the
+              larger single-logo lockup, instead of fine print underneath it. */}
+          <p className="text-slate-200 mt-5 text-lg sm:text-xl lg:text-2xl font-medium leading-snug tracking-wide max-w-md mx-auto lg:mx-0">
             Smart Platform เชื่อมต่อทุกการทำงานในระบบเดียว
           </p>
         </div>

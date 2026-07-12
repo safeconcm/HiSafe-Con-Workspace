@@ -1,7 +1,7 @@
 {
   "name": "CONNEX",
   "short_name": "CONNEX",
-  "description": "ระบบจัดการการลาและ Timesheet สำหรับ Safecon และ Highcon",
+  "description": "Smart Platform เชื่อมต่อทุกการทำงานในระบบเดียว",
   "start_url": "/dashboard",
   "display": "standalone",
   "background_color": "#ffffff",
