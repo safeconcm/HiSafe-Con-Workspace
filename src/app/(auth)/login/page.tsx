@@ -53,6 +53,17 @@ function LoginForm() {
   const [showPwd,  setShowPwd]  = useState(false)
   const [loading,  setLoading]  = useState<string|null>(null)
   const [error,    setError]    = useState('')
+  // "Sign in with Google" is opened via Google's OAuth consent screen, which
+  // Google blocks outright (403 disallowed_useragent) inside known in-app
+  // browsers (LINE, Facebook, Instagram, etc.) as an anti-phishing policy —
+  // nothing on our side can bypass this. This matters here specifically
+  // because every LINE notification we send now includes a tappable link
+  // (leave/OT/timesheet/announcements), which opens inside LINE's own
+  // in-app browser by default. Email/password login is unaffected (it never
+  // touches Google's OAuth screen), so the fix is: detect the blocked
+  // webview and steer people to email/password (or "เปิดในเบราว์เซอร์")
+  // instead of showing a Google button that's guaranteed to fail there.
+  const [blockedWebview, setBlockedWebview] = useState(false)
 
   const sceneRef = useRef<HTMLDivElement>(null)
   const [mouse, setMouse] = useState({ x: 50, y: 30 })
@@ -74,6 +85,14 @@ function LoginForm() {
   useEffect(() => {
     const saved = localStorage.getItem('hsc_remember_email')
     if (saved) setEmail(saved)
+  }, [])
+
+  useEffect(() => {
+    const ua = navigator.userAgent || ''
+    // LINE's in-app browser appends "Line/x.x.x"; Facebook/Messenger append
+    // "FBAN"/"FBAV"/"FB_IAB"; Instagram appends "Instagram". These are the
+    // in-app browsers Google's policy blocks OAuth sign-in from.
+    setBlockedWebview(/Line\/|FBAN|FBAV|FB_IAB|Instagram/i.test(ua))
   }, [])
 
   useEffect(() => {
@@ -175,17 +194,26 @@ function LoginForm() {
               </div>
             )}
 
-            <Button
-              type="button"
-              variant="secondary"
-              onClick={handleGoogle}
-              disabled={!!loading}
-              loading={loading === 'google'}
-              leftIcon={<GoogleIcon />}
-              className="mb-5"
-            >
-              เข้าสู่ระบบด้วย Google
-            </Button>
+            {blockedWebview ? (
+              <div className="mb-5 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3 text-xs text-amber-800 leading-relaxed">
+                เข้าสู่ระบบด้วย Google ใช้ไม่ได้ในเบราว์เซอร์ของแอป LINE (ข้อจำกัดของ Google เอง)
+                — กรุณาเข้าสู่ระบบด้วยอีเมล/รหัสผ่านด้านล่างแทน หรือกดปุ่ม{' '}
+                <span className="font-medium">•••</span> มุมขวาบน/ล่าง แล้วเลือก
+                &quot;เปิดในเบราว์เซอร์&quot; ก่อนกดเข้าสู่ระบบด้วย Google
+              </div>
+            ) : (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleGoogle}
+                disabled={!!loading}
+                loading={loading === 'google'}
+                leftIcon={<GoogleIcon />}
+                className="mb-5"
+              >
+                เข้าสู่ระบบด้วย Google
+              </Button>
+            )}
 
             <div className="relative mb-5">
               <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200" /></div>
