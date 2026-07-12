@@ -346,45 +346,49 @@ export async function dispatchNotifications(params: {
   const supabase = createAdminSupabaseClient()
 
   // Need each recipient's email / LINE link to actually deliver the
-  // email/line channels below (in_app just needs the row itself).
+  // email/line channels below (in_app just needs the row itself). Names
+  // added 2026-07-12 for the "เรียน [ชื่อ]" personalized email greeting.
   const { data: recipients } = await supabase
     .from('users')
-    .select('id, email, line_user_id')
+    .select('id, email, line_user_id, first_name_th, last_name_th')
     .in('id', params.recipient_ids)
   const byId = new Map((recipients ?? []).map((u) => [u.id, u]))
 
-  // For announcement LINE pushes specifically, look up the attachment once
-  // (same for every recipient) so we can send a Buttons-template card with
-  // the image as a thumbnail instead of plain text. Only fetched when it
+  // For announcement pushes, look up the attachment once (same for every
+  // recipient) — the image (if any) becomes the LINE Buttons-template
+  // thumbnail / email inline image, and attachment_name (any file type)
+  // becomes the "สิ่งที่แนบมาด้วย" line in the email. Only fetched when it
   // could actually matter — avoids an extra query on every other event type.
   let announcementImageUrl: string | null = null
+  let announcementAttachmentName: string | null = null
   if (params.event_type === 'announcement' && params.reference_id) {
     const { data: ann } = await supabase
       .from('announcements')
-      .select('attachment_url, attachment_type')
+      .select('attachment_url, attachment_type, attachment_name')
       .eq('id', params.reference_id)
       .maybeSingle()
     if (ann?.attachment_url && isImageAttachment(ann.attachment_type)) {
       announcementImageUrl = ann.attachment_url
     }
+    announcementAttachmentName = ann?.attachment_name ?? null
   }
 
-  // For leave/OT/timesheet LINE pushes, look up the company logo once (same
-  // for every recipient) to use as a generic thumbnail on the Buttons-
-  // template card — see CARD_META above.
-  let companyLogoUrl: string | null = null
+  // Company info — used for the LINE company-logo thumbnail (leave/OT/
+  // timesheet, see CARD_META below) and, since 2026-07-12, for the email
+  // letterhead (logo, legal name, address, tax id, phone in the header/
+  // footer) on every email this function sends. Fetched unconditionally
+  // now that email needs it regardless of event type.
+  const { data: company } = await supabase
+    .from('companies')
+    .select('code, legal_name_th, address_th, tax_id, phone')
+    .eq('id', params.company_id)
+    .maybeSingle()
   const cardMeta = CARD_META[params.event_type]
-  if (cardMeta) {
-    const { data: company } = await supabase
-      .from('companies')
-      .select('code')
-      .eq('id', params.company_id)
-      .maybeSingle()
-    const logoPath = companyLogoPath(company?.code)
-    if (logoPath) {
-      const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000').replace(/\/$/, '')
-      companyLogoUrl = `${appUrl}${logoPath}`
-    }
+  let companyLogoUrl: string | null = null
+  const logoPath = companyLogoPath(company?.code)
+  if (logoPath) {
+    const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000').replace(/\/$/, '')
+    companyLogoUrl = `${appUrl}${logoPath}`
   }
 
   const channels: ('in_app' | 'email' | 'line')[] = LINE_NOTIFY_EVENTS.has(params.event_type)
@@ -437,40 +441,54 @@ export async function dispatchNotifications(params: {
           .eq('id', row.id)
         continue
       }
-      // Mirrors the LINE rich card (same thumbnail + title + link), added
-      // 2026-07-12 once SMTP was actually configured — until then the email
-      // channel only ever failed silently, so this template was never
-      // visible in practice. `plainLink` deliberately skips the
-      // `openExternalBrowser=1` param added for LINE — that's a LINE-only
-      // in-app-browser workaround and would just be a no-op query string
-      // clutter in a normal email client.
+      // Formal Thai-memo layout, requested 2026-07-12 (letterhead header,
+      // personalized "เรียน" greeting, formal closing + signature, letterhead
+      // footer with company address/tax id/phone). `plainLink` deliberately
+      // skips the `openExternalBrowser=1` param added for LINE — that's a
+      // LINE-only in-app-browser workaround, a no-op query string in email.
       const plainLink = buildNotificationLink(params.reference_type, params.reference_id)
-      const emailThumbnail = announcementImageUrl ?? companyLogoUrl
+      // Body image: only for announcements with their own uploaded image —
+      // the company logo now lives in the letterhead header instead (used
+      // to also double as the body thumbnail for leave/OT/timesheet before
+      // there was a header at all).
+      const emailBodyImage = params.event_type === 'announcement' ? announcementImageUrl : null
       const emailTitle = params.event_type === 'announcement'
         ? params.title.replace(/^\[ประกาศ\]\s*/, '')
         : cardMeta?.title ?? params.title
       const emailLinkLabel = cardMeta?.linkLabel
         ?? (params.event_type === 'announcement' ? 'อ่านประกาศ' : 'ดูรายละเอียด')
-      // Formal closing line for org-wide announcements only (not personal
-      // leave/OT/timesheet notifications) — matches the standard Thai memo/
-      // circular convention, requested 2026-07-12.
+      const greetingName = `${user.first_name_th ?? ''} ${user.last_name_th ?? ''}`.trim() || user.email
+      // Formal closing + signature for org-wide announcements only (not
+      // personal leave/OT/timesheet notifications, which don't call for
+      // "ถือปฏิบัติ"-style directive language).
       const emailClosing = params.event_type === 'announcement'
-        ? 'จึงแจ้งมาเพื่อทราบด้วยทั่วกัน\nฝ่ายบุคคล (HR)'
+        ? 'จึงเรียนมาเพื่อโปรดทราบและถือปฏิบัติ\n\nขอแสดงความนับถือ\nฝ่ายบุคคล (HR)'
         : null
 
-      // Embed the thumbnail as a real inline attachment (cid) instead of a
-      // remote <img src>, so it isn't hidden behind "click to show images"
-      // in mail clients that block remote content by default — requested
-      // 2026-07-12. Fetch is best-effort: a failed/slow fetch just drops
-      // the image, it never blocks the email itself from sending.
-      let attachments: { filename: string; content: Buffer; cid: string }[] | undefined
-      let thumbnailTag = ''
-      if (emailThumbnail) {
+      // Embed images as real inline attachments (cid) instead of remote
+      // <img src>, so they aren't hidden behind "click to show images" in
+      // mail clients that block remote content by default. Both fetches are
+      // best-effort: a failed/slow fetch just drops that image, it never
+      // blocks the email itself from sending.
+      const attachments: { filename: string; content: Buffer; cid: string }[] = []
+      let logoTag = ''
+      if (companyLogoUrl) {
         try {
-          const imgRes = await fetch(emailThumbnail)
+          const logoRes = await fetch(companyLogoUrl)
+          if (logoRes.ok) {
+            attachments.push({ filename: 'logo.png', content: Buffer.from(await logoRes.arrayBuffer()), cid: 'logo' })
+            logoTag = `<img src="cid:logo" alt="" style="height:40px;display:block;margin-bottom:8px;" />`
+          }
+        } catch {
+          // no-op — email still sends without the logo
+        }
+      }
+      let thumbnailTag = ''
+      if (emailBodyImage) {
+        try {
+          const imgRes = await fetch(emailBodyImage)
           if (imgRes.ok) {
-            const buf = Buffer.from(await imgRes.arrayBuffer())
-            attachments = [{ filename: 'thumbnail.jpg', content: buf, cid: 'thumbnail' }]
+            attachments.push({ filename: 'thumbnail.jpg', content: Buffer.from(await imgRes.arrayBuffer()), cid: 'thumbnail' })
             thumbnailTag = `<img src="cid:thumbnail" alt="" style="max-width:100%;border-radius:8px;margin-bottom:16px;display:block;" />`
           }
         } catch {
@@ -482,14 +500,25 @@ export async function dispatchNotifications(params: {
         company_id: params.company_id,
         to: user.email,
         subject: params.title,
-        attachments,
+        attachments: attachments.length ? attachments : undefined,
         html: `
           <div style="font-family:-apple-system,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;color:#1f2937;">
+            ${logoTag}
+            <div style="font-size:13px;color:#6b7280;margin-bottom:16px;">${escapeHtml(company?.legal_name_th ?? '')}</div>
+            <p style="font-size:14px;margin:0 0 12px;">เรียน ${escapeHtml(greetingName)}</p>
             <h2 style="margin:0 0 12px;font-size:18px;">${escapeHtml(emailTitle)}</h2>
             ${thumbnailTag}
             <p style="white-space:pre-wrap;line-height:1.6;font-size:14px;">${escapeHtml(params.body)}</p>
+            ${announcementAttachmentName ? `<p style="font-size:13px;color:#4b5563;margin-top:12px;">สิ่งที่แนบมาด้วย: ${escapeHtml(announcementAttachmentName)}</p>` : ''}
             ${emailClosing ? `<p style="white-space:pre-wrap;line-height:1.6;font-size:14px;margin-top:16px;">${escapeHtml(emailClosing)}</p>` : ''}
             ${plainLink ? `<p style="margin-top:20px;"><a href="${plainLink}" style="background:#2563eb;color:#ffffff;padding:10px 18px;border-radius:6px;text-decoration:none;font-size:14px;display:inline-block;">${escapeHtml(emailLinkLabel)}</a></p>` : ''}
+            <hr style="margin:24px 0;border:none;border-top:1px solid #e5e7eb;" />
+            <p style="font-size:12px;color:#9ca3af;line-height:1.6;">
+              ${escapeHtml(company?.legal_name_th ?? '')}<br/>
+              ${company?.address_th ? `${escapeHtml(company.address_th)}<br/>` : ''}
+              ${company?.tax_id ? `เลขประจำตัวผู้เสียภาษี ${escapeHtml(company.tax_id)}<br/>` : ''}
+              ${company?.phone ? `โทร ${escapeHtml(company.phone)}` : ''}
+            </p>
           </div>
         `,
       })
