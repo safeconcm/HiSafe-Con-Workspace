@@ -17,9 +17,12 @@ type Announcement = {
   category: string
   title: string
   body: string
-  image_url: string | null
+  attachment_url: string | null
+  attachment_type: string | null
   created_at: string
 }
+
+const isImageType = (type: string | null | undefined) => !!type && type.startsWith('image/')
 
 async function fetchUnread(): Promise<Announcement[]> {
   const res  = await fetch('/api/announcements/unread')
@@ -64,8 +67,8 @@ export function MustReadPopup() {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
       <div className="w-full max-w-lg rounded-xl bg-white shadow-xl overflow-hidden">
-        {current.image_url && (
-          <img src={current.image_url} alt={current.title} className="w-full max-h-56 object-cover" />
+        {current.attachment_url && isImageType(current.attachment_type) && (
+          <img src={current.attachment_url} alt={current.title} className="w-full max-h-56 object-cover" />
         )}
         <div className="p-6 space-y-3">
           <div className="flex items-center gap-2 text-amber-700">

@@ -20,7 +20,8 @@ type Announcement = {
   category: string
   title: string
   body: string
-  image_url: string | null
+  attachment_url: string | null
+  attachment_type: string | null
   created_at: string
 }
 

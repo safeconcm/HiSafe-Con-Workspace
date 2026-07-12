@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
   const supabase = createAdminSupabaseClient()
   const { data, error } = await supabase
     .from('announcements')
-    .select('id, category, title, body, image_url, require_ack, created_at')
+    .select('id, category, title, body, attachment_url, attachment_type, attachment_name, require_ack, created_at')
     .contains('company_ids', [session.company_id])
     .order('created_at', { ascending: false })
   if (error) return serverError(error)

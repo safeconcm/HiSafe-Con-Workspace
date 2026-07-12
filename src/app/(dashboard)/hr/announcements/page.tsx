@@ -5,8 +5,9 @@
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from '@/components/ui/Toaster'
-import { Plus, Megaphone, Loader2, Image as ImageIcon, AlertTriangle } from 'lucide-react'
+import { Plus, Megaphone, Loader2, ImageIcon, FileText, AlertTriangle } from 'lucide-react'
 import { cn, formatDateTH } from '@/utils'
+import { createClient } from '@/lib/supabase/client'
 
 type Category = 'general' | 'policy' | 'event' | 'emergency'
 type Tab = 'all' | 'must_ack'
@@ -24,20 +25,83 @@ const CATEGORY_COLOR: Record<Category, string> = {
   emergency: 'bg-red-100 text-red-700',
 }
 
+// Accepted on the file picker — images plus common office document types.
+// Kept in sync with the ALLOWED_MIME list in
+// /api/hr/announcements/upload-url/route.ts and the "announcements" storage
+// bucket's allowed_mime_types.
+const ACCEPT_ATTR = [
+  'image/png', 'image/jpeg', 'image/webp', 'image/gif',
+  'application/pdf',
+  '.doc', '.docx', '.xls', '.xlsx',
+].join(',')
+
+const isImageType = (type: string | null | undefined) => !!type && type.startsWith('image/')
+
 type Company = { id: string; code: string; name_th: string }
+
+// A response that isn't valid JSON (e.g. a plain-text 413 "Request Entity
+// Too Large" from a platform-level body-size limit) used to crash the whole
+// mutation with a cryptic "Unexpected token 'R'..." error. Parse
+// defensively everywhere so a bad response just shows a readable message.
+async function safeJson(res: Response): Promise<any> {
+  try { return await res.json() } catch { return null }
+}
 
 async function fetchAnnouncements() {
   const res  = await fetch('/api/hr/announcements')
-  const json = await res.json()
-  if (!res.ok) throw new Error(json.error)
-  return json.data?.announcements ?? []
+  const json = await safeJson(res)
+  if (!res.ok) throw new Error(json?.error || `โหลดประกาศไม่สำเร็จ (${res.status})`)
+  return json?.data?.announcements ?? []
 }
 
 async function fetchCompanies() {
   const res  = await fetch('/api/companies')
-  const json = await res.json()
-  if (!res.ok) throw new Error(json.error)
-  return json.data?.companies ?? []
+  const json = await safeJson(res)
+  if (!res.ok) throw new Error(json?.error || `โหลดรายชื่อบริษัทไม่สำเร็จ (${res.status})`)
+  return json?.data?.companies ?? []
+}
+
+// Uploads the attachment straight to Supabase Storage via a signed upload
+// URL, bypassing our own API route entirely for the file bytes — see
+// /api/hr/announcements/upload-url/route.ts for why (Vercel's serverless
+// function body-size cap was silently breaking uploads near/over ~4.5MB).
+async function uploadAttachment(file: File) {
+  const urlRes = await fetch('/api/hr/announcements/upload-url', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename: file.name, content_type: file.type, size: file.size }),
+  })
+  const urlJson = await safeJson(urlRes)
+  if (!urlRes.ok) throw new Error(urlJson?.error || `สร้างลิงก์อัปโหลดไม่สำเร็จ (${urlRes.status})`)
+
+  const { signed_url, token, path, public_url } = urlJson.data
+  const supabase = createClient()
+  const { error: upErr } = await supabase.storage
+    .from('announcements')
+    .uploadToSignedUrl(path, token, file)
+  if (upErr) throw new Error(`อัปโหลดไฟล์ไม่สำเร็จ: ${upErr.message}`)
+
+  return { url: public_url as string, type: file.type, name: file.name }
+}
+
+// Small, consistent attachment preview used both in the create-form preview
+// and each list row — fixed thumbnail size for images (per user feedback
+// 2026-07-12: the old unconstrained preview rendered huge and "รำคาญ"),
+// file-type chip for anything else.
+function AttachmentThumb({ url, type, name, className }: { url: string; type: string | null; name?: string | null; className?: string }) {
+  if (isImageType(type)) {
+    return <img src={url} alt={name ?? ''} className={cn('rounded-lg object-cover border border-gray-200', className)} />
+  }
+  return (
+    <a
+      href={url} target="_blank" rel="noreferrer"
+      title={name ?? 'ไฟล์แนบ'}
+      className={cn('rounded-lg border border-gray-200 bg-gray-50 flex flex-col items-center justify-center gap-1 text-gray-500 hover:bg-gray-100 transition-colors p-2', className)}
+    >
+      <FileText className="w-6 h-6" />
+      <span className="text-[10px] leading-tight text-center line-clamp-2 break-all">{name ?? 'ไฟล์แนบ'}</span>
+    </a>
+  )
 }
 
 export default function HrAnnouncementsPage() {
@@ -48,8 +112,8 @@ export default function HrAnnouncementsPage() {
   const [category, setCategory] = useState<Category>('general')
   const [companyIds, setCompanyIds] = useState<string[]>([])
   const [requireAck, setRequireAck] = useState(false)
-  const [imageFile, setImageFile]   = useState<File | null>(null)
-  const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [attachFile, setAttachFile]       = useState<File | null>(null)
+  const [attachPreview, setAttachPreview] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const qc = useQueryClient()
@@ -66,20 +130,29 @@ export default function HrAnnouncementsPage() {
 
   const resetForm = () => {
     setTitle(''); setBody(''); setCategory('general'); setCompanyIds([]); setRequireAck(false)
-    setImageFile(null); setImagePreview(null)
+    setAttachFile(null); setAttachPreview(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
   const create = useMutation({
     mutationFn: async () => {
-      if (!imageFile) throw new Error('กรุณาแนบรูปภาพประกอบประกาศ')
-      const form = new FormData()
-      form.append('data', JSON.stringify({ title, body, category, company_ids: companyIds, require_ack: requireAck }))
-      form.append('image', imageFile)
-      const res  = await fetch('/api/hr/announcements', { method: 'POST', body: form })
-      const json = await res.json()
-      if (!res.ok) throw new Error(json.error)
-      return json.data
+      // Attachment is optional — a text-only announcement is fine (user
+      // feedback 2026-07-12).
+      const attachment = attachFile ? await uploadAttachment(attachFile) : null
+
+      const res = await fetch('/api/hr/announcements', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title, body, category, company_ids: companyIds, require_ack: requireAck,
+          attachment_url:  attachment?.url  ?? null,
+          attachment_type: attachment?.type ?? null,
+          attachment_name: attachment?.name ?? null,
+        }),
+      })
+      const json = await safeJson(res)
+      if (!res.ok) throw new Error(json?.error || `เกิดข้อผิดพลาด (${res.status})`)
+      return json?.data
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['hr-announcements'] })
@@ -90,16 +163,17 @@ export default function HrAnnouncementsPage() {
     onError: (e: Error) => toast.error('เกิดข้อผิดพลาด', e.message),
   })
 
-  const onImageChange = (file: File | null) => {
-    setImageFile(file)
-    setImagePreview(file ? URL.createObjectURL(file) : null)
+  const onFileChange = (file: File | null) => {
+    setAttachFile(file)
+    setAttachPreview(file ? URL.createObjectURL(file) : null)
   }
 
   const toggleCompany = (id: string) => {
     setCompanyIds(prev => prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id])
   }
 
-  const canSubmit = title.trim() && body.trim() && companyIds.length > 0 && imageFile
+  // Attachment is optional now — only title/body/target companies are required.
+  const canSubmit = title.trim() && body.trim() && companyIds.length > 0
 
   const mustAckCount = (announcements as any[]).filter(a => a.require_ack).length
   const filtered = (announcements as any[]).filter(a => tab === 'all' || a.require_ack)
@@ -215,19 +289,24 @@ export default function HrAnnouncementsPage() {
           </label>
 
           <div>
-            <label className="form-label">รูปภาพประกอบ * (สูงสุด 5MB)</label>
+            <label className="form-label">ไฟล์แนบ (ไม่บังคับ) — รูปภาพ, PDF, Word, Excel (สูงสุด 15MB)</label>
             <input
               ref={fileInputRef}
-              type="file" accept="image/png,image/jpeg,image/webp,image/gif"
-              onChange={e => onImageChange(e.target.files?.[0] ?? null)}
+              type="file" accept={ACCEPT_ATTR}
+              onChange={e => onFileChange(e.target.files?.[0] ?? null)}
               className="form-input"
             />
-            {imagePreview && (
-              <img src={imagePreview} alt="ตัวอย่างรูปภาพ" className="mt-3 rounded-lg max-h-48 object-cover border border-gray-200" />
+            {attachPreview && attachFile && (
+              <div className="mt-3">
+                <AttachmentThumb
+                  url={attachPreview} type={attachFile.type} name={attachFile.name}
+                  className="w-32 h-32"
+                />
+              </div>
             )}
-            {!imagePreview && (
+            {!attachPreview && (
               <div className="mt-3 flex items-center gap-2 text-xs text-gray-400">
-                <ImageIcon className="w-4 h-4" /> ยังไม่ได้เลือกรูปภาพ
+                <ImageIcon className="w-4 h-4" /> ยังไม่ได้แนบไฟล์ (ไม่แนบก็เผยแพร่ได้)
               </div>
             )}
           </div>
@@ -257,7 +336,12 @@ export default function HrAnnouncementsPage() {
         <div className="space-y-3">
           {filtered.map((a: any) => (
             <div key={a.id} className="card card-body flex gap-4">
-              <img src={a.image_url} alt={a.title} className="w-24 h-24 rounded-lg object-cover shrink-0" />
+              {a.attachment_url && (
+                <AttachmentThumb
+                  url={a.attachment_url} type={a.attachment_type} name={a.attachment_name}
+                  className="w-16 h-16 shrink-0"
+                />
+              )}
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className={cn('badge', CATEGORY_COLOR[a.category as Category])}>

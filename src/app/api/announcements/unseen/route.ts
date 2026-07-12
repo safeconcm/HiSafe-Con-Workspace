@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
 
   const { data: candidates, error } = await supabase
     .from('announcements')
-    .select('id, category, title, body, image_url, created_at')
+    .select('id, category, title, body, attachment_url, attachment_type, attachment_name, created_at')
     .contains('company_ids', [session.company_id])
     .eq('require_ack', false)
     .order('created_at', { ascending: true })
