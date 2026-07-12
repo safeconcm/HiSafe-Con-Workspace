@@ -7,7 +7,7 @@
 // announcement from EVERY employee's "อัปเดต" feed the moment any single
 // admin clicked delete. Per user feedback ("อยากให้ลบเฉพาะของ SC-ADMIN เอง
 // ได้ไหม"), the default is now scoped to the acting admin only: their id is
-// added to hidden_for_admin_ids, which just removes it from THEIR OWN
+// added to hidden_for_user_ids, which just removes it from THEIR OWN
 // "จัดการอัปเดต" list. Employees and other admins are completely
 // unaffected — this never touches deleted_at by default.
 //
@@ -47,16 +47,16 @@ export async function DELETE(req: NextRequest, ctx: Ctx) {
   const supabase = createAdminSupabaseClient()
   const { data: existing } = await supabase
     .from('announcements')
-    .select('id, title, company_ids, hidden_for_admin_ids')
+    .select('id, title, company_ids, hidden_for_user_ids')
     .eq('id', params.id)
     .contains('company_ids', [session.company_id])
     .is('deleted_at', null)
     .maybeSingle()
   if (!existing) return notFound('Announcement')
 
-  const hidden = new Set<string>((existing as any).hidden_for_admin_ids ?? [])
+  const hidden = new Set<string>((existing as any).hidden_for_user_ids ?? [])
   hidden.add(session.id)
-  const updates: Record<string, unknown> = { hidden_for_admin_ids: Array.from(hidden) }
+  const updates: Record<string, unknown> = { hidden_for_user_ids: Array.from(hidden) }
   if (retractForAll) updates.deleted_at = new Date().toISOString()
 
   const { error } = await supabase

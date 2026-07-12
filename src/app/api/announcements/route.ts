@@ -18,6 +18,11 @@ export async function GET(req: NextRequest) {
     .select('id, category, title, body, attachment_url, attachment_type, attachment_name, require_ack, created_at')
     .contains('company_ids', [session.company_id])
     .is('deleted_at', null)
+    // Excludes announcements this user personally hid from their own
+    // "อัปเดต" list (2026-07-13) — see DELETE /api/announcements/[id].
+    // Only ever filters on the requesting session's own id, so it never
+    // affects what anyone else sees.
+    .not('hidden_for_user_ids', 'cs', `{${session.id}}`)
     .order('created_at', { ascending: false })
   if (error) return serverError(error)
 

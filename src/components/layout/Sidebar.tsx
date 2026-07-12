@@ -243,9 +243,13 @@ const NAV_ITEMS: NavItem[] = [
 interface SidebarProps {
   session: SessionUser
   company: { code: string; name_th: string; logo_url: string | null } | null
+  // Mobile/tablet drawer state (2026-07-13) — desktop (lg:) rendering is
+  // completely unaffected by these; see DashboardShell for the state owner.
+  mobileOpen?: boolean
+  onClose?: () => void
 }
 
-export function Sidebar({ session, company }: SidebarProps) {
+export function Sidebar({ session, company, mobileOpen = false, onClose }: SidebarProps) {
   const pathname = usePathname()
   const [openMenus, setOpenMenus] = useState<Record<string, boolean>>({})
 
@@ -274,7 +278,15 @@ export function Sidebar({ session, company }: SidebarProps) {
   )
 
   return (
-    <aside className="no-print hidden lg:flex flex-col w-64 border-r border-gray-200 bg-white h-screen overflow-y-auto shrink-0">
+    <aside
+      className={cn(
+        'no-print flex-col w-64 border-r border-gray-200 bg-white h-screen overflow-y-auto shrink-0',
+        // Fixed slide-in drawer below lg; static in-flow column at lg+.
+        'fixed inset-y-0 left-0 z-50 transition-transform duration-200 ease-in-out',
+        'lg:static lg:z-auto lg:flex lg:translate-x-0',
+        mobileOpen ? 'flex translate-x-0' : 'hidden -translate-x-full'
+      )}
+    >
 
       {/* Company logo / switcher */}
       <CompanySwitcher current={company} companies={session.available_companies ?? []} />
@@ -308,6 +320,7 @@ export function Sidebar({ session, company }: SidebarProps) {
                       <Link
                         key={child.href}
                         href={child.href}
+                        onClick={() => onClose?.()}
                         className={cn(
                           'block py-1.5 px-2 text-sm rounded-md transition-colors',
                           pathname === child.href
@@ -325,7 +338,7 @@ export function Sidebar({ session, company }: SidebarProps) {
           }
 
           return (
-            <Link key={item.href} href={item.href}>
+            <Link key={item.href} href={item.href} onClick={() => onClose?.()}>
               <div className={cn('nav-item', active && 'active')}>
                 <Icon className="w-4 h-4 shrink-0" />
                 <span>{item.label}</span>

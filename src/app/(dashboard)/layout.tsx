@@ -1,6 +1,5 @@
 // src/app/(dashboard)/layout.tsx
-import { Sidebar } from '@/components/layout/Sidebar'
-import { Topbar }  from '@/components/layout/Topbar'
+import { DashboardShell } from '@/components/layout/DashboardShell'
 import { MustReadPopup } from '@/components/layout/MustReadPopup'
 import { NewAnnouncementPopup } from '@/components/layout/NewAnnouncementPopup'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
@@ -73,13 +72,9 @@ export default async function DashboardLayout({
     <div data-company={sessionUser.company_code} className="flex h-screen overflow-hidden bg-gray-50">
       <MustReadPopup />
       <NewAnnouncementPopup />
-      <Sidebar session={sessionUser} company={companyRow} />
-      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-        <Topbar session={sessionUser} />
-        <main className="flex-1 overflow-y-auto">
-          {children}
-        </main>
-      </div>
+      <DashboardShell session={sessionUser} company={companyRow}>
+        {children}
+      </DashboardShell>
     </div>
   )
 }

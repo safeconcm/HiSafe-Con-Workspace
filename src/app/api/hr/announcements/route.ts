@@ -34,10 +34,10 @@ export async function GET(req: NextRequest) {
     .contains('company_ids', [session.company_id])
     .is('deleted_at', null)
     // Excludes announcements this admin personally hid from their own
-    // "จัดการอัปเดต" list (2026-07-13) — see hidden_for_admin_ids comment.
+    // "จัดการอัปเดต" list (2026-07-13) — see hidden_for_user_ids comment.
     // Other admins/employees are unaffected — this filter only ever
     // applies to the requesting session's own id.
-    .not('hidden_for_admin_ids', 'cs', `{${session.id}}`)
+    .not('hidden_for_user_ids', 'cs', `{${session.id}}`)
     .order('created_at', { ascending: false })
   if (error) return serverError(error)
   return ok({ announcements: data })
@@ -46,7 +46,7 @@ export async function GET(req: NextRequest) {
 // Bulk-hide/delete (2026-07-13) — powers the new checkbox multi-select in
 // "จัดการอัปเดต". Body: { ids: string[], retract_for_all?: boolean }.
 // Default (retract_for_all falsy): adds the acting admin's id to each
-// row's hidden_for_admin_ids — removes it from THIS admin's own list only,
+// row's hidden_for_user_ids — removes it from THIS admin's own list only,
 // employees and other admins keep seeing it, matches the single-item
 // DELETE route below. retract_for_all=true also sets deleted_at, same as
 // checking "ลบสำหรับพนักงานทุกคนด้วย" in the confirm dialog.
@@ -63,7 +63,7 @@ export async function DELETE(req: NextRequest) {
   const supabase = createAdminSupabaseClient()
   const { data: rows, error: fetchErr } = await supabase
     .from('announcements')
-    .select('id, title, hidden_for_admin_ids, deleted_at')
+    .select('id, title, hidden_for_user_ids, deleted_at')
     .in('id', ids)
     .contains('company_ids', [session.company_id])
     .is('deleted_at', null)
@@ -71,9 +71,9 @@ export async function DELETE(req: NextRequest) {
   if (!rows || !rows.length) return notFound('Announcements')
 
   for (const row of rows) {
-    const hidden = new Set<string>((row as any).hidden_for_admin_ids ?? [])
+    const hidden = new Set<string>((row as any).hidden_for_user_ids ?? [])
     hidden.add(session.id)
-    const updates: Record<string, unknown> = { hidden_for_admin_ids: Array.from(hidden) }
+    const updates: Record<string, unknown> = { hidden_for_user_ids: Array.from(hidden) }
     if (retractForAll) updates.deleted_at = new Date().toISOString()
     await supabase.from('announcements').update(updates).eq('id', row.id)
   }

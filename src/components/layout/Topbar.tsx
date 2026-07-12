@@ -8,9 +8,13 @@ import { useQuery } from '@tanstack/react-query'
 
 interface TopbarProps {
   session: SessionUser
+  // Opens the mobile/tablet sidebar drawer (2026-07-13) — see DashboardShell,
+  // which owns the shared open/close state since Sidebar and Topbar are
+  // rendered as siblings by the (dashboard) layout Server Component.
+  onMenuClick?: () => void
 }
 
-export function Topbar({ session }: TopbarProps) {
+export function Topbar({ session, onMenuClick }: TopbarProps) {
   // Unread notification count
   const { data: unreadCount } = useQuery({
     queryKey: ['notifications', 'unread-count'],
@@ -26,7 +30,11 @@ export function Topbar({ session }: TopbarProps) {
     <header className="h-14 border-b border-gray-200 bg-white flex items-center px-4 gap-3 shrink-0 no-print">
 
       {/* Mobile menu button */}
-      <button className="lg:hidden p-1.5 rounded-lg hover:bg-gray-100">
+      <button
+        onClick={onMenuClick}
+        className="lg:hidden p-1.5 rounded-lg hover:bg-gray-100"
+        aria-label="เปิดเมนู"
+      >
         <Menu className="w-5 h-5 text-gray-600" />
       </button>
 

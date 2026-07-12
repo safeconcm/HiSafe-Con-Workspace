@@ -17,7 +17,7 @@
 
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Megaphone, Loader2, Check, AlertTriangle, ChevronDown, FileText } from 'lucide-react'
+import { Megaphone, Loader2, Check, AlertTriangle, ChevronDown, FileText, Trash2 } from 'lucide-react'
 import { cn, formatDateTH, renderAnnouncementBody, stripAnnouncementMarkdown } from '@/utils'
 
 type Category = 'general' | 'policy' | 'event' | 'emergency'
@@ -67,6 +67,13 @@ async function markRead(id: string) {
   if (!res.ok) throw new Error('Failed')
 }
 
+// Hides the announcement from THIS user's own list only — see the route's
+// own comment (2026-07-13). Doesn't affect anyone else.
+async function hideAnnouncement(id: string) {
+  const res = await fetch(`/api/announcements/${id}`, { method: 'DELETE' })
+  if (!res.ok) throw new Error('Failed')
+}
+
 export default function AnnouncementsPage() {
   const [tab, setTab] = useState<Tab>('all')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -79,6 +86,11 @@ export default function AnnouncementsPage() {
 
   const readMutation = useMutation({
     mutationFn: markRead,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['announcements'] }),
+  })
+
+  const hideMutation = useMutation({
+    mutationFn: hideAnnouncement,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['announcements'] }),
   })
 
@@ -176,7 +188,18 @@ export default function AnnouncementsPage() {
                       <span className="w-2 h-2 rounded-full bg-blue-500" title="ยังไม่อ่าน" />
                     )}
                     <span className="text-xs text-gray-400">{formatDateTH(a.created_at)}</span>
-                    <ChevronDown className={cn('w-4 h-4 text-gray-400 ml-auto transition-transform shrink-0', isOpen && 'rotate-180')} />
+                    <button
+                      onClick={e => {
+                        e.stopPropagation()
+                        if (confirm(`ซ่อนประกาศ "${a.title}" จากรายการของคุณใช่ไหม?`)) hideMutation.mutate(a.id)
+                      }}
+                      disabled={hideMutation.isPending}
+                      className="ml-auto p-1 text-gray-300 hover:text-red-600 transition-colors disabled:opacity-50"
+                      title="ซ่อนจากรายการของฉัน"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                    <ChevronDown className={cn('w-4 h-4 text-gray-400 transition-transform shrink-0', isOpen && 'rotate-180')} />
                   </div>
                   <p className="text-base font-semibold text-gray-900 mt-2">{a.title}</p>
                   {isOpen ? (
