@@ -291,6 +291,18 @@ function buildNotificationLink(referenceType?: string | null, referenceId?: stri
 
 const isImageAttachment = (type: string | null | undefined) => !!type && type.startsWith('image/')
 
+// Forces a link tapped from inside a LINE chat to open in the phone's
+// default browser (Chrome/Safari) instead of LINE's own in-app browser.
+// Needed because Google blocks Sign-In inside known in-app webviews
+// (403 disallowed_useragent) — LINE's own docs support this exact
+// `openExternalBrowser=1` query param for this purpose (doesn't apply to
+// LIFF apps, which we don't use). Added 2026-07-12 alongside the
+// UA-detection fallback on the login page (kept as a safety net in case
+// an older LINE app version ignores this param).
+function withExternalBrowser(url: string): string {
+  return url + (url.includes('?') ? '&' : '?') + 'openExternalBrowser=1'
+}
+
 // Card title + button label for leave/OT/timesheet LINE notifications —
 // added per user request 2026-07-12 to give these a thumbnail card like
 // announcements have, purely for visual appeal (no functional benefit;
@@ -441,7 +453,8 @@ export async function dispatchNotifications(params: {
           .eq('id', row.id)
         continue
       }
-      const link = buildNotificationLink(params.reference_type, params.reference_id)
+      const rawLink = buildNotificationLink(params.reference_type, params.reference_id)
+      const link = rawLink ? withExternalBrowser(rawLink) : null
       // `text` here feeds the altText (chat-list/push preview, 400-char
       // budget — title+body reads well there). The card's own visible line
       // is set separately via `cardText` (60-char budget shared with the
