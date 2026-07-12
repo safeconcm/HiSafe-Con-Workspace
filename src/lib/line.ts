@@ -63,6 +63,13 @@ export async function sendLineMessage(params: {
     // /highcon.png aren't the 1.51:1 "rectangle" aspect ratio and cropping
     // would cut off part of the logo. Defaults to 'cover'.
     imageSize?: 'cover' | 'contain'
+    // The short line shown under the card title (<=60 chars total with
+    // title present — see below). Defaults to `text` (truncated) if not
+    // given, but callers should pass this explicitly whenever `text` also
+    // repeats the card's own title — that was wasting most of the budget
+    // and cutting off mid-string (e.g. a leave date range). See
+    // dispatchNotifications in api-helpers.ts.
+    cardText?: string
   }
 }): Promise<{ ok: boolean; error?: string }> {
   const token = await getAccessToken(params.company_id)
@@ -82,7 +89,7 @@ export async function sendLineMessage(params: {
           imageAspectRatio: 'rectangle',
           imageSize: params.richCard.imageSize ?? 'cover',
           title: params.richCard.title.slice(0, 40),
-          text: (params.text.slice(0, 59) || '​'),
+          text: ((params.richCard.cardText ?? params.text).slice(0, 59) || '​'),
           actions: [
             { type: 'uri', label: (params.richCard.linkLabel ?? 'เปิดดู').slice(0, 20), uri: params.richCard.linkUrl },
           ],

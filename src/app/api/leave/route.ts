@@ -8,6 +8,8 @@ import {
   ok, created, badRequest, unauthorized, serverError,
   writeAuditLog, dispatchNotifications, isHROrAdmin,
 } from '@/lib/api-helpers'
+import { LEAVE_TYPE_LABEL, formatDateRangeShortTH } from '@/utils'
+import type { LeaveType } from '@/types/database'
 
 // ── GET ──────────────────────────────────────────────────────
 export async function GET(req: NextRequest) {
@@ -298,14 +300,18 @@ export async function POST(req: NextRequest) {
       })
     }
   } else {
-    // 7. Notify approver — unchanged, this is the existing "needs your
-    // action" notification the approver has always gotten.
+    // 7. Notify approver — the existing "needs your action" notification.
+    // Body now includes the leave type + a compact date range (previously
+    // just "ยื่นลา N วัน" with no type/dates) — see cardText fix below.
+    const leaveTypeLabel = LEAVE_TYPE_LABEL[leave_type as LeaveType] ?? leave_type
+    const dateRangeShort = formatDateRangeShortTH(start_date, end_date)
+
     await dispatchNotifications({
       company_id:     session.company_id,
       recipient_ids:  [approverId],
       event_type:     'leave_submitted',
       title:          'มีใบลารออนุมัติ',
-      body:           `${session.first_name_th} ${session.last_name_th} ยื่นลา ${totalDays} วัน กรุณาพิจารณา`,
+      body:           `${session.first_name_th} ${session.last_name_th} - ${leaveTypeLabel} ${totalDays} วัน (${dateRangeShort})`,
       reference_id:   leaveReq.id,
       reference_type: 'leave_request',
     })
@@ -315,13 +321,17 @@ export async function POST(req: NextRequest) {
     // existing LINE_NOTIFY_EVENTS allowlist) so the approver's message copy
     // above is untouched. Added per user request 2026-07-12: submitter
     // should see their own request is รออนุมัติ, not just silence until the
-    // approver decides.
+    // approver decides. Body includes the leave type and uses a compact
+    // date format — per follow-up feedback the same day ("ลาอะไร?" /
+    // "วันที่ลา ขอให้สั้นกว่านี้"): the original ISO-date, no-leave-type
+    // version was also getting cut off mid-string on the LINE card, whose
+    // text field has a ~59-char budget (see sendLineMessage in lib/line.ts).
     await dispatchNotifications({
       company_id:     session.company_id,
       recipient_ids:  [session.id],
       event_type:     'leave_submitted',
       title:          'ส่งใบลาสำเร็จ รออนุมัติ',
-      body:           `ใบลา ${totalDays} วัน (${start_date} ถึง ${end_date}) ของคุณถูกส่งแล้ว สถานะ: รออนุมัติ`,
+      body:           `${leaveTypeLabel} ${totalDays} วัน (${dateRangeShort}) รออนุมัติ`,
       reference_id:   leaveReq.id,
       reference_type: 'leave_request',
     })

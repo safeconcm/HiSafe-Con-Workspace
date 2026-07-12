@@ -442,6 +442,12 @@ export async function dispatchNotifications(params: {
         continue
       }
       const link = buildNotificationLink(params.reference_type, params.reference_id)
+      // `text` here feeds the altText (chat-list/push preview, 400-char
+      // budget — title+body reads well there). The card's own visible line
+      // is set separately via `cardText` (60-char budget shared with the
+      // title) — it must NOT also repeat params.title, or there's barely
+      // any room left for the actual detail (this previously cut leave
+      // notifications off mid-date-range). See cardText comment in line.ts.
       const result = announcementImageUrl && link
         ? await sendLineMessage({
             company_id: params.company_id,
@@ -452,6 +458,7 @@ export async function dispatchNotifications(params: {
               title: params.title.replace(/^\[ประกาศ\]\s*/, '').slice(0, 40),
               linkUrl: link,
               linkLabel: 'อ่านประกาศ',
+              cardText: params.body,
             },
           })
         : cardMeta && companyLogoUrl && link
@@ -465,6 +472,7 @@ export async function dispatchNotifications(params: {
               linkUrl: link,
               linkLabel: cardMeta.linkLabel,
               imageSize: 'contain',
+              cardText: params.body,
             },
           })
         : await sendLineMessage({
