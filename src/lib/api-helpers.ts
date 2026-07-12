@@ -303,6 +303,10 @@ function withExternalBrowser(url: string): string {
   return url + (url.includes('?') ? '&' : '?') + 'openExternalBrowser=1'
 }
 
+function escapeHtml(str: string): string {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
 // Card title + button label for leave/OT/timesheet LINE notifications —
 // added per user request 2026-07-12 to give these a thumbnail card like
 // announcements have, purely for visual appeal (no functional benefit;
@@ -433,11 +437,32 @@ export async function dispatchNotifications(params: {
           .eq('id', row.id)
         continue
       }
+      // Mirrors the LINE rich card (same thumbnail + title + link), added
+      // 2026-07-12 once SMTP was actually configured — until then the email
+      // channel only ever failed silently, so this template was never
+      // visible in practice. `plainLink` deliberately skips the
+      // `openExternalBrowser=1` param added for LINE — that's a LINE-only
+      // in-app-browser workaround and would just be a no-op query string
+      // clutter in a normal email client.
+      const plainLink = buildNotificationLink(params.reference_type, params.reference_id)
+      const emailThumbnail = announcementImageUrl ?? companyLogoUrl
+      const emailTitle = params.event_type === 'announcement'
+        ? params.title.replace(/^\[ประกาศ\]\s*/, '')
+        : cardMeta?.title ?? params.title
+      const emailLinkLabel = cardMeta?.linkLabel
+        ?? (params.event_type === 'announcement' ? 'อ่านประกาศ' : 'ดูรายละเอียด')
       const result = await sendCompanyEmail({
         company_id: params.company_id,
         to: user.email,
         subject: params.title,
-        html: `<p>${params.body.replace(/\n/g, '<br/>')}</p>`,
+        html: `
+          <div style="font-family:-apple-system,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;color:#1f2937;">
+            <h2 style="margin:0 0 12px;font-size:18px;">${escapeHtml(emailTitle)}</h2>
+            ${emailThumbnail ? `<img src="${emailThumbnail}" alt="" style="max-width:100%;border-radius:8px;margin-bottom:16px;display:block;" />` : ''}
+            <p style="white-space:pre-wrap;line-height:1.6;font-size:14px;">${escapeHtml(params.body)}</p>
+            ${plainLink ? `<p style="margin-top:20px;"><a href="${plainLink}" style="background:#2563eb;color:#ffffff;padding:10px 18px;border-radius:6px;text-decoration:none;font-size:14px;display:inline-block;">${escapeHtml(emailLinkLabel)}</a></p>` : ''}
+          </div>
+        `,
       })
       await supabase.from('notifications')
         .update(result.ok
