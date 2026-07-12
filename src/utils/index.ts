@@ -23,23 +23,21 @@ export function formatDateRangeTH(start: string, end: string): string {
   return `${formatDateTH(start)} – ${formatDateTH(end)}`
 }
 
-// Compact Buddhist-era date (e.g. "17 ก.ค. 69") for places with a hard
+// Compact Buddhist-era date (e.g. "22/7/69") for places with a hard
 // character budget — currently the LINE Buttons-template card text (≤60
 // chars, see sendLineMessage in lib/line.ts). Kept separate from
 // formatDateTH above (which uses date-fns' 'th' locale and stays Gregorian)
 // since the rest of the app shows Buddhist year via manual +543 in the PDF
 // templates — matching that convention here instead of introducing a third
-// date style.
-const TH_MONTHS_SHORT = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.']
-
-export function formatDateShortTH(dateStr: string): string {
+// date style. Format and always-show-both-dates (even same-day) requested
+// by the user directly, e.g. "22/7/69-22/7/69" for a single-day leave.
+export function formatDateSlashTH(dateStr: string): string {
   const d = typeof dateStr === 'string' ? parseISO(dateStr) : dateStr
-  return `${d.getDate()} ${TH_MONTHS_SHORT[d.getMonth()]} ${(d.getFullYear() + 543) % 100}`
+  return `${d.getDate()}/${d.getMonth() + 1}/${(d.getFullYear() + 543) % 100}`
 }
 
-export function formatDateRangeShortTH(start: string, end: string): string {
-  if (start === end) return formatDateShortTH(start)
-  return `${formatDateShortTH(start)} - ${formatDateShortTH(end)}`
+export function formatDateRangeSlashTH(start: string, end: string): string {
+  return `${formatDateSlashTH(start)}-${formatDateSlashTH(end)}`
 }
 
 export function formatMonthYearTH(year: number, month: number): string {
