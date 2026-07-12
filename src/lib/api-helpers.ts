@@ -291,6 +291,33 @@ function buildNotificationLink(referenceType?: string | null, referenceId?: stri
 
 const isImageAttachment = (type: string | null | undefined) => !!type && type.startsWith('image/')
 
+// Card title + button label for leave/OT/timesheet LINE notifications —
+// added per user request 2026-07-12 to give these a thumbnail card like
+// announcements have, purely for visual appeal (no functional benefit;
+// the plain-text link already worked fine). There's no per-record image
+// for these, so the company logo is used as a generic thumbnail instead
+// (see companyLogoUrl below).
+const CARD_META: Record<string, { title: string; linkLabel: string }> = {
+  leave_submitted:     { title: 'ใบลาใหม่ (รออนุมัติ)', linkLabel: 'ดูใบลา' },
+  leave_approved:      { title: 'ใบลาอนุมัติแล้ว',       linkLabel: 'ดูใบลา' },
+  leave_rejected:       { title: 'ใบลาไม่ได้รับอนุมัติ',    linkLabel: 'ดูใบลา' },
+  ot_submitted:        { title: 'คำขอ OT ใหม่',          linkLabel: 'ดู OT' },
+  ot_approved:         { title: 'OT อนุมัติแล้ว',          linkLabel: 'ดู OT' },
+  ot_rejected:         { title: 'OT ไม่ได้รับอนุมัติ',       linkLabel: 'ดู OT' },
+  timesheet_submitted: { title: 'Timesheet ใหม่ (รออนุมัติ)', linkLabel: 'ดู Timesheet' },
+  timesheet_approved:  { title: 'Timesheet อนุมัติแล้ว',    linkLabel: 'ดู Timesheet' },
+  timesheet_rejected:  { title: 'Timesheet ไม่ได้รับอนุมัติ', linkLabel: 'ดู Timesheet' },
+}
+
+// Maps a company code to its logo file under public/logos/ — the only real
+// branded image already available to use as a generic thumbnail for these
+// event types (companies.logo_url is unpopulated for both companies).
+function companyLogoPath(code: string | null | undefined): string | null {
+  if (code === 'SAFECON') return '/logos/safecon.png'
+  if (code === 'HIGHCON') return '/logos/highcon.png'
+  return null
+}
+
 export async function dispatchNotifications(params: {
   company_id: string
   recipient_ids: string[]
@@ -323,6 +350,24 @@ export async function dispatchNotifications(params: {
       .maybeSingle()
     if (ann?.attachment_url && isImageAttachment(ann.attachment_type)) {
       announcementImageUrl = ann.attachment_url
+    }
+  }
+
+  // For leave/OT/timesheet LINE pushes, look up the company logo once (same
+  // for every recipient) to use as a generic thumbnail on the Buttons-
+  // template card — see CARD_META above.
+  let companyLogoUrl: string | null = null
+  const cardMeta = CARD_META[params.event_type]
+  if (cardMeta) {
+    const { data: company } = await supabase
+      .from('companies')
+      .select('code')
+      .eq('id', params.company_id)
+      .maybeSingle()
+    const logoPath = companyLogoPath(company?.code)
+    if (logoPath) {
+      const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000').replace(/\/$/, '')
+      companyLogoUrl = `${appUrl}${logoPath}`
     }
   }
 
@@ -407,6 +452,19 @@ export async function dispatchNotifications(params: {
               title: params.title.replace(/^\[ประกาศ\]\s*/, '').slice(0, 40),
               linkUrl: link,
               linkLabel: 'อ่านประกาศ',
+            },
+          })
+        : cardMeta && companyLogoUrl && link
+        ? await sendLineMessage({
+            company_id: params.company_id,
+            line_user_id: user.line_user_id,
+            text: `${params.title}\n${params.body}`,
+            richCard: {
+              imageUrl: companyLogoUrl,
+              title: cardMeta.title,
+              linkUrl: link,
+              linkLabel: cardMeta.linkLabel,
+              imageSize: 'contain',
             },
           })
         : await sendLineMessage({

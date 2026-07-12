@@ -39,14 +39,15 @@ async function getAccessToken(company_id: string): Promise<string | null> {
 // announcements, etc). Counts against the LINE OA's monthly free push quota.
 //
 // `richCard` renders a LINE "Buttons" template (thumbnail image + title +
-// short text + one link button) instead of a plain text bubble — used for
-// announcements, which already have an attachment image to show. Everything
-// else (leave/OT/timesheet notifications) has no image to show, so those
-// stay plain text with the link appended inline (see buildNotificationLink
-// in api-helpers.ts) — tappable automatically since LINE auto-links URLs in
-// plain text. Added per user request 2026-07-12: "ไปเป็นได้ที่จะแนบลิ้งให้
-// user กดเข้าไปอ่านได้... ควรแสดงเป็น thumbnail แนบลิ้งเข้าระบบ" (for
-// announcements specifically).
+// short text + one link button) instead of a plain text bubble. Originally
+// added for announcements only (they have a real attachment image to show).
+// Per follow-up user request 2026-07-12 ("ใบลา/OT/Timesheet อยากให้รูปให้
+// โชว์ ใส่ thumbnail ได้ไหม... เพราะมันมีแต่ลิ้งดู ไม่สวย" — purely
+// decorative, no functional need), leave/OT/timesheet cards also now use
+// richCard, with the company logo as a generic thumbnail (see
+// dispatchNotifications in api-helpers.ts) since those events have no
+// per-record image of their own. inquiry_reply still has no card and stays
+// plain text + inline link.
 export async function sendLineMessage(params: {
   company_id: string
   line_user_id: string
@@ -56,6 +57,12 @@ export async function sendLineMessage(params: {
     title: string
     linkUrl: string
     linkLabel?: string
+    // 'cover' crops to fill the frame (right for photo attachments,
+    // e.g. announcements). 'contain' letterboxes instead of cropping —
+    // used for logo thumbnails (leave/OT/timesheet cards) since safecon.png
+    // /highcon.png aren't the 1.51:1 "rectangle" aspect ratio and cropping
+    // would cut off part of the logo. Defaults to 'cover'.
+    imageSize?: 'cover' | 'contain'
   }
 }): Promise<{ ok: boolean; error?: string }> {
   const token = await getAccessToken(params.company_id)
@@ -73,7 +80,7 @@ export async function sendLineMessage(params: {
           type: 'buttons',
           thumbnailImageUrl: params.richCard.imageUrl,
           imageAspectRatio: 'rectangle',
-          imageSize: 'cover',
+          imageSize: params.richCard.imageSize ?? 'cover',
           title: params.richCard.title.slice(0, 40),
           text: (params.text.slice(0, 59) || '​'),
           actions: [
