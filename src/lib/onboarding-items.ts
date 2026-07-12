@@ -26,7 +26,7 @@ export function defaultOnboardingItems(): ChecklistItem[] {
     { key: 'employee_card',     label: 'บัตรพนักงาน',                              category: 'อุปกรณ์' },
     { key: 'ppe',                label: 'อุปกรณ์ป้องกันภัยส่วนบุคคล (หมวก/เสื้อสะท้อนแสง ฯลฯ)', category: 'อุปกรณ์' },
     { key: 'uniform',           label: 'ชุดยูนิฟอร์ม',                              category: 'อุปกรณ์' },
-    { key: 'system_account',    label: 'สร้างบัญชีในระบบ HiSafe-CON WorkSpace',      category: 'สิทธิ์การเข้าระบบ' },
+    { key: 'system_account',    label: 'สร้างบัญชีในระบบ CONNEX',      category: 'สิทธิ์การเข้าระบบ' },
     { key: 'line_link',         label: 'เชื่อมต่อบัญชี LINE เพื่อรับการแจ้งเตือน',    category: 'สิทธิ์การเข้าระบบ' },
     { key: 'site_access',       label: 'สิทธิ์เข้าไซต์งาน/สำนักงาน',                 category: 'สิทธิ์การเข้าระบบ' },
   ]
@@ -39,7 +39,7 @@ export function defaultClearanceItems(): ChecklistItem[] {
     { key: 'employee_card_return',   label: 'คืนบัตรพนักงาน' },
     { key: 'expense_clearance',      label: 'เคลียร์ค่าใช้จ่าย/เงินเบิกล่วงหน้าคงค้าง' },
     { key: 'handover',               label: 'ส่งมอบงานให้ผู้สืบทอด/หัวหน้างาน' },
-    { key: 'system_access_revoked',  label: 'ยกเลิกสิทธิ์เข้าระบบ HiSafe-CON WorkSpace' },
+    { key: 'system_access_revoked',  label: 'ยกเลิกสิทธิ์เข้าระบบ CONNEX' },
     { key: 'site_access_revoked',    label: 'ยกเลิกสิทธิ์เข้าไซต์งาน/สำนักงาน' },
   ]
   return template.map(t => ({ ...t, done: false, done_by: null, done_at: null }))

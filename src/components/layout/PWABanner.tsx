@@ -31,7 +31,7 @@ export function PWABanner() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900">ติดตั้งแอปบนมือถือ</p>
                 <p className="text-xs text-gray-500 mt-0.5">
-                  เพิ่ม HiSafe-CON ลงหน้าจอหลัก ใช้งานได้แบบแอปทันที
+                  เพิ่ม CONNEX ลงหน้าจอหลัก ใช้งานได้แบบแอปทันที
                 </p>
                 <div className="flex gap-2 mt-2">
                   <button

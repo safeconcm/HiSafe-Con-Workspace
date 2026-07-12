@@ -1,6 +1,6 @@
 {
-  "name": "HiSafe-CON WorkSpace",
-  "short_name": "HiSafe-CON",
+  "name": "CONNEX",
+  "short_name": "CONNEX",
   "description": "ระบบจัดการการลาและ Timesheet สำหรับ Safecon และ Highcon",
   "start_url": "/dashboard",
   "display": "standalone",
@@ -26,7 +26,7 @@
       "src": "/logos/safecon.png",
       "sizes": "1200x630",
       "type": "image/png",
-      "label": "HiSafe-CON WorkSpace Dashboard"
+      "label": "CONNEX Dashboard"
     }
   ],
   "categories": ["business", "productivity"],

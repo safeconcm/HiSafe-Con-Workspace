@@ -208,7 +208,7 @@ export default function AdminSettingsPage() {
           <div>
             <label className="form-label">From Name</label>
             <input value={smtp.smtp_from_name} onChange={e => setSmtp(s => ({ ...s, smtp_from_name: e.target.value }))}
-              className="form-input" placeholder="HiSafe-CON WorkSpace" />
+              className="form-input" placeholder="CONNEX" />
           </div>
         </div>
       </div>

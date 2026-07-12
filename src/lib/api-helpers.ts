@@ -26,7 +26,7 @@ export function getSessionFromHeaders(req: NextRequest): SessionUser | null {
   if (!userId || !companyId || !role) return null
 
   // Re-read full session from cookie for email / name fields
-  const sessionCookie = req.cookies.get('hsc_session')?.value
+  const sessionCookie = req.cookies.get('connex_session')?.value
   if (sessionCookie) {
     try {
       return JSON.parse(sessionCookie) as SessionUser

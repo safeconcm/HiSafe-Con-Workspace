@@ -83,7 +83,7 @@ function LoginForm() {
   }, [])
 
   useEffect(() => {
-    const saved = localStorage.getItem('hsc_remember_email')
+    const saved = localStorage.getItem('connex_remember_email')
     if (saved) setEmail(saved)
   }, [])
 
@@ -115,8 +115,8 @@ function LoginForm() {
       email: email.trim().toLowerCase(), password,
     })
     if (err) { setError('อีเมลหรือรหัสผ่านไม่ถูกต้อง'); setLoading(null); return }
-    if (remember) localStorage.setItem('hsc_remember_email', email.trim().toLowerCase())
-    else          localStorage.removeItem('hsc_remember_email')
+    if (remember) localStorage.setItem('connex_remember_email', email.trim().toLowerCase())
+    else          localStorage.removeItem('connex_remember_email')
     router.push(next); router.refresh()
   }
 
@@ -168,7 +168,7 @@ function LoginForm() {
           </div>
 
           <h1 className="text-3xl sm:text-4xl xl:text-5xl font-bold text-white leading-tight tracking-tight">
-            HiSafe-CON <span className="text-amber-400">WorkSpace</span>
+            CONNEX
           </h1>
           <p className="text-slate-300 mt-4 text-sm sm:text-base leading-relaxed max-w-sm mx-auto lg:mx-0">
             HR Platform สำหรับทีม Highcon และ Safecon
@@ -182,7 +182,7 @@ function LoginForm() {
             <div className="mb-7">
               <div className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-700 mb-2">
                 <Users className="w-3.5 h-3.5" aria-hidden="true" />
-                HiSafe-CON WorkSpace
+                CONNEX
               </div>
               <h2 className="text-2xl font-semibold text-gray-900">เข้าสู่ระบบ</h2>
               <p className="text-sm text-gray-500 mt-1">กรอกข้อมูลเพื่อเข้าใช้งานระบบ</p>

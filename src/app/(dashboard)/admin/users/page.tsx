@@ -18,7 +18,7 @@ import type { UserRole, UserStatus } from '@/types/database'
 function useCurrentRole(): string {
   if (typeof window === 'undefined') return ''
   try {
-    const raw = document.cookie.split('; ').find(r => r.startsWith('hsc_session='))
+    const raw = document.cookie.split('; ').find(r => r.startsWith('connex_session='))
     if (!raw) return ''
     return JSON.parse(decodeURIComponent(raw.split('=').slice(1).join('=')))?.role ?? ''
   } catch { return '' }

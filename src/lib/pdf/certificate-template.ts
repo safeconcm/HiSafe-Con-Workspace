@@ -218,7 +218,7 @@ export function generateCertificateHTML(data: CertificateTemplateData, appUrl: s
   </div>
 
   <div class="footer">
-    <span>HiSafe-CON WorkSpace · ${data.company.name_th}</span>
+    <span>CONNEX · ${data.company.name_th}</span>
     <span>เอกสารนี้สร้างโดยระบบอัตโนมัติ · ${new Date().toLocaleDateString('th-TH')}</span>
   </div>
 

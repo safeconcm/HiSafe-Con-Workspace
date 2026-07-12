@@ -98,7 +98,7 @@ export async function middleware(request: NextRequest) {
   // We store a lightweight session payload in a signed cookie
   // to avoid a DB query on every request
   const activeCompanyId = request.cookies.get(ACTIVE_COMPANY_COOKIE)?.value
-  const sessionCookie = request.cookies.get('hsc_session')?.value
+  const sessionCookie = request.cookies.get('connex_session')?.value
   let sessionUser = sessionCookie ? safeParseSession(sessionCookie) : null
 
   const cacheStale =
@@ -155,14 +155,14 @@ export async function middleware(request: NextRequest) {
 
     // Store in cookie (7 day TTL, Secure in prod). NOT httpOnly: several
     // client components (admin/users, timesheet, leave detail, OT/timesheet
-    // approvals — see the `document.cookie` reads for 'hsc_session') read
+    // approvals — see the `document.cookie` reads for 'connex_session') read
     // this cookie directly in the browser to avoid an extra round-trip for
     // display-only session info (id/role/company). None of that data is
     // secret — it's already rendered in the UI (name, email, role badge) —
     // so there's no meaningful security loss versus the real protection
     // (Supabase's own auth session cookies, which stay httpOnly/managed by
     // @supabase/ssr and are untouched here).
-    response.cookies.set('hsc_session', JSON.stringify(sessionUser), {
+    response.cookies.set('connex_session', JSON.stringify(sessionUser), {
       httpOnly: false,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
@@ -198,7 +198,7 @@ export async function middleware(request: NextRequest) {
 
   const finalResponse = NextResponse.next({ request: { headers: forwardedHeaders } })
   // Carry over any cookies queued on `response` (Supabase session refresh,
-  // and the hsc_session cache cookie set above) onto the response we return.
+  // and the connex_session cache cookie set above) onto the response we return.
   response.cookies.getAll().forEach(cookie => finalResponse.cookies.set(cookie))
 
   return finalResponse

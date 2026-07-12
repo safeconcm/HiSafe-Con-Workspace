@@ -16,6 +16,6 @@ export const useAuthStore = create<AuthState>()(
       setSession: (session) => set({ session }),
       clearSession: () => set({ session: null }),
     }),
-    { name: 'hsc-auth' }
+    { name: 'connex-auth' }
   )
 )

@@ -36,7 +36,7 @@ const STATUS_LABEL: Record<string, string> = {
 function useCurrentUser() {
   if (typeof window === 'undefined') return { id: '', role: '' }
   try {
-    const raw = document.cookie.split('; ').find(r => r.startsWith('hsc_session='))
+    const raw = document.cookie.split('; ').find(r => r.startsWith('connex_session='))
     if (!raw) return { id: '', role: '' }
     const s = JSON.parse(decodeURIComponent(raw.split('=').slice(1).join('=')))
     return { id: s.id, role: s.role }

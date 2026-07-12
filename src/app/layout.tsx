@@ -14,13 +14,13 @@ const sarabun = Sarabun({
 
 export const metadata: Metadata = {
   title: {
-    template: '%s | HiSafe-CON WorkSpace',
-    default: 'HiSafe-CON WorkSpace',
+    template: '%s | CONNEX',
+    default: 'CONNEX',
   },
   description: 'ระบบจัดการการลาและ Timesheet สำหรับ Safecon และ Highcon',
   manifest: '/manifest.json',
   themeColor: '#1e3a8a',
-  appleWebApp: { capable: true, title: 'HiSafe-CON', statusBarStyle: 'default' },
+  appleWebApp: { capable: true, title: 'CONNEX', statusBarStyle: 'default' },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -53,7 +53,7 @@ export async function sendCompanyEmail(params: {
     })
 
     await transporter.sendMail({
-      from: `"${company.smtp_from_name ?? 'HiSafe-CON WorkSpace'}" <${company.smtp_from}>`,
+      from: `"${company.smtp_from_name ?? 'CONNEX'}" <${company.smtp_from}>`,
       to: params.to,
       subject: params.subject,
       html: params.html,

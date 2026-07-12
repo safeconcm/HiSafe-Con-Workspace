@@ -113,7 +113,7 @@ export async function POST(req: NextRequest) {
   let reusedExistingAuthUser = false
   const { data: authData, error: authErr } = await supabase.auth.admin.createUser({
     email,
-    password: password ?? `Hsc${Math.random().toString(36).slice(2, 10)}!`,
+    password: password ?? `Connex${Math.random().toString(36).slice(2, 10)}!`,
     email_confirm: true,
   })
   if (authErr) {

@@ -12,12 +12,12 @@ import {
 } from 'lucide-react'
 
 // Same document.cookie read used by admin/users, approvals/timesheet, etc.
-// (see hsc_session comment in middleware.ts) — avoids an extra round-trip
+// (see connex_session comment in middleware.ts) — avoids an extra round-trip
 // just to know the viewer's role for UI branching.
 function useCurrentRole(): string {
   if (typeof window === 'undefined') return ''
   try {
-    const raw = document.cookie.split('; ').find(r => r.startsWith('hsc_session='))
+    const raw = document.cookie.split('; ').find(r => r.startsWith('connex_session='))
     if (!raw) return ''
     return JSON.parse(decodeURIComponent(raw.split('=').slice(1).join('=')))?.role ?? ''
   } catch { return '' }

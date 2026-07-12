@@ -18,7 +18,7 @@ import { useState } from 'react'
 function useCurrentUserId(): string {
   if (typeof window === 'undefined') return ''
   try {
-    const raw = document.cookie.split('; ').find(r => r.startsWith('hsc_session='))
+    const raw = document.cookie.split('; ').find(r => r.startsWith('connex_session='))
     if (!raw) return ''
     const session = JSON.parse(decodeURIComponent(raw.split('=').slice(1).join('=')))
     return session?.id ?? ''

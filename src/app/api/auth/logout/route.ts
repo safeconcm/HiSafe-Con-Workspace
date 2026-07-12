@@ -7,6 +7,6 @@ export async function POST(req: NextRequest) {
   await supabase.auth.signOut()
 
   const response = NextResponse.redirect(new URL('/login', req.url), 303)
-  response.cookies.delete('hsc_session')
+  response.cookies.delete('connex_session')
   return response
 }

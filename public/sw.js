@@ -1,8 +1,8 @@
 // public/sw.js
-// HiSafe-CON WorkSpace — Service Worker
+// CONNEX — Service Worker
 // Provides: offline fallback, cache-first for static assets, push notifications
 
-const CACHE_NAME   = 'hisafe-con-v1'
+const CACHE_NAME   = 'connex-v1'
 const OFFLINE_URL  = '/offline.html'
 
 const PRECACHE = [
@@ -82,11 +82,11 @@ self.addEventListener('push', (event) => {
   const data = event.data.json()
 
   event.waitUntil(
-    self.registration.showNotification(data.title ?? 'HiSafe-CON', {
+    self.registration.showNotification(data.title ?? 'CONNEX', {
       body:    data.body ?? '',
       icon:    '/icons/icon-192.png',
       badge:   '/icons/badge-72.png',
-      tag:     data.tag ?? 'hisafe-notif',
+      tag:     data.tag ?? 'connex-notif',
       data:    { url: data.url ?? '/notifications' },
       actions: [
         { action: 'view', title: 'ดูรายละเอียด' },

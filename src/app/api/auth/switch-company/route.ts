@@ -44,6 +44,6 @@ export async function POST(req: NextRequest) {
     path: '/',
   })
   // Force middleware/layout to re-resolve the session against the new company
-  response.cookies.delete('hsc_session')
+  response.cookies.delete('connex_session')
   return response
 }

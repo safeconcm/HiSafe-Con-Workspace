@@ -323,7 +323,7 @@ export function generateTimesheetHTML(data: TimesheetTemplateData, appUrl: strin
   </div>
 
   <div class="footer">
-    <span>HiSafe-CON WorkSpace · ${data.company.name_th}</span>
+    <span>CONNEX · ${data.company.name_th}</span>
     <span>เอกสารอัตโนมัติ · TS-${data.timesheet.id.slice(-8).toUpperCase()}</span>
   </div>
 </div>

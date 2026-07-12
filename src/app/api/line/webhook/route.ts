@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
       await supabase.from('line_link_codes').update({ used_at: new Date().toISOString() }).eq('id', pending.id)
       await replyLineMessage({
         company_id: channel.id, reply_token: replyToken,
-        text: 'เชื่อมต่อบัญชี LINE กับ HiSafe-CON WorkSpace สำเร็จแล้ว',
+        text: 'เชื่อมต่อบัญชี LINE กับ CONNEX สำเร็จแล้ว',
       })
     } else {
       await replyLineMessage({

@@ -4,11 +4,11 @@
 // A single Supabase Auth user (auth_user_id) can now be linked to more than
 // one row in `users` — one per company — so that one admin login can operate
 // on behalf of both Safecon and Highcon. This module resolves which of those
-// rows is "active" for the current request, based on the hsc_active_company
+// rows is "active" for the current request, based on the connex_active_company
 // cookie, and is shared by middleware.ts, the dashboard layout, and the
 // dashboard page so all three stay in sync.
 
-export const ACTIVE_COMPANY_COOKIE = 'hsc_active_company'
+export const ACTIVE_COMPANY_COOKIE = 'connex_active_company'
 
 export interface CompanyRef {
   id: string

@@ -55,9 +55,8 @@ function CompanySwitcher({
         </div>
         <div className="min-w-0">
           <p className="text-sm font-semibold text-gray-900 truncate">
-            {current?.name_th ?? 'HiSafe-CON'}
+            {current?.name_th ?? 'CONNEX'}
           </p>
-          <p className="text-xs text-gray-400">WorkSpace</p>
         </div>
       </div>
     )
@@ -75,7 +74,7 @@ function CompanySwitcher({
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-gray-900 truncate">
-            {switching ? 'กำลังสลับ...' : (current?.name_th ?? 'HiSafe-CON')}
+            {switching ? 'กำลังสลับ...' : (current?.name_th ?? 'CONNEX')}
           </p>
           <p className="text-xs text-gray-400">แตะเพื่อสลับบริษัท</p>
         </div>
