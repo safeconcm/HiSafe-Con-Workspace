@@ -25,6 +25,12 @@ export async function sendCompanyEmail(params: {
   to: string
   subject: string
   html: string
+  // Inline images (e.g. the announcement/company-logo thumbnail) — pass a
+  // cid here and reference it in `html` as `<img src="cid:XXX">`. This
+  // embeds the image as part of the email itself instead of a remote
+  // <img src="https://..."> link, which some mail clients block by default
+  // until the user clicks "show images". Added 2026-07-12 per user request.
+  attachments?: { filename: string; content: Buffer; cid: string }[]
 }): Promise<{ ok: boolean; error?: string }> {
   const supabase = adminClient()
   const { data: company, error } = await supabase
@@ -51,6 +57,7 @@ export async function sendCompanyEmail(params: {
       to: params.to,
       subject: params.subject,
       html: params.html,
+      attachments: params.attachments,
     })
 
     return { ok: true }

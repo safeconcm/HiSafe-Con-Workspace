@@ -451,15 +451,44 @@ export async function dispatchNotifications(params: {
         : cardMeta?.title ?? params.title
       const emailLinkLabel = cardMeta?.linkLabel
         ?? (params.event_type === 'announcement' ? 'อ่านประกาศ' : 'ดูรายละเอียด')
+      // Formal closing line for org-wide announcements only (not personal
+      // leave/OT/timesheet notifications) — matches the standard Thai memo/
+      // circular convention, requested 2026-07-12.
+      const emailClosing = params.event_type === 'announcement'
+        ? 'จึงแจ้งมาเพื่อทราบด้วยทั่วกัน\nฝ่ายบุคคล (HR)'
+        : null
+
+      // Embed the thumbnail as a real inline attachment (cid) instead of a
+      // remote <img src>, so it isn't hidden behind "click to show images"
+      // in mail clients that block remote content by default — requested
+      // 2026-07-12. Fetch is best-effort: a failed/slow fetch just drops
+      // the image, it never blocks the email itself from sending.
+      let attachments: { filename: string; content: Buffer; cid: string }[] | undefined
+      let thumbnailTag = ''
+      if (emailThumbnail) {
+        try {
+          const imgRes = await fetch(emailThumbnail)
+          if (imgRes.ok) {
+            const buf = Buffer.from(await imgRes.arrayBuffer())
+            attachments = [{ filename: 'thumbnail.jpg', content: buf, cid: 'thumbnail' }]
+            thumbnailTag = `<img src="cid:thumbnail" alt="" style="max-width:100%;border-radius:8px;margin-bottom:16px;display:block;" />`
+          }
+        } catch {
+          // no-op — email still sends without the image
+        }
+      }
+
       const result = await sendCompanyEmail({
         company_id: params.company_id,
         to: user.email,
         subject: params.title,
+        attachments,
         html: `
           <div style="font-family:-apple-system,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;color:#1f2937;">
             <h2 style="margin:0 0 12px;font-size:18px;">${escapeHtml(emailTitle)}</h2>
-            ${emailThumbnail ? `<img src="${emailThumbnail}" alt="" style="max-width:100%;border-radius:8px;margin-bottom:16px;display:block;" />` : ''}
+            ${thumbnailTag}
             <p style="white-space:pre-wrap;line-height:1.6;font-size:14px;">${escapeHtml(params.body)}</p>
+            ${emailClosing ? `<p style="white-space:pre-wrap;line-height:1.6;font-size:14px;margin-top:16px;">${escapeHtml(emailClosing)}</p>` : ''}
             ${plainLink ? `<p style="margin-top:20px;"><a href="${plainLink}" style="background:#2563eb;color:#ffffff;padding:10px 18px;border-radius:6px;text-decoration:none;font-size:14px;display:inline-block;">${escapeHtml(emailLinkLabel)}</a></p>` : ''}
           </div>
         `,
