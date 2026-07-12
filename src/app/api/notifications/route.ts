@@ -57,3 +57,30 @@ export async function GET(req: NextRequest) {
     return serverError(err)
   }
 }
+
+// DELETE /api/notifications — bulk-delete the current user's own
+// notifications (2026-07-13, powers the checkbox multi-select on the
+// notifications page). Body: { ids: string[] }. Same safety scoping as
+// the single-item route: always filtered to .eq('recipient_id', session.id),
+// so this can only ever delete the caller's own notifications.
+export async function DELETE(req: NextRequest) {
+  const session = getSessionFromHeaders(req)
+  if (!session) return unauthorized()
+
+  const payload = await req.json().catch(() => null)
+  const ids = Array.isArray(payload?.ids) ? payload.ids.filter((x: unknown) => typeof x === 'string') : []
+  if (!ids.length) return ok({ deleted: 0 })
+
+  const supabase = createAdminSupabaseClient()
+  try {
+    await supabase
+      .from('notifications')
+      .delete()
+      .eq('recipient_id', session.id)
+      .in('id', ids)
+
+    return ok({ deleted: ids.length })
+  } catch (err) {
+    return serverError(err)
+  }
+}

@@ -16,7 +16,7 @@
 import { NextRequest } from 'next/server'
 import {
   getSessionFromHeaders, createAdminSupabaseClient,
-  ok, created, badRequest, unauthorized, forbidden, serverError,
+  ok, created, badRequest, unauthorized, forbidden, notFound, serverError,
   writeAuditLog, dispatchNotifications,
 } from '@/lib/api-helpers'
 
@@ -33,9 +33,63 @@ export async function GET(req: NextRequest) {
     .select('id, company_ids, category, title, body, attachment_url, attachment_type, attachment_name, require_ack, created_by, created_at, users:created_by(first_name_th, last_name_th)')
     .contains('company_ids', [session.company_id])
     .is('deleted_at', null)
+    // Excludes announcements this admin personally hid from their own
+    // "จัดการอัปเดต" list (2026-07-13) — see hidden_for_admin_ids comment.
+    // Other admins/employees are unaffected — this filter only ever
+    // applies to the requesting session's own id.
+    .not('hidden_for_admin_ids', 'cs', `{${session.id}}`)
     .order('created_at', { ascending: false })
   if (error) return serverError(error)
   return ok({ announcements: data })
+}
+
+// Bulk-hide/delete (2026-07-13) — powers the new checkbox multi-select in
+// "จัดการอัปเดต". Body: { ids: string[], retract_for_all?: boolean }.
+// Default (retract_for_all falsy): adds the acting admin's id to each
+// row's hidden_for_admin_ids — removes it from THIS admin's own list only,
+// employees and other admins keep seeing it, matches the single-item
+// DELETE route below. retract_for_all=true also sets deleted_at, same as
+// checking "ลบสำหรับพนักงานทุกคนด้วย" in the confirm dialog.
+export async function DELETE(req: NextRequest) {
+  const session = getSessionFromHeaders(req)
+  if (!session) return unauthorized()
+  if (session.role !== 'hr' && session.role !== 'admin') return forbidden()
+
+  const payload = await req.json().catch(() => null)
+  const ids = Array.isArray(payload?.ids) ? payload.ids.filter((x: unknown) => typeof x === 'string') : []
+  const retractForAll = payload?.retract_for_all === true
+  if (!ids.length) return badRequest('กรุณาเลือกประกาศที่ต้องการลบ')
+
+  const supabase = createAdminSupabaseClient()
+  const { data: rows, error: fetchErr } = await supabase
+    .from('announcements')
+    .select('id, title, hidden_for_admin_ids, deleted_at')
+    .in('id', ids)
+    .contains('company_ids', [session.company_id])
+    .is('deleted_at', null)
+  if (fetchErr) return serverError(fetchErr)
+  if (!rows || !rows.length) return notFound('Announcements')
+
+  for (const row of rows) {
+    const hidden = new Set<string>((row as any).hidden_for_admin_ids ?? [])
+    hidden.add(session.id)
+    const updates: Record<string, unknown> = { hidden_for_admin_ids: Array.from(hidden) }
+    if (retractForAll) updates.deleted_at = new Date().toISOString()
+    await supabase.from('announcements').update(updates).eq('id', row.id)
+  }
+
+  // entity_id is a uuid column — can't hold a joined list of multiple ids,
+  // so a bulk action logs entity_id: null and puts the full id list in
+  // old_data (jsonb, no type constraint) instead.
+  await writeAuditLog({
+    session,
+    action: retractForAll ? 'announcement.bulk_retracted' : 'announcement.bulk_hidden',
+    entity_type: 'announcement',
+    old_data: { ids: rows.map(r => r.id), titles: rows.map(r => r.title), count: rows.length },
+    req,
+  })
+
+  return ok({ ids: rows.map(r => r.id), retracted_for_all: retractForAll })
 }
 
 export async function POST(req: NextRequest) {

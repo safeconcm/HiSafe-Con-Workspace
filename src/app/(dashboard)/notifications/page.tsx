@@ -6,7 +6,7 @@ import { formatDateTime, cn } from '@/utils'
 import {
   Bell, CheckCheck, CalendarDays, Clock,
   ChevronRight, Loader2, Check, FileText, UserCheck, CalendarClock,
-  MessageCircleQuestion, Megaphone,
+  MessageCircleQuestion, Megaphone, Trash2,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -61,8 +61,26 @@ async function markAllRead() {
   await fetch('/api/notifications/read-all', { method: 'PATCH' })
 }
 
+async function deleteOne(id: string) {
+  await fetch(`/api/notifications/${id}`, { method: 'DELETE' })
+}
+
+async function deleteMany(ids: string[]) {
+  await fetch('/api/notifications', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids }),
+  })
+}
+
 export default function NotificationsPage() {
   const [page, setPage] = useState(1)
+  // Checkbox multi-select + delete (2026-07-13) — same delete affordance
+  // as the "จัดการอัปเดต" page, per user request. Simpler here than that
+  // page's modal since each notification only ever belongs to the current
+  // user — no "affects other people" option needed, so a plain confirm()
+  // is enough.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const qc = useQueryClient()
 
   const { data, isLoading } = useQuery({
@@ -88,6 +106,23 @@ export default function NotificationsPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['notifications-page'] })
       qc.invalidateQueries({ queryKey: ['notifications', 'unread-count'] })
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteOne,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['notifications-page'] })
+      qc.invalidateQueries({ queryKey: ['notifications', 'unread-count'] })
+    },
+  })
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: deleteMany,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['notifications-page'] })
+      qc.invalidateQueries({ queryKey: ['notifications', 'unread-count'] })
+      setSelectedIds(new Set())
     },
   })
 
@@ -138,6 +173,36 @@ export default function NotificationsPage() {
         )}
       </div>
 
+      {/* Select-all + bulk delete toolbar (2026-07-13) */}
+      {notifications.length > 0 && (
+        <div className="flex items-center gap-3 px-1">
+          <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={selectedIds.size > 0 && notifications.every(n => selectedIds.has(n.id))}
+              onChange={e => {
+                if (e.target.checked) setSelectedIds(new Set(notifications.map(n => n.id)))
+                else setSelectedIds(new Set())
+              }}
+            />
+            เลือกทั้งหมด
+          </label>
+          {selectedIds.size > 0 && (
+            <button
+              onClick={() => {
+                if (confirm(`ลบการแจ้งเตือนที่เลือก ${selectedIds.size} รายการ ใช่ไหม?`)) {
+                  bulkDeleteMutation.mutate(Array.from(selectedIds))
+                }
+              }}
+              disabled={bulkDeleteMutation.isPending}
+              className="flex items-center gap-1.5 text-sm text-red-600 hover:underline disabled:opacity-60"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> ลบที่เลือก ({selectedIds.size})
+            </button>
+          )}
+        </div>
+      )}
+
       {/* List */}
       {isLoading ? (
         <div className="flex justify-center py-16">
@@ -160,7 +225,7 @@ export default function NotificationsPage() {
               <div
                 onClick={() => handleClick(n)}
                 className={cn(
-                  'flex items-start gap-4 px-5 py-4 transition-colors cursor-pointer',
+                  'flex items-start gap-4 px-2 py-4 transition-colors cursor-pointer flex-1 min-w-0',
                   isNew ? 'bg-blue-50/40 hover:bg-blue-50' : 'hover:bg-gray-50'
                 )}
               >
@@ -187,10 +252,36 @@ export default function NotificationsPage() {
               </div>
             )
 
-            return link ? (
-              <Link key={n.id} href={link}>{inner}</Link>
-            ) : (
-              <div key={n.id}>{inner}</div>
+            // Checkbox + delete button live outside the Link so they don't
+            // trigger navigation — only the icon/title/body area is clickable.
+            return (
+              <div key={n.id} className="flex items-start gap-2 pl-3 pr-2">
+                <label className="flex items-center pt-4 shrink-0 cursor-pointer" onClick={e => e.stopPropagation()}>
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(n.id)}
+                    onChange={e => {
+                      setSelectedIds(prev => {
+                        const next = new Set(prev)
+                        if (e.target.checked) next.add(n.id); else next.delete(n.id)
+                        return next
+                      })
+                    }}
+                  />
+                </label>
+                {link ? <Link href={link} className="flex-1 min-w-0">{inner}</Link> : inner}
+                <button
+                  onClick={e => {
+                    e.stopPropagation()
+                    if (confirm('ลบการแจ้งเตือนนี้ใช่ไหม?')) deleteMutation.mutate(n.id)
+                  }}
+                  disabled={deleteMutation.isPending}
+                  className="mt-4 p-1 text-gray-300 hover:text-red-600 transition-colors disabled:opacity-50 shrink-0"
+                  title="ลบการแจ้งเตือน"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
             )
           })}
         </div>

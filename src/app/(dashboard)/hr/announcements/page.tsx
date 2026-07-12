@@ -5,7 +5,7 @@
 import { useState, useRef } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from '@/components/ui/Toaster'
-import { Plus, Megaphone, Loader2, ImageIcon, FileText, AlertTriangle, Trash2 } from 'lucide-react'
+import { Plus, Megaphone, Loader2, ImageIcon, FileText, AlertTriangle, Trash2, X } from 'lucide-react'
 import { cn, formatDateTH, stripAnnouncementMarkdown } from '@/utils'
 import { createClient } from '@/lib/supabase/client'
 
@@ -163,6 +163,13 @@ export default function HrAnnouncementsPage() {
   const [sizeInfo, setSizeInfo] = useState<{ before: number; after: number } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Checkbox multi-select + delete-confirm modal (2026-07-13, per user
+  // request for bulk delete). `pendingDelete` holds the id(s) awaiting
+  // confirmation — null when the modal is closed.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [pendingDelete, setPendingDelete] = useState<{ ids: string[]; titles: string[] } | null>(null)
+  const [retractForAll, setRetractForAll] = useState(false)
+
   const qc = useQueryClient()
 
   const { data: announcements = [], isLoading } = useQuery({
@@ -210,19 +217,47 @@ export default function HrAnnouncementsPage() {
     onError: (e: Error) => toast.error('เกิดข้อผิดพลาด', e.message),
   })
 
-  // Soft-delete only — does not touch each user's already-received
-  // in-app/email/LINE notification history, see the route's own comment.
-  // Added 2026-07-12 so test/mistaken posts can be cleaned up during the
-  // trial period without needing to ask an engineer.
+  // Default = hide from the acting admin's own list only (does not touch
+  // deleted_at, employees/other admins unaffected). retractForAll=true
+  // also sets deleted_at — a real, global retraction. See the route's own
+  // comment for the full reasoning (2026-07-13 revision). Does not touch
+  // each user's already-received in-app/email/LINE notification history
+  // either way.
   const removeAnnouncement = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await fetch(`/api/hr/announcements/${id}`, { method: 'DELETE' })
+    mutationFn: async ({ id, retractForAll }: { id: string; retractForAll: boolean }) => {
+      const res = await fetch(`/api/hr/announcements/${id}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ retract_for_all: retractForAll }),
+      })
       const json = await safeJson(res)
       if (!res.ok) throw new Error(json?.error || `ลบไม่สำเร็จ (${res.status})`)
     },
-    onSuccess: () => {
+    onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ['hr-announcements'] })
-      toast.success('ลบประกาศแล้ว')
+      setSelectedIds(new Set())
+      toast.success(vars.retractForAll ? 'ถอนประกาศแล้ว (พนักงานทุกคนไม่เห็นแล้ว)' : 'ลบออกจากรายการของคุณแล้ว')
+    },
+    onError: (e: Error) => toast.error('ลบไม่สำเร็จ', e.message),
+  })
+
+  // Bulk version of the same mutation — powers the checkbox multi-select.
+  const bulkRemoveAnnouncements = useMutation({
+    mutationFn: async ({ ids, retractForAll }: { ids: string[]; retractForAll: boolean }) => {
+      const res = await fetch('/api/hr/announcements', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids, retract_for_all: retractForAll }),
+      })
+      const json = await safeJson(res)
+      if (!res.ok) throw new Error(json?.error || `ลบไม่สำเร็จ (${res.status})`)
+    },
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ['hr-announcements'] })
+      setSelectedIds(new Set())
+      toast.success(vars.retractForAll
+        ? `ถอนประกาศแล้ว ${vars.ids.length} รายการ (พนักงานทุกคนไม่เห็นแล้ว)`
+        : `ลบออกจากรายการของคุณแล้ว ${vars.ids.length} รายการ`)
     },
     onError: (e: Error) => toast.error('ลบไม่สำเร็จ', e.message),
   })
@@ -423,8 +458,50 @@ export default function HrAnnouncementsPage() {
         </div>
       ) : (
         <div className="space-y-3">
+          {/* Select-all + bulk delete toolbar (2026-07-13) — only shown
+              when there's something to select. */}
+          {filtered.length > 0 && (
+            <div className="flex items-center gap-3 px-1">
+              <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.size > 0 && filtered.every((a: any) => selectedIds.has(a.id))}
+                  onChange={e => {
+                    if (e.target.checked) setSelectedIds(new Set(filtered.map((a: any) => a.id)))
+                    else setSelectedIds(new Set())
+                  }}
+                />
+                เลือกทั้งหมด
+              </label>
+              {selectedIds.size > 0 && (
+                <button
+                  onClick={() => setPendingDelete({
+                    ids: Array.from(selectedIds),
+                    titles: filtered.filter((a: any) => selectedIds.has(a.id)).map((a: any) => a.title),
+                  })}
+                  className="flex items-center gap-1.5 text-sm text-red-600 hover:underline"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> ลบที่เลือก ({selectedIds.size})
+                </button>
+              )}
+            </div>
+          )}
+
           {filtered.map((a: any) => (
             <div key={a.id} className="card card-body flex gap-4">
+              <label className="flex items-start pt-1 shrink-0 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.has(a.id)}
+                  onChange={e => {
+                    setSelectedIds(prev => {
+                      const next = new Set(prev)
+                      if (e.target.checked) next.add(a.id); else next.delete(a.id)
+                      return next
+                    })
+                  }}
+                />
+              </label>
               {a.attachment_url && (
                 <AttachmentThumb
                   url={a.attachment_url} type={a.attachment_type} name={a.attachment_name}
@@ -443,9 +520,7 @@ export default function HrAnnouncementsPage() {
                   )}
                   <span className="text-xs text-gray-400">{formatDateTH(a.created_at)}</span>
                   <button
-                    onClick={() => {
-                      if (confirm(`ลบประกาศ "${a.title}" ใช่ไหม?`)) removeAnnouncement.mutate(a.id)
-                    }}
+                    onClick={() => setPendingDelete({ ids: [a.id], titles: [a.title] })}
                     disabled={removeAnnouncement.isPending}
                     className="ml-auto p-1 text-gray-400 hover:text-red-600 transition-colors disabled:opacity-50"
                     title="ลบประกาศ"
@@ -463,6 +538,63 @@ export default function HrAnnouncementsPage() {
               {tab === 'must_ack' ? 'ไม่มีประกาศที่ต้องรับทราบ' : 'ยังไม่มีประกาศ'}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Delete confirmation modal (2026-07-13) — replaces the old native
+          confirm() so we can offer the "retract for everyone" checkbox.
+          Default (unchecked) only hides from this admin's own list. */}
+      {pendingDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="card w-full max-w-sm p-5 space-y-4">
+            <div className="flex items-start justify-between gap-2">
+              <h3 className="text-sm font-semibold text-gray-900">
+                ลบประกาศ {pendingDelete.ids.length > 1 ? `${pendingDelete.ids.length} รายการ` : ''}
+              </h3>
+              <button onClick={() => { setPendingDelete(null); setRetractForAll(false) }} className="text-gray-400 hover:text-gray-600">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="text-sm text-gray-600 max-h-32 overflow-y-auto space-y-1">
+              {pendingDelete.titles.map((t, i) => <p key={i} className="line-clamp-1">&quot;{t}&quot;</p>)}
+            </div>
+
+            <p className="text-xs text-gray-400">
+              ค่าเริ่มต้น: ลบออกจากรายการของคุณเท่านั้น พนักงานยังเห็นประกาศนี้ตามปกติ
+            </p>
+
+            <label className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-800 cursor-pointer">
+              <input
+                type="checkbox" className="mt-0.5"
+                checked={retractForAll} onChange={e => setRetractForAll(e.target.checked)}
+              />
+              <span>ลบสำหรับพนักงานทุกคนด้วย (ถอนประกาศถาวร ทุกคนจะไม่เห็นอีกต่อไป)</span>
+            </label>
+
+            <div className="flex gap-3 pt-1">
+              <button
+                onClick={() => { setPendingDelete(null); setRetractForAll(false) }}
+                className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+              >ยกเลิก</button>
+              <button
+                onClick={() => {
+                  if (!pendingDelete) return
+                  if (pendingDelete.ids.length > 1) {
+                    bulkRemoveAnnouncements.mutate({ ids: pendingDelete.ids, retractForAll })
+                  } else {
+                    removeAnnouncement.mutate({ id: pendingDelete.ids[0], retractForAll })
+                  }
+                  setPendingDelete(null)
+                  setRetractForAll(false)
+                }}
+                disabled={removeAnnouncement.isPending || bulkRemoveAnnouncements.isPending}
+                className="flex-1 rounded-lg bg-red-600 text-white px-4 py-2 text-sm font-medium hover:bg-red-700 disabled:opacity-60"
+              >
+                ยืนยันลบ
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
