@@ -84,6 +84,67 @@ function formatBytes(n: number) {
 
 type Company = { id: string; code: string; name_th: string }
 
+// Which attachment MIME types the "ดึงข้อความจากไฟล์" button supports.
+// Scoped to .docx only for this ship — mammoth (docx→text) is a mature,
+// pure-JS library safe to run in Vercel's serverless functions. PDF
+// extraction (pdf-parse or similar) was deliberately left out of this round
+// specifically to keep the build/deploy risk on this change as low as
+// possible per the pre-implementation code review — can be added as a
+// follow-up once this path is confirmed stable in production. Legacy .doc
+// (application/msword) is also excluded — mammoth doesn't parse the old
+// binary format, only .docx.
+const EXTRACTABLE_TYPES = new Set([
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+])
+
+// Sub-category "patterns" (2026-07-13, per user request) — a pure UI
+// convenience layer, NOT stored in the database. Picking one just inserts a
+// ready-made opening/closing line into the existing เนื้อหา textarea (still
+// fully editable) and pre-selects the closest matching `category` enum
+// value. Deliberately does not add any new DB column: the category enum
+// (general/policy/event/emergency) is unchanged, and these patterns are
+// only ever a starting point for the same title/body fields that already
+// exist — see the "จัดการอัปเดต" consultation thread for why this scope was
+// chosen (skips the department/location targeting and the confidential
+// per-person hidden-document ideas from the original spec — those were
+// explicitly declined as separate, higher-risk projects).
+type Pattern = { key: string; group: 'ประกาศ' | 'ประชาสัมพันธ์'; label: string; category: Category; opening: string; closing: string }
+const PATTERNS: Pattern[] = [
+  { key: 'holiday',    group: 'ประกาศ', label: 'วันหยุด/เวลาทำการ', category: 'general',
+    opening: 'ประกาศเรื่อง วันหยุดเนื่องในวัน... (หรือ แจ้งการปรับเปลี่ยนเวลาทำการช่วง...)\n\n',
+    closing: '\n\nจึงเรียนมาเพื่อทราบและวางแผนการดำเนินงานร่วมกัน' },
+  { key: 'policy',     group: 'ประกาศ', label: 'นโยบาย/ข้อบังคับ/ระเบียบการทำงาน', category: 'policy',
+    opening: 'ประกาศข้อบังคับเรื่อง... (หรือ นโยบายการทำงานเกี่ยวกับการ...)\n\n',
+    closing: '\n\nจึงเรียนมาเพื่อทราบและถือปฏิบัติอย่างเคร่งครัด ตั้งแต่วันที่... เป็นต้นไป' },
+  { key: 'appoint',    group: 'ประกาศ', label: 'การแต่งตั้ง/โยกย้าย/ปรับโครงสร้างองค์กร', category: 'general',
+    opening: 'ประกาศคำสั่งแต่งตั้งบุคลากรตำแหน่ง... (หรือ คำสั่งปรับโครงสร้างส่วนงาน...)\n\n',
+    closing: '\n\nขอให้ทุกท่านร่วมแสดงความยินดีและให้ความร่วมมือในการปฏิบัติงานกับเพื่อนร่วมงานใหม่' },
+  { key: 'emergency',  group: 'ประกาศ', label: 'มาตรการฉุกเฉิน/ความปลอดภัย', category: 'emergency',
+    opening: 'ประกาศด่วนที่สุด! มาตรการรับมือกรณี [ภัยพิบัติ/โรคระบาด/เหตุฉุกเฉิน]...\n\n',
+    closing: '\n\nโปรดติดตามสถานการณ์อย่างใกล้ชิดและปฏิบัติตามคู่มือความปลอดภัยอย่างเคร่งครัด' },
+  { key: 'termination', group: 'ประกาศ', label: 'การพ้นสภาพของพนักงาน', category: 'general',
+    opening: 'ประกาศแจ้งเรื่อง พนักงานพ้นสภาพการเป็นบุคลากร เรียน ทุกท่าน...\n\n',
+    closing: '\n\nการกระทำใดๆ ของบุคคลดังกล่าวหลังจากนี้ ไม่มีส่วนเกี่ยวข้องกับบริษัทฯ ทั้งสิ้น' },
+  { key: 'event',      group: 'ประชาสัมพันธ์', label: 'กิจกรรมภายใน/งานสังสรรค์/CSR', category: 'event',
+    opening: 'ขอเชิญชวนเพื่อนๆ ร่วมสนุกในงาน... (หรือ เคลียร์คิวให้พร้อม! กับกิจกรรม...)\n\n',
+    closing: '\n\nแล้วพบกันในงานนะครับ/ค่ะ! กดลงชื่อร่วมงานได้ที่ลิงก์ด้านล่าง' },
+  { key: 'benefit',    group: 'ประชาสัมพันธ์', label: 'สิทธิประโยชน์/สวัสดิการพนักงาน/ประกันกลุ่ม', category: 'general',
+    opening: 'ข่าวดี! แจ้งสิทธิประโยชน์เพิ่มเติมเรื่อง... (หรือ เปิดลงทะเบียนรับสิทธิ์...)\n\n',
+    closing: '\n\nสามารถตรวจสอบเงื่อนไขการใช้งานและการเคลมสิทธิ์ของคุณได้ที่คู่มือแนบ' },
+  { key: 'celebrate',  group: 'ประชาสัมพันธ์', label: 'ความสำเร็จ/เรื่องยินดี/วันเกิด', category: 'event',
+    opening: 'ร่วมยินดีกับความสำเร็จ!... (หรือ สุขสันต์วันเกิดแด่พนักงานที่เกิดในเดือน...)\n\n',
+    closing: '\n\nขอบคุณทุกแรงกายแรงใจที่เป็นส่วนหนึ่งของความสำเร็จและการเติบโตนี้' },
+  { key: 'knowledge',  group: 'ประชาสัมพันธ์', label: 'สาระน่ารู้/บทความ/เทรนด์ความรู้', category: 'general',
+    opening: 'สาระความรู้คู่คนทำงานวันนี้ เสนอเรื่อง... (หรือ รู้หรือไม่? เทรนด์ปีนี้...)\n\n',
+    closing: '\n\nติดตามสาระดีๆ แบบนี้ได้ใหม่ในอัปเดตถัดไป' },
+  { key: 'pr',         group: 'ประชาสัมพันธ์', label: 'ประชาสัมพันธ์ภายนอก/ข่าวสารแบรนด์', category: 'general',
+    opening: 'แจ้งข่าวสารประชาสัมพันธ์: แบรนด์ของเราได้ทำการเปิดตัว... (หรือ ข่าวอัปเดตสู่สาธารณะ...)\n\n',
+    closing: '\n\nช่วยกันแชร์และร่วมสนับสนุนแบรนด์ของเราได้ตามช่องทางที่ระบุ' },
+  { key: 'market',     group: 'ประชาสัมพันธ์', label: 'ประกาศซื้อ-ขาย/ของหาย/พื้นที่ฝากร้าน', category: 'general',
+    opening: 'พื้นที่ฝากข่าว: พบสิ่งของสูญหายบริเวณ... (หรือ เปิดตลาดชาวออฟฟิศ:...)\n\n',
+    closing: '\n\nหากใครเป็นเจ้าของหรือสนใจ สามารถติดต่อได้ที่เบอร์/ไลน์ที่ระบุไว้' },
+]
+
 // A response that isn't valid JSON (e.g. a plain-text 413 "Request Entity
 // Too Large" from a platform-level body-size limit) used to crash the whole
 // mutation with a cryptic "Unexpected token 'R'..." error. Parse
@@ -163,6 +224,17 @@ export default function HrAnnouncementsPage() {
   const [sizeInfo, setSizeInfo] = useState<{ before: number; after: number } | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // Sub-category pattern picker (2026-07-13) — see PATTERNS above.
+  const [patternKey, setPatternKey] = useState('')
+
+  // Extract-text-from-attachment (2026-07-13, per user request "ดึงข้อมูล
+  // จากไฟล์แนบมาจัดเรียงในกล่องข้อความก่อนกดส่ง"). `uploadedAttachment`
+  // caches the Storage upload so clicking "ดึงข้อความ" doesn't force a
+  // second upload of the same file when the form is submitted afterwards —
+  // both the extract button and handleSubmit check this cache first.
+  const [uploadedAttachment, setUploadedAttachment] = useState<{ file: File; url: string; type: string; name: string } | null>(null)
+  const [extracting, setExtracting] = useState(false)
+
   // Checkbox multi-select + delete-confirm modal (2026-07-13, per user
   // request for bulk delete). `pendingDelete` holds the id(s) awaiting
   // confirmation — null when the modal is closed.
@@ -185,14 +257,33 @@ export default function HrAnnouncementsPage() {
   const resetForm = () => {
     setTitle(''); setBody(''); setCategory('general'); setCompanyIds([]); setRequireAck(false)
     setAttachFile(null); setAttachPreview(null); setSizeInfo(null)
+    setPatternKey(''); setUploadedAttachment(null)
     if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  // Applies a pattern's opening/closing text into the body box and
+  // pre-selects the matching category. Never fires silently over content
+  // the admin already typed — same confirm() pattern already used
+  // elsewhere in this app (e.g. the employee-side hide button).
+  const applyPattern = (key: string) => {
+    if (!key) { setPatternKey(''); return }
+    const p = PATTERNS.find(x => x.key === key)
+    if (!p) return
+    if (body.trim() && !confirm('แทนที่เนื้อหาปัจจุบันในกล่องข้อความด้วยรูปแบบนี้?')) return
+    setPatternKey(key)
+    setCategory(p.category)
+    setBody(`${p.opening}[รายละเอียด...]${p.closing}`)
   }
 
   const create = useMutation({
     mutationFn: async () => {
       // Attachment is optional — a text-only announcement is fine (user
-      // feedback 2026-07-12).
-      const attachment = attachFile ? await uploadAttachment(attachFile) : null
+      // feedback 2026-07-12). Reuse the cached upload from "ดึงข้อความจาก
+      // ไฟล์" if the admin already used it for this exact file, instead of
+      // uploading the same file to Storage a second time.
+      const attachment = uploadedAttachment && uploadedAttachment.file === attachFile
+        ? { url: uploadedAttachment.url, type: uploadedAttachment.type, name: uploadedAttachment.name }
+        : attachFile ? await uploadAttachment(attachFile) : null
 
       const res = await fetch('/api/hr/announcements', {
         method: 'POST',
@@ -263,6 +354,10 @@ export default function HrAnnouncementsPage() {
   })
 
   const onFileChange = async (file: File | null) => {
+    // A new/removed file invalidates any cached upload from a previous
+    // "ดึงข้อความจากไฟล์" click — otherwise submit could silently attach the
+    // OLD file's already-uploaded URL instead of the newly picked file.
+    setUploadedAttachment(null)
     if (!file) {
       setAttachFile(null); setAttachPreview(null); setSizeInfo(null)
       return
@@ -275,6 +370,43 @@ export default function HrAnnouncementsPage() {
       setSizeInfo(processed.size < file.size ? { before: file.size, after: processed.size } : null)
     } finally {
       setCompressing(false)
+    }
+  }
+
+  // Extract-text-from-attachment: uploads the file (reusing the cache if
+  // already uploaded) then asks the server to pull its text content, which
+  // lands in the เนื้อหา box for the admin to review/edit — never sent
+  // automatically. .docx extracts reliably; PDF only works if it's a real
+  // text PDF, not a scanned image (best-effort, per user approval "ต้องตรวจ
+  // อยู่ก่อนกดส่ง").
+  const extractText = async () => {
+    if (!attachFile) return
+    setExtracting(true)
+    try {
+      let uploaded = uploadedAttachment && uploadedAttachment.file === attachFile ? uploadedAttachment : null
+      if (!uploaded) {
+        const att = await uploadAttachment(attachFile)
+        uploaded = { file: attachFile, ...att }
+        setUploadedAttachment(uploaded)
+      }
+      const res = await fetch('/api/hr/announcements/extract-text', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: uploaded.url, type: uploaded.type }),
+      })
+      const json = await safeJson(res)
+      if (!res.ok) throw new Error(json?.error || `ดึงข้อความไม่สำเร็จ (${res.status})`)
+      const text = String(json?.data?.text ?? '').trim()
+      if (!text) {
+        toast.error('ไม่พบข้อความในไฟล์นี้', 'ไฟล์อาจเป็น PDF ที่สแกนจากกระดาษ (รูปภาพ) ลองพิมพ์เองแทน')
+        return
+      }
+      setBody(prev => prev.trim() ? `${prev}\n\n---\n${text}` : text)
+      toast.success('ดึงข้อความจากไฟล์แล้ว', 'กรุณาตรวจสอบและแก้ไขเนื้อหาก่อนเผยแพร่')
+    } catch (e) {
+      toast.error('ดึงข้อความไม่สำเร็จ', e instanceof Error ? e.message : 'เกิดข้อผิดพลาด')
+    } finally {
+      setExtracting(false)
     }
   }
 
@@ -336,6 +468,30 @@ export default function HrAnnouncementsPage() {
       {showForm && (
         <div className="card card-body space-y-4">
           <h3 className="text-sm font-medium text-gray-700">สร้างประกาศใหม่</h3>
+
+          <div>
+            <label className="form-label">รูปแบบสำเร็จรูป (ไม่บังคับ)</label>
+            <select
+              value={patternKey}
+              onChange={e => applyPattern(e.target.value)}
+              className="form-input"
+            >
+              <option value="">-- เลือกเพื่อเติมคำขึ้นต้น/ลงท้ายให้อัตโนมัติ --</option>
+              <optgroup label="ประกาศ (ทางการ)">
+                {PATTERNS.filter(p => p.group === 'ประกาศ').map(p => (
+                  <option key={p.key} value={p.key}>{p.label}</option>
+                ))}
+              </optgroup>
+              <optgroup label="ประชาสัมพันธ์">
+                {PATTERNS.filter(p => p.group === 'ประชาสัมพันธ์').map(p => (
+                  <option key={p.key} value={p.key}>{p.label}</option>
+                ))}
+              </optgroup>
+            </select>
+            <p className="text-xs text-gray-400 mt-1">
+              เลือกแล้วแก้ไขข้อความต่อได้ตามปกติ — ไม่ได้บังคับใช้ ไม่มีผลต่อการบันทึก
+            </p>
+          </div>
 
           <div>
             <label className="form-label">หัวข้อ *</label>
@@ -425,6 +581,18 @@ export default function HrAnnouncementsPage() {
                   <p className="mt-1.5 text-xs text-emerald-600">
                     บีบอัดรูปจาก {formatBytes(sizeInfo.before)} เหลือ {formatBytes(sizeInfo.after)}
                   </p>
+                )}
+                {EXTRACTABLE_TYPES.has(attachFile.type) && (
+                  <button
+                    type="button"
+                    onClick={extractText}
+                    disabled={extracting}
+                    className="mt-2 flex items-center gap-1.5 text-xs text-blue-700 hover:underline disabled:opacity-50"
+                  >
+                    {extracting
+                      ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> กำลังดึงข้อความจากไฟล์...</>
+                      : <><FileText className="w-3.5 h-3.5" /> ดึงข้อความจากไฟล์นี้มาใส่ในเนื้อหา</>}
+                  </button>
                 )}
               </div>
             )}

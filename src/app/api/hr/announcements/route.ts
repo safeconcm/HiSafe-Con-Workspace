@@ -170,6 +170,11 @@ export async function POST(req: NextRequest) {
         body,
         reference_id: inserted.id,
         reference_type: 'announcement',
+        // 2026-07-13: joint (both-company) announcement reads as sent by
+        // "CONNEX" rather than either individual company. Still 2 separate
+        // emails (one per company's own SMTP domain) — only the displayed
+        // brand name/from-name changes, not the legal footer.
+        sender_display_name: companyIds.length > 1 ? 'CONNEX' : undefined,
       })
     }
   } catch (err) {

@@ -31,6 +31,14 @@ export async function sendCompanyEmail(params: {
   // <img src="https://..."> link, which some mail clients block by default
   // until the user clicks "show images". Added 2026-07-12 per user request.
   attachments?: { filename: string; content: Buffer; cid: string }[]
+  // Overrides the display name shown as the sender, without touching the
+  // company's own smtp_from_name setting in the database (that setting is
+  // shared across every email type this company sends — leave/OT/timesheet
+  // included — so it must never be mutated for a one-off send). Added
+  // 2026-07-13 for joint (both-company) announcements, which should read as
+  // sent by "CONNEX" rather than either individual company. Omit for every
+  // other call site — behavior is byte-for-byte identical to before.
+  fromNameOverride?: string
 }): Promise<{ ok: boolean; error?: string }> {
   const supabase = adminClient()
   const { data: company, error } = await supabase
@@ -53,7 +61,7 @@ export async function sendCompanyEmail(params: {
     })
 
     await transporter.sendMail({
-      from: `"${company.smtp_from_name ?? 'CONNEX'}" <${company.smtp_from}>`,
+      from: `"${params.fromNameOverride ?? company.smtp_from_name ?? 'CONNEX'}" <${company.smtp_from}>`,
       to: params.to,
       subject: params.subject,
       html: params.html,

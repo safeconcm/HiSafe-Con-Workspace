@@ -343,6 +343,16 @@ export async function dispatchNotifications(params: {
   body: string
   reference_id?: string
   reference_type?: string
+  // 2026-07-13: for a joint (both-company) announcement, the email should
+  // read as sent by "CONNEX" instead of either individual company's own
+  // legal name. Optional and omitted by every other call site (leave/OT/
+  // timesheet/inquiries/etc.) — those keep their exact previous behavior
+  // untouched. Only overrides the friendly brand line shown near the top of
+  // the email and the "from" display name; the legal footer (address/tax
+  // id/phone) always stays the real sending company's own info, since the
+  // email is still literally sent from that company's SMTP domain — see
+  // the "จัดการอัปเดต" consultation thread for why this split was chosen.
+  sender_display_name?: string
 }) {
   const supabase = createAdminSupabaseClient()
 
@@ -453,6 +463,11 @@ export async function dispatchNotifications(params: {
       // to also double as the body thumbnail for leave/OT/timesheet before
       // there was a header at all).
       const emailBodyImage = params.event_type === 'announcement' ? announcementImageUrl : null
+      // Friendly brand line shown right under the logo — "CONNEX" for joint
+      // (both-company) announcements, the real company name otherwise. The
+      // footer further down intentionally keeps the real company's legal
+      // name/address/tax id regardless (2026-07-13 decision).
+      const brandName = params.sender_display_name ?? (company?.legal_name_th ?? '')
       const emailTitle = params.event_type === 'announcement'
         ? params.title.replace(/^\[ประกาศ\]\s*/, '')
         : cardMeta?.title ?? params.title
@@ -502,10 +517,11 @@ export async function dispatchNotifications(params: {
         to: user.email,
         subject: params.title,
         attachments: attachments.length ? attachments : undefined,
+        fromNameOverride: params.sender_display_name,
         html: `
           <div style="font-family:-apple-system,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;color:#1f2937;">
             ${logoTag}
-            <div style="font-size:13px;color:#6b7280;margin-bottom:16px;">${escapeHtml(company?.legal_name_th ?? '')}</div>
+            <div style="font-size:13px;color:#6b7280;margin-bottom:16px;">${escapeHtml(brandName)}</div>
             <p style="font-size:14px;margin:0 0 12px;">เรียน ${escapeHtml(greetingName)}</p>
             <h2 style="margin:0 0 12px;font-size:18px;">${escapeHtml(emailTitle)}</h2>
             ${thumbnailTag}

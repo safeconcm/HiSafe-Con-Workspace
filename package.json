@@ -29,6 +29,7 @@
     "date-fns": "^4.4.0",
     "exceljs": "^4.4.0",
     "lucide-react": "^1.21.0",
+    "mammoth": "^1.8.0",
     "next": "16.2.9",
     "nodemailer": "^6.9.16",
     "puppeteer-core": "^23.11.1",
