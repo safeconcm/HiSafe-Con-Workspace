@@ -22,6 +22,9 @@ interface LeaveListParams {
   // supervisor's own submitted leave never shows up in their own approval
   // queue.
   approverOnly?: boolean
+  // HR's 2nd-step check queue (2026-07-14) — 'pending' | 'done'. See hr_check
+  // comment in src/app/api/leave/route.ts.
+  hrCheck?: 'pending' | 'done'
 }
 
 interface CreateLeaveBody {
@@ -32,6 +35,10 @@ interface CreateLeaveBody {
   half_day_period?: 'morning' | 'afternoon'
   reason?: string
   attachment_url?: string
+  // 2026-07-14: paper-form fields ("ใบลา") — all optional.
+  place_written?: string
+  medical_cert_provided?: boolean
+  contact_during_leave?: string
 }
 
 // ── Fetchers ─────────────────────────────────────────────────
@@ -46,6 +53,7 @@ async function fetchLeaves(params: LeaveListParams) {
   if (params.user_id)    qs.set('user_id',    params.user_id)
   if (params.ownOnly)      qs.set('own_only',      '1')
   if (params.approverOnly) qs.set('approver_only', '1')
+  if (params.hrCheck)      qs.set('hr_check',      params.hrCheck)
 
   const res  = await fetch(`/api/leave?${qs}`)
   const json = await res.json()
@@ -165,6 +173,29 @@ export function useRejectLeave() {
       qc.invalidateQueries({ queryKey: ['leaves'] })
       qc.invalidateQueries({ queryKey: ['leave', id] })
       toast.success('ปฏิเสธใบลาแล้ว')
+    },
+    onError: (err: Error) => toast.error('เกิดข้อผิดพลาด', err.message),
+  })
+}
+
+// HR's 2nd-step check/acknowledgment — 2026-07-14. See LeaveHRCheckPanel.
+export function useHRCheckLeave() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, comment }: { id: string; comment?: string }) => {
+      const res  = await fetch(`/api/leave/${id}/hr-check`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comment }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Failed')
+      return json.data
+    },
+    onSuccess: (_, { id }) => {
+      qc.invalidateQueries({ queryKey: ['leaves'] })
+      qc.invalidateQueries({ queryKey: ['leave', id] })
+      toast.success('บันทึกการตรวจสอบแล้ว')
     },
     onError: (err: Error) => toast.error('เกิดข้อผิดพลาด', err.message),
   })

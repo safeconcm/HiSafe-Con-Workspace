@@ -189,13 +189,16 @@ export async function DELETE(req: NextRequest, ctx: Ctx) {
         }
       }
     }
-  } else if (existing.status === 'approved') {
-    // Need re-approval for cancellation
-    await supabase.from('leave_requests').update({
-      status: 'cancel_pending', cancel_reason,
-    }).eq('id', params.id)
   } else {
-    return badRequest('ไม่สามารถยกเลิกใบลาในสถานะนี้ได้')
+    // 2026-07-14: once the supervisor has approved, self-service cancel is
+    // blocked entirely — same payroll-safety reasoning as the Timesheet
+    // cancel button (only 'submitted'/pending covered there too). This
+    // replaces the old 'cancel_pending' re-approval flow, which had a
+    // latent bug anyway (current_approver_id is nulled out at approval time,
+    // so there was no one left assigned to approve the cancellation). No new
+    // 'cancel_pending' rows will be created going forward; any pre-existing
+    // ones are left untouched.
+    return badRequest('ใบลาที่หัวหน้างานอนุมัติแล้วไม่สามารถยกเลิกได้ กรุณาติดต่อ HR หากต้องการยกเลิก')
   }
 
   await writeAuditLog({

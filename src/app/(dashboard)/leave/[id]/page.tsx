@@ -4,6 +4,7 @@ import { useParams, useRouter } from 'next/navigation'
 import { useLeave, useCancelLeave } from '@/hooks/useLeave'
 import { LeaveStatusBadge, LeaveTypeBadge } from '@/components/leave/LeaveStatusBadge'
 import { LeaveApprovalPanel }              from '@/components/leave/LeaveApprovalPanel'
+import { LeaveHRCheckPanel }               from '@/components/leave/LeaveHRCheckPanel'
 import { LeaveSignatureSection }          from '@/components/leave/LeaveSignatureSection'
 import { LeaveTimeline }                   from '@/components/leave/LeaveTimeline'
 import {
@@ -14,22 +15,23 @@ import { ArrowLeft, Download, Loader2, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { useState } from 'react'
 
-// Get current user id from session cookie (client-side)
-function useCurrentUserId(): string {
-  if (typeof window === 'undefined') return ''
+// Get current user id + role from session cookie (client-side)
+function useCurrentUser(): { id: string; role: string } {
+  if (typeof window === 'undefined') return { id: '', role: '' }
   try {
     const raw = document.cookie.split('; ').find(r => r.startsWith('connex_session='))
-    if (!raw) return ''
+    if (!raw) return { id: '', role: '' }
     const session = JSON.parse(decodeURIComponent(raw.split('=').slice(1).join('=')))
-    return session?.id ?? ''
-  } catch { return '' }
+    return { id: session?.id ?? '', role: session?.role ?? '' }
+  } catch { return { id: '', role: '' } }
 }
 
 export default function LeaveDetailPage() {
   const params        = useParams()
   const router        = useRouter()
   const id            = params.id as string
-  const currentUserId = useCurrentUserId()
+  const { id: currentUserId, role: currentUserRole } = useCurrentUser()
+  const isHROrAdmin   = currentUserRole === 'hr' || currentUserRole === 'admin'
   const [confirmCancel, setConfirmCancel] = useState(false)
 
   const { data, isLoading, refetch } = useLeave(id)
@@ -50,8 +52,11 @@ export default function LeaveDetailPage() {
   )
 
   const leave    = data
+  // 2026-07-14: once the supervisor has approved, cancel is no longer
+  // self-service (see DELETE /api/leave/:id) — same rule as Timesheet's
+  // cancel button.
   const canCancel = leave.user_id === currentUserId &&
-    ['draft', 'pending', 'approved'].includes(leave.status)
+    ['draft', 'pending'].includes(leave.status)
 
   const handleCancel = async () => {
     await cancel.mutateAsync({ id })
@@ -151,6 +156,15 @@ export default function LeaveDetailPage() {
         onDone={() => refetch()}
       />
 
+      {/* HR check panel (2nd step, after supervisor approval) */}
+      <LeaveHRCheckPanel
+        leaveId={id}
+        status={leave.status}
+        hrCheckedAt={leave.hr_checked_at ?? null}
+        isHROrAdmin={isHROrAdmin}
+        onDone={() => refetch()}
+      />
+
       {/* Approval timeline */}
       {(leave.approvals?.length > 0 || leave.status === 'pending') && (
         <div className="card">
@@ -188,11 +202,7 @@ export default function LeaveDetailPage() {
               </button>
             ) : (
               <div className="space-y-3">
-                <p className="text-sm text-gray-700">
-                  {leave.status === 'approved'
-                    ? 'ใบลาที่อนุมัติแล้วจะต้องรอหัวหน้างานยืนยันการยกเลิกอีกครั้ง'
-                    : 'ยืนยันการยกเลิกใบลานี้?'}
-                </p>
+                <p className="text-sm text-gray-700">ยืนยันการยกเลิกใบลานี้?</p>
                 <div className="flex gap-2">
                   <button
                     onClick={() => setConfirmCancel(false)}

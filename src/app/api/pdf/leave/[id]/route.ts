@@ -36,6 +36,9 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       approved_by:users!leave_requests_approved_by_id_fkey(
         first_name_th, last_name_th
       ),
+      hr_checked_by:users!leave_requests_hr_checked_by_id_fkey(
+        first_name_th, last_name_th
+      ),
       approvals:leave_approvals(
         action, comment, approver_name, acted_at,
         approver:users!leave_approvals_approver_id_fkey(first_name_th, last_name_th)
@@ -69,10 +72,42 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     return `data:image/png;base64,${buf.toString('base64')}`
   }
 
-  const [employeeSigUri, approverSigUri] = await Promise.all([
+  const [employeeSigUri, approverSigUri, hrSigUri] = await Promise.all([
     signatureDataUri(leave.signature_employee_url ?? null),
     signatureDataUri(leave.signature_approver_url ?? null),
+    signatureDataUri(leave.signature_hr_url ?? null),
   ])
+
+  // 2026-07-14: "สถิติการลาในปีนี้" stats table — the 4 types shown on the
+  // paper form (maternity isn't on the paper form, so it's excluded here).
+  // "ลามาแล้ว" backs out this request's own days from used_days for its own
+  // type (only meaningful once status is 'approved', since used_days only
+  // reflects this request after approval — see /api/leave/[id]/approve).
+  const leaveYear = new Date(leave.start_date).getFullYear()
+  const { data: balanceRows } = await supabase
+    .from('leave_balances')
+    .select('leave_type, used_days')
+    .eq('user_id', leave.user_id)
+    .eq('year', leaveYear)
+
+  const STATS_TYPES: { type: string; th: string }[] = [
+    { type: 'sick',     th: 'ป่วย' },
+    { type: 'personal', th: 'กิจส่วนตัว' },
+    { type: 'annual',   th: 'ลาพักร้อน' },
+    { type: 'other',    th: 'อื่นๆ' },
+  ]
+  const balanceStats = STATS_TYPES.map(({ type, th }) => {
+    const usedDays = (balanceRows ?? []).find((b: any) => b.leave_type === type)?.used_days ?? 0
+    const isThisType = type === leave.leave_type
+    const thisTime = isThisType ? Number(leave.total_days) : 0
+    const usedBefore = isThisType && leave.status === 'approved'
+      ? Math.max(Number(usedDays) - thisTime, 0)
+      : Number(usedDays)
+    return {
+      leave_type: type, leave_type_th: th,
+      used_before: usedBefore, this_time: thisTime, total: usedBefore + thisTime,
+    }
+  })
 
   const templateData: LeaveTemplateData = {
     company: {
@@ -105,17 +140,27 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       reason:          leave.reason,
       status:          leave.status,
       created_at:      leave.created_at,
+      place_written:          leave.place_written ?? null,
+      contact_during_leave:   leave.contact_during_leave ?? null,
+      medical_cert_provided:  leave.medical_cert_provided ?? null,
     },
     approver: leave.approved_by ? {
       first_name_th: (leave.approved_by as any).first_name_th,
       last_name_th:  (leave.approved_by as any).last_name_th,
       approved_at:   leave.approved_at,
     } : null,
+    hrChecker: leave.hr_checked_by ? {
+      first_name_th: (leave.hr_checked_by as any).first_name_th,
+      last_name_th:  (leave.hr_checked_by as any).last_name_th,
+      checked_at:    leave.hr_checked_at,
+    } : null,
     signatures: {
       employee_url: employeeSigUri,
       employee_at:  leave.signature_employee_at ?? null,
       approver_url: approverSigUri,
       approver_at:  leave.signature_approver_at  ?? null,
+      hr_url:       hrSigUri,
+      hr_at:        leave.hr_checked_at ?? null,
     },
     approvals: ((leave.approvals as any[]) ?? []).map(ap => ({
       action:        ap.action,
@@ -125,6 +170,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       comment:       ap.comment,
       acted_at:      ap.acted_at,
     })).sort((a: any, b: any) => new Date(a.acted_at).getTime() - new Date(b.acted_at).getTime()),
+    balanceStats,
   }
 
   const html = generateLeaveHTML(templateData, appUrl)

@@ -48,6 +48,12 @@ export async function GET(req: NextRequest) {
   // queue, since that clause's user_id branch matches regardless of who's
   // actually assigned to approve it (bug reported 2026-07-12, SC-002).
   const approverOnly = searchParams.get('approver_only') === '1'
+  // HR's 2nd-step check queue (2026-07-14) — "pending" = supervisor already
+  // approved but HR hasn't checked yet; "done" = HR has. Independent of the
+  // `status` filter above (both describe status='approved' requests, split
+  // by hr_checked_at instead of status, since status itself never changes
+  // for this step — see hr-check route's comment for why).
+  const hrCheck   = searchParams.get('hr_check')  // 'pending' | 'done'
   const from      = (page - 1) * limit
 
   const supabase  = createAdminSupabaseClient()
@@ -125,6 +131,8 @@ export async function GET(req: NextRequest) {
   if (status)    query = query.eq('status', status)
   if (leaveType) query = query.eq('leave_type', leaveType)
   if (year)      query = query.gte('start_date', `${year}-01-01`).lte('end_date', `${year}-12-31`)
+  if (hrCheck === 'pending') query = query.eq('status', 'approved').is('hr_checked_at', null)
+  else if (hrCheck === 'done') query = query.eq('status', 'approved').not('hr_checked_at', 'is', null)
 
   const { data, count, error } = await query
   if (error) return serverError(error)
@@ -140,7 +148,12 @@ export async function POST(req: NextRequest) {
   let body: any
   try { body = await req.json() } catch { return badRequest('Invalid JSON') }
 
-  const { leave_type, start_date, end_date, is_half_day, half_day_period, reason, attachment_url } = body
+  const {
+    leave_type, start_date, end_date, is_half_day, half_day_period, reason, attachment_url,
+    // 2026-07-14: paper-form fields ("ใบลา") — all optional, purely
+    // additive to the existing required fields above.
+    place_written, medical_cert_provided, contact_during_leave,
+  } = body
 
   if (!leave_type || !start_date || !end_date) {
     return badRequest('leave_type, start_date, end_date are required')
@@ -239,6 +252,9 @@ export async function POST(req: NextRequest) {
       attachment_url:      attachment_url ?? null,
       current_approver_id: approverId ?? null,   // NULL = CEO → auto-approve
       is_unpaid:           isUnpaid,
+      place_written:          place_written ?? null,
+      medical_cert_provided:  leave_type === 'sick' ? (medical_cert_provided ?? null) : null,
+      contact_during_leave:   contact_during_leave ?? null,
       signature_employee_url: signer?.signature_url ?? null,
       signature_employee_at:  signer?.signature_url ? new Date().toISOString() : null,
     })

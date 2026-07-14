@@ -33,23 +33,44 @@ export interface LeaveTemplateData {
     reason:          string | null
     status:          string
     created_at:      string
+    // 2026-07-14: official paper "ใบลา" form fields
+    place_written?:         string | null
+    contact_during_leave?:  string | null
+    medical_cert_provided?: boolean | null
   }
   approver?: {
     first_name_th: string
     last_name_th:  string
     approved_at:   string | null
   } | null
+  // 2026-07-14: HR's 2nd-step check — mirrors the paper form's "ผู้ตรวจสอบ"
+  // block, separate from the supervisor's "ความเห็นของผู้บังคับบัญชา" block.
+  hrChecker?: {
+    first_name_th: string
+    last_name_th:  string
+    checked_at:    string | null
+  } | null
   signatures?: {
     employee_url?:  string | null
     employee_at?:   string | null
     approver_url?:  string | null
     approver_at?:   string | null
+    hr_url?:        string | null
+    hr_at?:         string | null
   }
   approvals: {
     action:        string
     approver_name: string | null
     comment:       string | null
     acted_at:      string
+  }[]
+  // 2026-07-14: "สถิติการลาในปีนี้" table on the paper form
+  balanceStats?: {
+    leave_type:    string
+    leave_type_th: string
+    used_before:   number
+    this_time:     number
+    total:         number
   }[]
 }
 
@@ -227,11 +248,25 @@ export function generateLeaveHTML(data: LeaveTemplateData, appUrl: string): stri
   .approval-action-rejected { color: #dc2626; font-weight: 600; }
   .approval-time { font-size: 9px; color: #888; margin-top: 1px; }
   .approval-comment { font-size: 10px; color: #555; margin-top: 2px; font-style: italic; }
+  /* Stats table ("สถิติการลาในปีนี้") */
+  .stats-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+  .stats-table th, .stats-table td {
+    border: 1px solid #e2e8f0;
+    padding: 4px 8px;
+    text-align: center;
+  }
+  .stats-table th { background: #eff6ff; color: #1e3a8a; font-weight: 600; }
+  .stats-table td:first-child { text-align: left; color: #374151; }
+  .stats-table tr.stats-row-active td { background: #fffbeb; font-weight: 600; }
   /* Signature section */
   .signature-section {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
     margin-top: 14px;
     border-top: 1px solid #e5e7eb;
     padding-top: 10px;
@@ -367,7 +402,47 @@ export function generateLeaveHTML(data: LeaveTemplateData, appUrl: string): stri
       <div class="info-label" style="margin-bottom:6px;">เหตุผลการลา</div>
       <div class="reason-box">${data.leave.reason ?? '(ไม่ระบุเหตุผล)'}</div>
     </div>
+
+    <!-- 2026-07-14: paper-form fields -->
+    <div class="info-grid" style="margin-top:8px;">
+      <div class="info-row">
+        <span class="info-label">เขียนที่</span>
+        <span class="info-value">${data.leave.place_written ?? '—'}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">ติดต่อได้ที่/เบอร์โทร</span>
+        <span class="info-value">${data.leave.contact_during_leave ?? '—'}</span>
+      </div>
+      ${data.leave.leave_type === 'sick' ? `
+      <div class="info-row">
+        <span class="info-label">ใบรับรองแพทย์</span>
+        <span class="info-value">${data.leave.medical_cert_provided ? 'มี' : 'ไม่มี'}</span>
+      </div>
+      ` : ''}
+    </div>
   </div>
+
+  <!-- Leave balance stats ("สถิติการลาในปีนี้") -->
+  ${data.balanceStats?.length ? `
+  <div class="section">
+    <div class="section-title">สถิติการลาในปีนี้</div>
+    <table class="stats-table">
+      <thead>
+        <tr><th>ประเภทลา</th><th>ลามาแล้ว</th><th>ลาครั้งนี้</th><th>รวมเป็น</th></tr>
+      </thead>
+      <tbody>
+        ${data.balanceStats.map(s => `
+        <tr class="${s.leave_type === data.leave.leave_type ? 'stats-row-active' : ''}">
+          <td>${s.leave_type_th}</td>
+          <td>${s.used_before}</td>
+          <td>${s.this_time}</td>
+          <td>${s.total}</td>
+        </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  </div>
+  ` : ''}
 
   <!-- Approval History -->
   ${data.approvals.length > 0 ? `
@@ -407,9 +482,9 @@ export function generateLeaveHTML(data: LeaveTemplateData, appUrl: string): stri
   <!-- Self-service e-signature: each signature image is whoever's own saved
        signature (Profile > ลายเซ็นดิจิทัลของฉัน), auto-attached the moment
        they acted — submitting for the employee box, approving for the
-       approver box. Neither is a separate manual signing step, and there is
-       no distinct "HR" signer anymore: the approver box always reflects
-       whoever actually approved (could be a supervisor, HR, or admin). -->
+       supervisor box. 2026-07-14: a real 3rd "ผู้ตรวจสอบ" (HR) box was
+       added back — HR's check is now a genuine 2nd approval step, separate
+       from whoever approved as supervisor (see hr-check route). -->
   <div class="signature-section">
     <div class="sig-box">
       ${data.signatures?.employee_url
@@ -425,9 +500,9 @@ export function generateLeaveHTML(data: LeaveTemplateData, appUrl: string): stri
     </div>
     <div class="sig-box">
       ${data.signatures?.approver_url
-        ? `<div class="sig-image"><img src="${data.signatures.approver_url}" alt="ลายเซ็นผู้อนุมัติ" /></div>`
+        ? `<div class="sig-image"><img src="${data.signatures.approver_url}" alt="ลายเซ็นผู้บังคับบัญชา" /></div>`
         : `<div class="sig-line"></div>`}
-      <div class="sig-label">ลงชื่อผู้อนุมัติ</div>
+      <div class="sig-label">ความเห็นของผู้บังคับบัญชา</div>
       <div class="sig-name">${
         data.approver
           ? `${data.approver.first_name_th} ${data.approver.last_name_th}`
@@ -438,6 +513,26 @@ export function generateLeaveHTML(data: LeaveTemplateData, appUrl: string): stri
           ? (data.signatures?.approver_at
               ? `เซ็นดิจิทัล ${formatThaiDate(data.signatures.approver_at)}`
               : `วันที่ ${formatThaiDate(data.approver.approved_at)}`)
+          : '&nbsp;'
+      }</div>
+    </div>
+    <!-- 2026-07-14: HR's 2nd-step check block — "ผู้ตรวจสอบ" on the paper
+         form, separate from the supervisor's block above. -->
+    <div class="sig-box">
+      ${data.signatures?.hr_url
+        ? `<div class="sig-image"><img src="${data.signatures.hr_url}" alt="ลายเซ็นผู้ตรวจสอบ" /></div>`
+        : `<div class="sig-line"></div>`}
+      <div class="sig-label">ผู้ตรวจสอบ</div>
+      <div class="sig-name">${
+        data.hrChecker
+          ? `${data.hrChecker.first_name_th} ${data.hrChecker.last_name_th}`
+          : '...................................'
+      }</div>
+      <div class="sig-date">${
+        data.hrChecker?.checked_at
+          ? (data.signatures?.hr_at
+              ? `เซ็นดิจิทัล ${formatThaiDate(data.signatures.hr_at)}`
+              : `วันที่ ${formatThaiDate(data.hrChecker.checked_at)}`)
           : '&nbsp;'
       }</div>
     </div>

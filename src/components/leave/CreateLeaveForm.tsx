@@ -19,6 +19,10 @@ const schema = z.object({
   is_half_day:     z.boolean(),
   half_day_period: z.enum(['morning', 'afternoon']).optional(),
   reason:          z.string().optional(),
+  // 2026-07-14: paper-form fields ("ใบลา") — all optional.
+  place_written:          z.string().optional(),
+  medical_cert_provided:  z.boolean().optional(),
+  contact_during_leave:   z.string().optional(),
 }).refine(d => new Date(d.end_date) >= new Date(d.start_date), {
   message: 'วันสิ้นสุดต้องไม่ก่อนวันเริ่มต้น',
   path: ['end_date'],
@@ -194,6 +198,46 @@ export function CreateLeaveForm() {
           className="form-input resize-none"
           placeholder="ระบุเหตุผลการลา (ถ้ามี)"
         />
+      </div>
+
+      {/* Medical certificate — sick leave only. 2026-07-14, per official
+          "ใบลา" paper form's "ใบรับรองแพทย์ มี/ไม่มี" checkbox. */}
+      {leaveType === 'sick' && (
+        <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+          <input
+            id="medical_cert_provided"
+            type="checkbox"
+            {...register('medical_cert_provided')}
+            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+          />
+          <label htmlFor="medical_cert_provided" className="text-sm font-medium text-gray-700 cursor-pointer">
+            มีใบรับรองแพทย์แนบมาด้วย
+          </label>
+        </div>
+      )}
+
+      {/* เขียนที่ / ติดต่อได้ที่ระหว่างลา — 2026-07-14, paper-form fields */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label htmlFor="place_written" className="form-label">เขียนที่</label>
+          <input
+            id="place_written"
+            type="text"
+            {...register('place_written')}
+            className="form-input"
+            placeholder="เช่น สำนักงานใหญ่"
+          />
+        </div>
+        <div>
+          <label htmlFor="contact_during_leave" className="form-label">ติดต่อได้ที่ / เบอร์โทรระหว่างลา</label>
+          <input
+            id="contact_during_leave"
+            type="text"
+            {...register('contact_during_leave')}
+            className="form-input"
+            placeholder="ที่อยู่หรือเบอร์โทรติดต่อระหว่างลา (ถ้ามี)"
+          />
+        </div>
       </div>
 
       {/* Error */}

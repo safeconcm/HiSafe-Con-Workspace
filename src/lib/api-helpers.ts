@@ -325,6 +325,13 @@ const CARD_META: Record<string, { title: string; linkLabel: string }> = {
   timesheet_approved:  { title: 'Timesheet อนุมัติแล้ว',    linkLabel: 'ดู Timesheet' },
   timesheet_rejected:  { title: 'Timesheet ไม่ได้รับอนุมัติ', linkLabel: 'ดู Timesheet' },
   timesheet_cancelled: { title: 'Timesheet ถูกยกเลิกโดยผู้ส่ง', linkLabel: 'ดู Timesheet' },
+  // 2026-07-14: 2nd approval step — HR checks/acknowledges a leave request
+  // AFTER the supervisor has already approved it (status stays 'approved'
+  // the whole time; this is just a parallel administrative sign-off, see
+  // hr_checked_at on leave_requests). Not added to LINE_NOTIFY_EVENTS below
+  // — this is a formality step for the employee's own records, doesn't need
+  // a phone push like the supervisor's decision does.
+  leave_hr_checked:    { title: 'ใบลาผ่านการตรวจสอบจาก HR แล้ว', linkLabel: 'ดูใบลา' },
 }
 
 // Maps a company code to its logo file under public/logos/ — the only real

@@ -79,6 +79,19 @@ export default async function DashboardPage() {
     pendingTsCount = tc ?? 0
   }
 
+  // HR's 2nd-step check queue (2026-07-14) — approved by supervisor, not
+  // yet checked by HR. See hr_check comment in src/app/api/leave/route.ts.
+  let pendingHRCheckCount = 0
+  if (['hr', 'admin'].includes(me.role)) {
+    const { count: hc } = await admin
+      .from('leave_requests')
+      .select('id', { count: 'exact', head: true })
+      .eq('company_id', me.company_id)
+      .eq('status', 'approved')
+      .is('hr_checked_at', null)
+    pendingHRCheckCount = hc ?? 0
+  }
+
   type BalanceRow = { leave_type: string; quota_days: number; carried_forward: number; adjusted_days: number; used_days: number; pending_days: number }
   const annualBalance   = balances?.find((b: BalanceRow) => b.leave_type === 'annual')
   const sickBalance     = balances?.find((b: BalanceRow) => b.leave_type === 'sick')
@@ -124,6 +137,19 @@ export default async function DashboardPage() {
                 Timesheet {pendingTsCount} รายการ
               </Link>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* HR check queue banner (2nd approval step, 2026-07-14) */}
+      {pendingHRCheckCount > 0 && (
+        <div className="rounded-xl bg-blue-50 border border-blue-200 p-4 flex items-center gap-3">
+          <ClipboardList className="w-5 h-5 text-blue-600 shrink-0" />
+          <div className="text-sm text-blue-800">
+            มีใบลารอ HR ตรวจสอบ:
+            <Link href="/hr/leave" className="ml-1 font-medium underline">
+              {pendingHRCheckCount} รายการ
+            </Link>
           </div>
         </div>
       )}

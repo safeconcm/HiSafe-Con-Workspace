@@ -17,10 +17,14 @@ const LEAVE_TYPES: { label: string; value: string }[] = [
 ]
 
 const STATUS_FILTERS = [
-  { label: 'ทั้งหมด',     value: ''          },
-  { label: 'รออนุมัติ',  value: 'pending'   },
-  { label: 'อนุมัติแล้ว', value: 'approved'  },
-  { label: 'ไม่อนุมัติ',  value: 'rejected'  },
+  { label: 'ทั้งหมด',        value: ''          },
+  { label: 'รออนุมัติ',     value: 'pending'   },
+  { label: 'อนุมัติแล้ว',    value: 'approved'  },
+  { label: 'ไม่อนุมัติ',     value: 'rejected'  },
+  // 2026-07-14: HR's 2nd-step check queue — not a real `status` value (see
+  // hr_check comment in src/app/api/leave/route.ts), handled separately
+  // below rather than through the normal status filter.
+  { label: 'รอ HR ตรวจสอบ', value: 'hr_pending' },
 ]
 
 export default function HRLeavePage() {
@@ -29,8 +33,11 @@ export default function HRLeavePage() {
   const [year,      setYear]      = useState(new Date().getFullYear())
   const [page,      setPage]      = useState(1)
 
+  const isHRPendingTab = status === 'hr_pending'
+
   const { data, isLoading } = useLeaves({
-    status:     status     || undefined,
+    status:     (!isHRPendingTab && status) || undefined,
+    hrCheck:    isHRPendingTab ? 'pending' : undefined,
     leave_type: leaveType  || undefined,
     year,
     page,
@@ -45,7 +52,11 @@ export default function HRLeavePage() {
     const qs = new URLSearchParams({
       format: 'excel',
       year:   String(year),
-      ...(status     && { status }),
+      // 'hr_pending' isn't a real leave_requests.status value (see
+      // hr_check comment in src/app/api/leave/route.ts) — the export
+      // endpoint doesn't understand it, so skip the status filter for that
+      // tab rather than sending a status it can't match.
+      ...(status && !isHRPendingTab && { status }),
       ...(leaveType  && { leave_type: leaveType }),
     })
     window.open(`/api/hr/leave/export?${qs}`, '_blank')
