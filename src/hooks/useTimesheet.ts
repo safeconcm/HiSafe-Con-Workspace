@@ -132,6 +132,28 @@ export function useSubmitTimesheet(tsId: string, year: number, month: number) {
   })
 }
 
+// Withdraws a submitted (pending-approval) timesheet back to draft so the
+// employee can edit and resubmit — 2026-07-13, per user request
+// ("Timesheet ควรมีกดยกเลิกได้"). Only valid from 'submitted' status; see
+// the route's own comment for why 'approved' is deliberately not covered.
+export function useCancelTimesheet(tsId: string, year: number, month: number) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async () => {
+      const res  = await fetch(`/api/timesheet/${tsId}/cancel`, { method: 'POST' })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Failed')
+      return json.data
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['timesheet', year, month] })
+      qc.invalidateQueries({ queryKey: ['timesheet-detail', tsId] })
+      toast.success('ยกเลิก Timesheet แล้ว', 'กลับไปเป็นสถานะร่าง แก้ไขและส่งใหม่ได้')
+    },
+    onError: (err: Error) => toast.error('ยกเลิกไม่สำเร็จ', err.message),
+  })
+}
+
 export function useApproveTimesheet() {
   const qc = useQueryClient()
   return useMutation({

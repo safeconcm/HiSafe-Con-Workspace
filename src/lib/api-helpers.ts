@@ -266,7 +266,7 @@ export async function writeAuditLog(params: {
 const LINE_NOTIFY_EVENTS = new Set<string>([
   'leave_submitted', 'leave_approved', 'leave_rejected',
   'ot_submitted', 'ot_approved', 'ot_rejected',
-  'timesheet_submitted', 'timesheet_approved', 'timesheet_rejected',
+  'timesheet_submitted', 'timesheet_approved', 'timesheet_rejected', 'timesheet_cancelled',
   'announcement',
   'inquiry_reply',
 ])
@@ -324,6 +324,7 @@ const CARD_META: Record<string, { title: string; linkLabel: string }> = {
   timesheet_submitted: { title: 'Timesheet ใหม่ (รออนุมัติ)', linkLabel: 'ดู Timesheet' },
   timesheet_approved:  { title: 'Timesheet อนุมัติแล้ว',    linkLabel: 'ดู Timesheet' },
   timesheet_rejected:  { title: 'Timesheet ไม่ได้รับอนุมัติ', linkLabel: 'ดู Timesheet' },
+  timesheet_cancelled: { title: 'Timesheet ถูกยกเลิกโดยผู้ส่ง', linkLabel: 'ดู Timesheet' },
 }
 
 // Maps a company code to its logo file under public/logos/ — the only real

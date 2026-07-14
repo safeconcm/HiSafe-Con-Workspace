@@ -2,7 +2,7 @@
 // src/app/(dashboard)/timesheet/[year]/[month]/page.tsx
 import { useParams, useRouter }       from 'next/navigation'
 import { useState, useRef, useCallback } from 'react'
-import { useMonthTimesheet, useSaveTimesheetLines, useSubmitTimesheet } from '@/hooks/useTimesheet'
+import { useMonthTimesheet, useSaveTimesheetLines, useSubmitTimesheet, useCancelTimesheet } from '@/hooks/useTimesheet'
 import { TimesheetGrid }              from '@/components/timesheet/TimesheetGrid'
 import { TimesheetStatusBadge }       from '@/components/timesheet/TimesheetStatusBadge'
 import { TimesheetApprovalPanel }     from '@/components/timesheet/TimesheetApprovalPanel'
@@ -10,7 +10,7 @@ import { LeaveTimeline }              from '@/components/leave/LeaveTimeline'
 import { formatMonthYearTH, cn }      from '@/utils'
 import {
   ArrowLeft, ArrowRight, Save, Send,
-  Loader2, Download, Clock, FileSpreadsheet
+  Loader2, Download, Clock, FileSpreadsheet, XCircle
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -44,6 +44,7 @@ export default function TimesheetMonthPage() {
 
   const save   = useSaveTimesheetLines(ts?.id ?? '')
   const submit = useSubmitTimesheet(ts?.id ?? '', year, month)
+  const cancel = useCancelTimesheet(ts?.id ?? '', year, month)
 
   const [submitting, setSubmitting] = useState(false)
 
@@ -165,6 +166,24 @@ export default function TimesheetMonthPage() {
             >
               {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
               ส่งอนุมัติ
+            </button>
+          )}
+          {/* Cancel/withdraw — only while waiting for approval (2026-07-13,
+              per user request "Timesheet ควรมีกดยกเลิกได้"). Reverts to
+              draft so it can be edited and resubmitted; doesn't cover an
+              already-approved timesheet (see cancel route's comment). */}
+          {ts?.status === 'submitted' && (
+            <button
+              onClick={() => {
+                if (confirm('ยกเลิกการส่งอนุมัติ Timesheet เดือนนี้? จะกลับไปเป็นสถานะร่าง แก้ไขและส่งใหม่ได้')) {
+                  cancel.mutate()
+                }
+              }}
+              disabled={cancel.isPending}
+              className="flex items-center gap-2 rounded-lg border border-red-300 text-red-600 px-4 py-2 text-sm font-medium hover:bg-red-50 disabled:opacity-60"
+            >
+              {cancel.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+              ยกเลิก
             </button>
           )}
         </div>

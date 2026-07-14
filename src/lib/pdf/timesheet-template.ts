@@ -226,7 +226,7 @@ export function generateTimesheetHTML(data: TimesheetTemplateData, appUrl: strin
   .summary-chip .l { font-size: 9px; color: #888; }
   /* Signature */
   .sig-section {
-    display: grid; grid-template-columns: 1fr 1fr 1fr;
+    display: grid; grid-template-columns: 1fr 1fr;
     gap: 16px; margin-top: 14px; padding-top: 10px; border-top: 1px solid #e5e7eb;
   }
   .sig-box { text-align: center; }
@@ -313,12 +313,6 @@ export function generateTimesheetHTML(data: TimesheetTemplateData, appUrl: strin
       <div class="sig-date">${data.timesheet.approved_at
         ? `วันที่ ${formatThaiDate(data.timesheet.approved_at)}`
         : '&nbsp;'}</div>
-    </div>
-    <div class="sig-box">
-      <div class="sig-line"></div>
-      <div class="sig-label">ลงชื่อ HR รับทราบ</div>
-      <div class="sig-name">...</div>
-      <div class="sig-date">&nbsp;</div>
     </div>
   </div>
 
