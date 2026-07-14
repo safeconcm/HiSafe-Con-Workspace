@@ -13,8 +13,37 @@ import {
 } from '@/lib/api-helpers'
 import { generateLeaveOfficialFormHTML, type LeaveOfficialFormData } from '@/lib/pdf/leave-official-form-template'
 import { renderPdfFromHtml } from '@/lib/pdf/render'
+import { PDFDocument } from 'pdf-lib'
 
 export const maxDuration = 30
+
+// A4 in pt — matches the base form's own page size (see
+// leave-official-form-template.ts's html/body width/height).
+const A4_WIDTH  = 595.32
+const A4_HEIGHT = 841.92
+
+// 2026-07-14 (part 2), item 2.4 — appends the medical certificate as an
+// extra page. A PDF cert has its own pages copied in as-is; an image cert
+// gets embedded, scaled to fit, and centered on a new A4 page.
+async function appendMedicalCertPage(basePdf: Uint8Array, certBuf: Buffer, certMime: string): Promise<Uint8Array> {
+  const doc = await PDFDocument.load(basePdf)
+
+  if (certMime === 'application/pdf') {
+    const certDoc = await PDFDocument.load(certBuf)
+    const pages = await doc.copyPages(certDoc, certDoc.getPageIndices())
+    pages.forEach(p => doc.addPage(p))
+  } else {
+    const img = certMime === 'image/png' ? await doc.embedPng(certBuf) : await doc.embedJpg(certBuf)
+    const page = doc.addPage([A4_WIDTH, A4_HEIGHT])
+    const margin = 30
+    const scale  = Math.min((A4_WIDTH - margin * 2) / img.width, (A4_HEIGHT - margin * 2) / img.height, 1)
+    const w = img.width * scale
+    const h = img.height * scale
+    page.drawImage(img, { x: (A4_WIDTH - w) / 2, y: (A4_HEIGHT - h) / 2, width: w, height: h })
+  }
+
+  return doc.save()
+}
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const params = await ctx.params
@@ -29,7 +58,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     .select(`
       *,
       user:users!leave_requests_user_id_fkey(
-        employee_code, first_name_th, last_name_th, position_th, department
+        employee_code, first_name_th, last_name_th, position_th, department, address, phone
       ),
       approved_by:users!leave_requests_approved_by_id_fkey(
         first_name_th, last_name_th, position_th
@@ -95,6 +124,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       first_name_th: (leave.user as any)?.first_name_th ?? '',
       last_name_th:  (leave.user as any)?.last_name_th  ?? '',
       position_th:   (leave.user as any)?.position_th   ?? null,
+      address:       (leave.user as any)?.address        ?? null,
+      phone:         (leave.user as any)?.phone          ?? null,
     },
     leave: {
       leave_type:            leave.leave_type,
@@ -135,7 +166,26 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     // Zero margin — the overlay coordinates were measured assuming the page
     // starts flush at (0,0), matching the background image 1:1. See
     // render.ts's opts.margin comment.
-    const pdfBuffer = await renderPdfFromHtml(html, { margin: { top: '0', bottom: '0', left: '0', right: '0' } })
+    let pdfBuffer: Uint8Array = await renderPdfFromHtml(html, { margin: { top: '0', bottom: '0', left: '0', right: '0' } })
+
+    // 2026-07-14 (part 2), item 2.4: sick leave + "มีใบรับรองแพทย์" +
+    // an actual uploaded file → append it as an extra page after the form
+    // itself, official-form PDF only (per user decision). PDFs get their
+    // pages copied in as-is; images get embedded centered on a new A4 page.
+    if (leave.leave_type === 'sick' && leave.medical_cert_provided && leave.medical_cert_url) {
+      try {
+        const { data: certBlob } = await supabase.storage.from('documents').download(leave.medical_cert_url)
+        if (certBlob) {
+          const certBuf = Buffer.from(await certBlob.arrayBuffer())
+          pdfBuffer = await appendMedicalCertPage(pdfBuffer, certBuf, certBlob.type || 'application/pdf')
+        }
+      } catch (mergeErr) {
+        // Non-fatal — the form itself still renders fine without the cert
+        // page attached; the "มี/ไม่มี" checkbox on the form already shows
+        // whether a certificate exists.
+        console.error('[pdf/leave/official] medical cert merge failed', mergeErr)
+      }
+    }
 
     const storagePath = `leave-official/${params.id}.pdf`
     await supabase.storage.from('documents')

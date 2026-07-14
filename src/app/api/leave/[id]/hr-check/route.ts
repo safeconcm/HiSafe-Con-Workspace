@@ -11,6 +11,15 @@
 // and payroll.ts's unpaid-leave-during-probation query (both read
 // status='approved' to mean "this leave is in effect") are completely
 // unaffected — see the investigation notes before this feature shipped.
+//
+// 2026-07-14 (part 2): HR can now also record "ไม่อนุมัติ" (decision =
+// 'rejected'), stored in the separate hr_decision column — per explicit
+// user decision, this is a NOTE only. It still does NOT touch status,
+// used_days, or payroll (the supervisor's approval already locked those
+// in, and un-doing them after the fact was deliberately ruled out — same
+// reasoning as leave/timesheet cancel being disabled post-approval). HR's
+// disagreement is visible on the timeline/detail page and travels into
+// hr_check_comment as the reason.
 import { NextRequest } from 'next/server'
 import {
   getSessionFromHeaders, createAdminSupabaseClient,
@@ -24,8 +33,13 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   if (!session) return unauthorized()
   if (!isHROrAdmin(session)) return forbidden()
 
-  const body    = await req.json().catch(() => ({}))
-  const comment = body.comment ?? null
+  const body     = await req.json().catch(() => ({}))
+  const comment  = body.comment ?? null
+  const decision: 'approved' | 'rejected' = body.decision === 'rejected' ? 'rejected' : 'approved'
+
+  if (decision === 'rejected' && !comment?.trim()) {
+    return badRequest('กรุณาระบุเหตุผลที่ไม่อนุมัติ')
+  }
 
   const supabase = createAdminSupabaseClient()
   const { data: leave } = await supabase
@@ -55,6 +69,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     hr_checked_by_id:  session.id,
     hr_checked_at:      now,
     hr_check_comment:   comment,
+    hr_decision:        decision,
     signature_hr_url:   signer?.signature_url ?? null,
   }).eq('id', params.id)
 
@@ -62,7 +77,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     leave_request_id: params.id,
     approver_id:       session.id,
     approver_name:     `${session.first_name_th} ${session.last_name_th}`,
-    action:            'noted',
+    action:            decision === 'rejected' ? 'hr_rejected' : 'noted',
     comment,
     sequence:          2,
   })
@@ -71,8 +86,10 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     company_id:     session.company_id,
     recipient_ids:  [leave.user_id],
     event_type:     'leave_hr_checked',
-    title:          'ใบลาผ่านการตรวจสอบจาก HR แล้ว',
-    body:           `ใบลาของคุณ ${leave.total_days} วัน (${leave.start_date} – ${leave.end_date}) ผ่านการตรวจสอบจาก HR เรียบร้อยแล้ว`,
+    title:          decision === 'rejected' ? 'HR มีข้อสังเกตเกี่ยวกับใบลาของคุณ' : 'ใบลาผ่านการตรวจสอบจาก HR แล้ว',
+    body:           decision === 'rejected'
+      ? `HR ตรวจสอบใบลาของคุณ ${leave.total_days} วัน (${leave.start_date} – ${leave.end_date}) แล้วมีข้อสังเกต: "${comment}" — ใบลานี้ยังคงมีผลตามที่หัวหน้างานอนุมัติ กรุณาติดต่อ HR หากมีข้อสงสัย`
+      : `ใบลาของคุณ ${leave.total_days} วัน (${leave.start_date} – ${leave.end_date}) ผ่านการตรวจสอบจาก HR เรียบร้อยแล้ว`,
     reference_id:   params.id,
     reference_type: 'leave_request',
   })
@@ -80,8 +97,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   await writeAuditLog({
     session, action: 'leave.hr_checked', entity_type: 'leave_request',
     entity_id: params.id, old_data: leave,
-    new_data: { hr_checked_by_id: session.id, hr_checked_at: now }, req,
+    new_data: { hr_checked_by_id: session.id, hr_checked_at: now, hr_decision: decision }, req,
   })
 
-  return ok({ id: params.id, hr_checked_at: now })
+  return ok({ id: params.id, hr_checked_at: now, hr_decision: decision })
 }

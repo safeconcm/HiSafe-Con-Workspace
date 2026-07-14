@@ -5,11 +5,51 @@ import { useRouter }     from 'next/navigation'
 import { useForm }       from 'react-hook-form'
 import { zodResolver }   from '@hookform/resolvers/zod'
 import { z }             from 'zod'
-import { useCreateLeave, useLeaveBalance } from '@/hooks/useLeave'
+import Link               from 'next/link'
+import { useCreateLeave, useLeaveBalance, useUploadMedicalCert } from '@/hooks/useLeave'
 import { LEAVE_TYPE_LABEL, formatDateTH }  from '@/utils'
 import type { LeaveType } from '@/types/database'
-import { CalendarDays, AlertCircle, Info } from 'lucide-react'
+import { CalendarDays, AlertCircle, Info, Paperclip, X } from 'lucide-react'
 import { cn } from '@/utils'
+
+// 2026-07-14: "เขียนที่" as a dropdown instead of free text (item 1.1) —
+// สำนักงานสนาม/อื่นๆ need a follow-up detail text, the other two don't.
+const PLACE_OPTIONS = [
+  { value: 'hq',    label: 'สำนักงานใหญ่', needsDetail: false },
+  { value: 'field',  label: 'สำนักงานสนาม', needsDetail: true },
+  { value: 'home',  label: 'ที่พัก',        needsDetail: false },
+  { value: 'other', label: 'อื่นๆ',        needsDetail: true },
+] as const
+
+const MAX_CERT_BYTES = 2 * 1024 * 1024
+
+// Images over the 2MB cap get compressed client-side (re-encoded as JPEG,
+// scaled down + quality reduced until under the cap or attempts run out).
+// PDFs can't be compressed this way, so those stay hard-capped at 2MB —
+// enforced by the API route as a backstop either way.
+async function compressImageIfNeeded(file: File): Promise<File> {
+  if (file.size <= MAX_CERT_BYTES || !file.type.startsWith('image/')) return file
+  const bitmap = await createImageBitmap(file)
+  const maxDim = 1600
+  const scale  = Math.min(1, maxDim / Math.max(bitmap.width, bitmap.height))
+  const canvas = document.createElement('canvas')
+  canvas.width  = Math.round(bitmap.width * scale)
+  canvas.height = Math.round(bitmap.height * scale)
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return file
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+
+  let quality = 0.85
+  for (let i = 0; i < 6; i++) {
+    const blob: Blob | null = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality))
+    if (!blob) break
+    if (blob.size <= MAX_CERT_BYTES || quality <= 0.35) {
+      return new File([blob], file.name.replace(/\.\w+$/, '.jpg'), { type: 'image/jpeg' })
+    }
+    quality -= 0.15
+  }
+  return file
+}
 
 // ── Validation schema ────────────────────────────────────────
 const schema = z.object({
@@ -20,9 +60,9 @@ const schema = z.object({
   half_day_period: z.enum(['morning', 'afternoon']).optional(),
   reason:          z.string().optional(),
   // 2026-07-14: paper-form fields ("ใบลา") — all optional.
-  place_written:          z.string().optional(),
+  place_type:             z.enum(['hq', 'field', 'home', 'other']).optional(),
+  place_detail:           z.string().optional(),
   medical_cert_provided:  z.boolean().optional(),
-  contact_during_leave:   z.string().optional(),
 }).refine(d => new Date(d.end_date) >= new Date(d.start_date), {
   message: 'วันสิ้นสุดต้องไม่ก่อนวันเริ่มต้น',
   path: ['end_date'],
@@ -32,7 +72,10 @@ const schema = z.object({
 }).refine(d => !d.is_half_day || !!d.half_day_period, {
   message: 'กรุณาเลือกช่วงเวลา (เช้า/บ่าย)',
   path: ['half_day_period'],
-})
+}).refine(d => {
+  const opt = PLACE_OPTIONS.find(o => o.value === d.place_type)
+  return !opt?.needsDetail || !!d.place_detail?.trim()
+}, { message: 'กรุณาระบุรายละเอียดสถานที่', path: ['place_detail'] })
 
 type FormValues = z.infer<typeof schema>
 
@@ -47,7 +90,12 @@ const LEAVE_TYPES: { value: LeaveType; label: string; color: string }[] = [
 export function CreateLeaveForm() {
   const router   = useRouter()
   const create   = useCreateLeave()
+  const uploadCert = useUploadMedicalCert()
   const today    = new Date().toISOString().split('T')[0]
+
+  const [certFile, setCertFile]   = useState<File | null>(null)
+  const [certError, setCertError] = useState<string | null>(null)
+  const [uploadingCert, setUploadingCert] = useState(false)
 
   const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -56,6 +104,7 @@ export function CreateLeaveForm() {
       start_date:  today,
       end_date:    today,
       is_half_day: false,
+      place_type:  'hq',
     },
   })
 
@@ -63,7 +112,10 @@ export function CreateLeaveForm() {
   const startDate   = watch('start_date')
   const endDate     = watch('end_date')
   const isHalfDay   = watch('is_half_day')
+  const placeType   = watch('place_type')
+  const medCertProvided = watch('medical_cert_provided')
   const year        = startDate ? new Date(startDate).getFullYear() : new Date().getFullYear()
+  const placeNeedsDetail = PLACE_OPTIONS.find(o => o.value === placeType)?.needsDetail ?? false
 
   const { data: balanceData } = useLeaveBalance(year)
   const balances: any[] = balanceData?.balances ?? []
@@ -74,8 +126,43 @@ export function CreateLeaveForm() {
     if (isHalfDay) setValue('end_date', startDate)
   }, [isHalfDay, startDate, setValue])
 
+  const onCertFileChange = async (file: File | null) => {
+    setCertError(null)
+    if (!file) { setCertFile(null); return }
+    if (!['image/jpeg', 'image/png', 'application/pdf'].includes(file.type)) {
+      setCertError('ไฟล์ต้องเป็น JPG, PNG หรือ PDF เท่านั้น')
+      return
+    }
+    const processed = await compressImageIfNeeded(file)
+    if (processed.size > MAX_CERT_BYTES) {
+      setCertError('ไฟล์ใหญ่เกิน 2MB (PDF ไม่สามารถบีบอัดอัตโนมัติได้ กรุณาลดขนาดไฟล์)')
+      return
+    }
+    setCertFile(processed)
+  }
+
   const onSubmit = async (values: FormValues) => {
-    await create.mutateAsync(values)
+    const opt = PLACE_OPTIONS.find(o => o.value === values.place_type)
+    const place_written = opt
+      ? (opt.needsDetail ? `${opt.label}: ${values.place_detail?.trim()}` : opt.label)
+      : undefined
+
+    const leave = await create.mutateAsync({
+      leave_type:             values.leave_type,
+      start_date:              values.start_date,
+      end_date:                values.end_date,
+      is_half_day:             values.is_half_day,
+      half_day_period:         values.half_day_period,
+      reason:                  values.reason,
+      place_written,
+      medical_cert_provided:   values.medical_cert_provided,
+    })
+
+    if (certFile && leave?.id) {
+      setUploadingCert(true)
+      await uploadCert.mutateAsync({ id: leave.id, file: certFile }).catch(() => {})
+      setUploadingCert(false)
+    }
     router.push('/leave/my')
   }
 
@@ -201,43 +288,75 @@ export function CreateLeaveForm() {
       </div>
 
       {/* Medical certificate — sick leave only. 2026-07-14, per official
-          "ใบลา" paper form's "ใบรับรองแพทย์ มี/ไม่มี" checkbox. */}
+          "ใบลา" paper form's "ใบรับรองแพทย์ มี/ไม่มี" checkbox. If checked,
+          the actual file gets attached below and appended as an extra page
+          on the "พิมพ์แบบฟอร์มทางการ" PDF. */}
       {leaveType === 'sick' && (
-        <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
-          <input
-            id="medical_cert_provided"
-            type="checkbox"
-            {...register('medical_cert_provided')}
-            className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-          />
-          <label htmlFor="medical_cert_provided" className="text-sm font-medium text-gray-700 cursor-pointer">
-            มีใบรับรองแพทย์แนบมาด้วย
-          </label>
+        <div className="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 space-y-3">
+          <div className="flex items-center gap-3">
+            <input
+              id="medical_cert_provided"
+              type="checkbox"
+              {...register('medical_cert_provided')}
+              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <label htmlFor="medical_cert_provided" className="text-sm font-medium text-gray-700 cursor-pointer">
+              มีใบรับรองแพทย์แนบมาด้วย
+            </label>
+          </div>
+          {medCertProvided && (
+            <div className="pl-7">
+              {certFile ? (
+                <div className="flex items-center gap-2 text-sm text-gray-700 bg-white border border-gray-200 rounded-lg px-3 py-2">
+                  <Paperclip className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                  <span className="truncate flex-1">{certFile.name}</span>
+                  <span className="text-xs text-gray-400 shrink-0">{(certFile.size / 1024).toFixed(0)} KB</span>
+                  <button type="button" onClick={() => onCertFileChange(null)} className="text-gray-400 hover:text-red-600 shrink-0">
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ) : (
+                <label className="flex items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 bg-white px-4 py-3 text-sm text-gray-500 cursor-pointer hover:border-blue-300 hover:text-blue-600">
+                  <Paperclip className="w-4 h-4" />
+                  แนบไฟล์ใบรับรองแพทย์ (JPG, PNG หรือ PDF ไม่เกิน 2MB)
+                  <input
+                    type="file" accept="image/jpeg,image/png,application/pdf"
+                    className="hidden"
+                    onChange={e => onCertFileChange(e.target.files?.[0] ?? null)}
+                  />
+                </label>
+              )}
+              {certError && <p className="mt-1 text-xs text-red-600">{certError}</p>}
+            </div>
+          )}
         </div>
       )}
 
-      {/* เขียนที่ / ติดต่อได้ที่ระหว่างลา — 2026-07-14, paper-form fields */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div>
-          <label htmlFor="place_written" className="form-label">เขียนที่</label>
-          <input
-            id="place_written"
-            type="text"
-            {...register('place_written')}
-            className="form-input"
-            placeholder="เช่น สำนักงานใหญ่"
-          />
+      {/* เขียนที่ — 2026-07-14, paper-form field (item 1.1: dropdown instead
+          of free text). "ติดต่อได้ที่"/"เบอร์โทร" no longer entered here —
+          pulled automatically from Profile at print time (see note below). */}
+      <div>
+        <label htmlFor="place_type" className="form-label">เขียนที่</label>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <select id="place_type" {...register('place_type')} className="form-input">
+            {PLACE_OPTIONS.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+          {placeNeedsDetail && (
+            <input
+              type="text"
+              {...register('place_detail')}
+              className="form-input"
+              placeholder={placeType === 'field' ? 'ระบุสถานที่ เช่น หน้างานราชบุรี' : 'ระบุสถานที่'}
+            />
+          )}
         </div>
-        <div>
-          <label htmlFor="contact_during_leave" className="form-label">ติดต่อได้ที่ / เบอร์โทรระหว่างลา</label>
-          <input
-            id="contact_during_leave"
-            type="text"
-            {...register('contact_during_leave')}
-            className="form-input"
-            placeholder="ที่อยู่หรือเบอร์โทรติดต่อระหว่างลา (ถ้ามี)"
-          />
-        </div>
+        {errors.place_detail && <p className="mt-1 text-xs text-red-600">{errors.place_detail.message}</p>}
+        <p className="mt-1.5 text-xs text-gray-400">
+          "ติดต่อได้ที่" และ "เบอร์โทร" ในใบลาจะดึงจากหน้า{' '}
+          <Link href="/profile" className="text-blue-600 hover:underline">โปรไฟล์ของฉัน</Link> โดยอัตโนมัติ
+        </p>
       </div>
 
       {/* Error */}
@@ -259,10 +378,10 @@ export function CreateLeaveForm() {
         </button>
         <button
           type="submit"
-          disabled={create.isPending}
+          disabled={create.isPending || uploadingCert}
           className="flex-1 rounded-lg bg-blue-700 px-4 py-2.5 text-sm font-medium text-white hover:bg-blue-800 disabled:opacity-60 transition-colors"
         >
-          {create.isPending ? 'กำลังส่ง...' : 'ยื่นใบลา'}
+          {create.isPending ? 'กำลังส่ง...' : uploadingCert ? 'กำลังแนบไฟล์...' : 'ยื่นใบลา'}
         </button>
       </div>
     </form>

@@ -25,6 +25,9 @@ const ACTION_ICON: Record<string, React.ElementType> = {
   cancelled:    XCircle,
   noted:        User,
   auto_approved: Zap,
+  // 2026-07-14: HR's "ไม่อนุมัติ" — a note only, does NOT change the leave's
+  // overall status (see hr-check route comment).
+  hr_rejected:  XCircle,
 }
 
 const ACTION_COLOR: Record<string, string> = {
@@ -33,6 +36,7 @@ const ACTION_COLOR: Record<string, string> = {
   cancelled:    'text-gray-500 bg-gray-100',
   noted:        'text-blue-600 bg-blue-100',
   auto_approved:'text-purple-600 bg-purple-100',
+  hr_rejected:  'text-amber-600 bg-amber-100',
 }
 
 const ACTION_LABEL: Record<string, string> = {
@@ -41,6 +45,7 @@ const ACTION_LABEL: Record<string, string> = {
   cancelled:    'ยกเลิก',
   noted:        'รับทราบ',
   auto_approved:'อนุมัติอัตโนมัติ (CEO)',
+  hr_rejected:  'HR มีข้อสังเกต (ใบลายังมีผล)',
 }
 
 export function LeaveTimeline({ approvals, status }: Props) {

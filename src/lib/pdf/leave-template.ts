@@ -20,6 +20,10 @@ export interface LeaveTemplateData {
     last_name_th:  string
     position_th:   string | null
     department:    string | null
+    // 2026-07-14 (part 2): pulled live from Profile at render time — see
+    // contact_during_leave deprecation note below.
+    address?:      string | null
+    phone?:        string | null
   }
   leave: {
     id:              string
@@ -33,7 +37,10 @@ export interface LeaveTemplateData {
     reason:          string | null
     status:          string
     created_at:      string
-    // 2026-07-14: official paper "ใบลา" form fields
+    // 2026-07-14: official paper "ใบลา" form fields. contact_during_leave
+    // is deprecated (part 2) — "ติดต่อได้ที่"/"เบอร์โทร" now render from
+    // employee.address/phone (Profile) instead; kept here only so old rows
+    // that still have it don't break the type.
     place_written?:         string | null
     contact_during_leave?:  string | null
     medical_cert_provided?: boolean | null
@@ -272,22 +279,28 @@ export function generateLeaveHTML(data: LeaveTemplateData, appUrl: string): stri
     padding-top: 10px;
   }
   .sig-box { text-align: center; }
+  /* 2026-07-14: reordered so the caption ("ลงชื่อผู้ขอลา" / "ความเห็นของ
+     ผู้บังคับบัญชา" / "ผู้ตรวจสอบ") always renders ABOVE the signature
+     line/image, matching how the paper form itself is laid out. Previously
+     the signature image sat directly above the label with only a few px of
+     margin, which could visually read as the signature overlapping the
+     caption text (item 1.8). Label-first + more breathing room fixes that
+     by construction. */
+  .sig-label { font-size: 10px; color: #555; margin-bottom: 6px; }
   .sig-line {
     border-bottom: 1px solid #aaa;
-    height: 30px;
-    margin-bottom: 5px;
-    margin: 0 16px 5px 16px;
+    height: 32px;
+    margin: 0 16px 6px 16px;
   }
   .sig-image {
-    height: 30px;
-    margin: 0 16px 5px 16px;
+    height: 32px;
+    margin: 0 16px 6px 16px;
     display: flex;
     align-items: flex-end;
     justify-content: center;
     border-bottom: 1px solid #aaa;
   }
-  .sig-image img { max-height: 28px; max-width: 100%; object-fit: contain; }
-  .sig-label { font-size: 10px; color: #555; margin-bottom: 2px; }
+  .sig-image img { max-height: 30px; max-width: 100%; object-fit: contain; }
   .sig-name  { font-size: 11px; font-weight: 600; color: #111; }
   .sig-date  { font-size: 9px; color: #888; margin-top: 1px; }
   /* Status watermark */
@@ -410,8 +423,12 @@ export function generateLeaveHTML(data: LeaveTemplateData, appUrl: string): stri
         <span class="info-value">${data.leave.place_written ?? '—'}</span>
       </div>
       <div class="info-row">
-        <span class="info-label">ติดต่อได้ที่/เบอร์โทร</span>
-        <span class="info-value">${data.leave.contact_during_leave ?? '—'}</span>
+        <span class="info-label">ติดต่อได้ที่</span>
+        <span class="info-value">${data.employee.address ?? '—'}</span>
+      </div>
+      <div class="info-row">
+        <span class="info-label">เบอร์โทร</span>
+        <span class="info-value">${data.employee.phone ?? '—'}</span>
       </div>
       ${data.leave.leave_type === 'sick' ? `
       <div class="info-row">
@@ -487,10 +504,10 @@ export function generateLeaveHTML(data: LeaveTemplateData, appUrl: string): stri
        from whoever approved as supervisor (see hr-check route). -->
   <div class="signature-section">
     <div class="sig-box">
+      <div class="sig-label">ลงชื่อผู้ขอลา</div>
       ${data.signatures?.employee_url
         ? `<div class="sig-image"><img src="${data.signatures.employee_url}" alt="ลายเซ็นพนักงาน" /></div>`
         : `<div class="sig-line"></div>`}
-      <div class="sig-label">ลงชื่อผู้ขอลา</div>
       <div class="sig-name">${data.employee.first_name_th} ${data.employee.last_name_th}</div>
       <div class="sig-date">${
         data.signatures?.employee_at
@@ -499,10 +516,10 @@ export function generateLeaveHTML(data: LeaveTemplateData, appUrl: string): stri
       }</div>
     </div>
     <div class="sig-box">
+      <div class="sig-label">ความเห็นของผู้บังคับบัญชา</div>
       ${data.signatures?.approver_url
         ? `<div class="sig-image"><img src="${data.signatures.approver_url}" alt="ลายเซ็นผู้บังคับบัญชา" /></div>`
         : `<div class="sig-line"></div>`}
-      <div class="sig-label">ความเห็นของผู้บังคับบัญชา</div>
       <div class="sig-name">${
         data.approver
           ? `${data.approver.first_name_th} ${data.approver.last_name_th}`
@@ -519,10 +536,10 @@ export function generateLeaveHTML(data: LeaveTemplateData, appUrl: string): stri
     <!-- 2026-07-14: HR's 2nd-step check block — "ผู้ตรวจสอบ" on the paper
          form, separate from the supervisor's block above. -->
     <div class="sig-box">
+      <div class="sig-label">ผู้ตรวจสอบ</div>
       ${data.signatures?.hr_url
         ? `<div class="sig-image"><img src="${data.signatures.hr_url}" alt="ลายเซ็นผู้ตรวจสอบ" /></div>`
         : `<div class="sig-line"></div>`}
-      <div class="sig-label">ผู้ตรวจสอบ</div>
       <div class="sig-name">${
         data.hrChecker
           ? `${data.hrChecker.first_name_th} ${data.hrChecker.last_name_th}`

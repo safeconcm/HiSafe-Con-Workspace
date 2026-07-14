@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
   const supabase = createAdminSupabaseClient()
   const { data, error } = await supabase
     .from('users')
-    .select('id, employee_code, email, first_name_th, last_name_th, first_name_en, last_name_en, position_th, department, role, hire_date, phone, avatar_url, line_user_id')
+    .select('id, employee_code, email, first_name_th, last_name_th, first_name_en, last_name_en, position_th, department, role, hire_date, phone, address, avatar_url, line_user_id')
     .eq('id', session.id)
     .single()
   if (error) return serverError(error)
@@ -59,6 +59,14 @@ export async function PATCH(req: NextRequest) {
   if (typeof phone === 'string') {
     if (phone.length > 30) return badRequest('เบอร์โทรยาวเกินไป')
     updates.phone = phone.trim() || null
+  }
+
+  // 2026-07-14: "ที่อยู่ปัจจุบัน" — used as the leave form's "ติดต่อได้ที่"
+  // field, pulled live at PDF-render time (see leave-official-form-template.ts).
+  const address = form.get('address')
+  if (typeof address === 'string') {
+    if (address.length > 300) return badRequest('ที่อยู่ยาวเกินไป')
+    updates.address = address.trim() || null
   }
 
   const avatar = form.get('avatar')

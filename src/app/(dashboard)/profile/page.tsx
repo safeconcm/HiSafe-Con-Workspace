@@ -31,6 +31,7 @@ type ProfileUser = {
   role: string
   hire_date: string
   phone: string | null
+  address: string | null
   avatar_url: string | null
   line_user_id: string | null
 }
@@ -72,6 +73,7 @@ export default function ProfilePage() {
   const qc = useQueryClient()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [phone, setPhone] = useState<string | null>(null)
+  const [address, setAddress] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
 
@@ -83,7 +85,8 @@ export default function ProfilePage() {
   const contracts     = data?.contracts ?? []
   const certificates   = data?.certificates ?? []
 
-  const phoneValue = phone ?? user?.phone ?? ''
+  const phoneValue   = phone   ?? user?.phone   ?? ''
+  const addressValue = address ?? user?.address ?? ''
 
   // Self-service e-signature — set up once here, reused automatically when
   // this person submits a leave request (as requester) or clicks "อนุมัติ"
@@ -103,16 +106,21 @@ export default function ProfilePage() {
     onError: (e: Error) => toast.error('บันทึกไม่สำเร็จ', e.message),
   })
 
-  const savePhone = async () => {
+  // 2026-07-14: saves phone + address together — both now double as the
+  // leave form's "เบอร์โทร" / "ติดต่อได้ที่" fields, pulled live from here
+  // at PDF-render time (see leave-official-form-template.ts) instead of
+  // being typed per leave request.
+  const saveContact = async () => {
     setSaving(true)
     try {
       const form = new FormData()
       form.append('phone', phoneValue)
+      form.append('address', addressValue)
       const res  = await fetch('/api/profile', { method: 'PATCH', body: form })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error)
       qc.invalidateQueries({ queryKey: ['my-profile'] })
-      toast.success('บันทึกเบอร์โทรแล้ว')
+      toast.success('บันทึกข้อมูลติดต่อแล้ว')
     } catch (e: any) {
       toast.error('บันทึกไม่สำเร็จ', e.message)
     } finally {
@@ -197,21 +205,30 @@ export default function ProfilePage() {
       {/* Editable */}
       <div className="card card-body space-y-4">
         <h3 className="text-sm font-medium text-gray-700 border-b border-gray-100 pb-2">แก้ไขข้อมูลของฉัน</h3>
+        <p className="text-xs text-gray-400 -mt-2">
+          เบอร์โทรและที่อยู่นี้จะถูกใช้อัตโนมัติในช่อง "ติดต่อได้ที่" / "เบอร์โทร" ของใบลาทุกครั้ง — ไม่ต้องกรอกซ้ำตอนยื่นใบลา
+        </p>
         <div>
           <label className="form-label">เบอร์โทร</label>
-          <div className="flex gap-2">
-            <input
-              value={phoneValue} onChange={e => setPhone(e.target.value)}
-              className="form-input" placeholder="08x-xxx-xxxx"
-            />
-            <button
-              onClick={savePhone} disabled={saving}
-              className="rounded-lg bg-blue-700 text-white px-4 py-2 text-sm font-medium hover:bg-blue-800 disabled:opacity-60 shrink-0"
-            >
-              {saving ? 'กำลังบันทึก...' : 'บันทึก'}
-            </button>
-          </div>
+          <input
+            value={phoneValue} onChange={e => setPhone(e.target.value)}
+            className="form-input" placeholder="08x-xxx-xxxx"
+          />
         </div>
+        <div>
+          <label className="form-label">ที่อยู่ปัจจุบัน</label>
+          <textarea
+            value={addressValue} onChange={e => setAddress(e.target.value)}
+            rows={2} className="form-input resize-none"
+            placeholder="ที่อยู่ที่ติดต่อได้ระหว่างลา"
+          />
+        </div>
+        <button
+          onClick={saveContact} disabled={saving}
+          className="rounded-lg bg-blue-700 text-white px-4 py-2 text-sm font-medium hover:bg-blue-800 disabled:opacity-60"
+        >
+          {saving ? 'กำลังบันทึก...' : 'บันทึก'}
+        </button>
       </div>
 
       {/* Self-service e-signature */}

@@ -31,7 +31,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     .select(`
       *,
       user:users!leave_requests_user_id_fkey(
-        employee_code, first_name_th, last_name_th, position_th, department
+        employee_code, first_name_th, last_name_th, position_th, department, address, phone
       ),
       approved_by:users!leave_requests_approved_by_id_fkey(
         first_name_th, last_name_th
@@ -127,6 +127,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       last_name_th:  (leave.user as any)?.last_name_th  ?? '',
       position_th:   (leave.user as any)?.position_th   ?? null,
       department:    (leave.user as any)?.department    ?? null,
+      address:       (leave.user as any)?.address        ?? null,
+      phone:         (leave.user as any)?.phone          ?? null,
     },
     leave: {
       id:              leave.id,

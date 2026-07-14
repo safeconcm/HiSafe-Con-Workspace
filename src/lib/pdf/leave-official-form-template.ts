@@ -39,12 +39,32 @@ const LEAVE_TYPE_CHECKBOX: Record<string, 'sick' | 'personal' | 'annual' | 'othe
   maternity: 'other',
 }
 
+// 2026-07-14 (part 2), item 2.2: "เรียน ผู้จัดการฝ่าย ___" pulls the
+// department name straight from the supervisor's own position_th, e.g.
+// "ผู้จัดการแผนกออกแบบ" → "ออกแบบ" (confirmed against real data: SC-002 =
+// "ผู้จัดการแผนกออกแบบ", dept "Engineering" — the Thai position string is
+// the reliable source, not the English department column). Falls back to
+// the supervisor's full position title if it doesn't match either prefix
+// (e.g. "กรรมการผู้จัดการ" has no department suffix) — per user decision,
+// auto-parsing is fine since a wrong/unexpected title just prints in full
+// instead of silently blank.
+function parseDeptLabel(position: string | null | undefined): string {
+  if (!position) return ''
+  const m = position.match(/^ผู้จัดการ(?:แผนก|ฝ่าย)(.+)$/)
+  return m ? m[1].trim() : position
+}
+
 export interface LeaveOfficialFormData {
   company: { code: string }
   employee: {
     first_name_th: string
     last_name_th:  string
     position_th:   string | null
+    // 2026-07-14 (part 2): pulled live from Profile (users.address/phone)
+    // at render time — items 2.5/2.6 no longer come from the leave request
+    // itself (see contact_during_leave deprecation note in the create form).
+    address:        string | null
+    phone:          string | null
   }
   leave: {
     leave_type:             string
@@ -118,13 +138,16 @@ const POS = {
   contact_address: { left: 206, top: 378 },
   contact_phone:   { left: 145, top: 398 },
 
-  employee_sig_img:  { left: 300, top: 497, width: 110, height: 15 },
+  // 2026-07-14 (part 2), items 2.7/2.13: signature images nudged up ~5pt
+  // (~0.18cm) from their originally-measured baseline so the image sits
+  // clear ABOVE the dotted signature line instead of overlapping it.
+  employee_sig_img:  { left: 300, top: 492, width: 110, height: 15 },
   employee_name_paren: { left: 294, top: 518.5, width: 127.7 },
 
   stats_col: { used_before: 164, this_time: 211, total: 256 },
   stats_row: { sick: 647.4, personal: 668.05, annual: 688.65, other: 709.3 },
 
-  hr_sig_img:      { left: 150, top: 743, width: 120, height: 15 },
+  hr_sig_img:      { left: 150, top: 738, width: 120, height: 15 },
   hr_name_paren:   { left: 124.9, top: 764, width: 106.1 },
   hr_position:     { left: 128, top: 784.5 },
   hr_day:          { left: 124, top: 804.5 },
@@ -136,7 +159,7 @@ const POS = {
 
   boss_comment_line1: { left: 331, top: 598.5, width: 170 },
   boss_comment_line2: { left: 331, top: 616.1, width: 170 },
-  boss_sig_img:       { left: 390, top: 651, width: 95, height: 15 },
+  boss_sig_img:       { left: 390, top: 646, width: 95, height: 15 },
   boss_name_paren:    { left: 364.2, top: 668.5, width: 122.4 },
   boss_position:      { left: 365, top: 703.5 },
   boss_day:           { left: 350, top: 721 },
@@ -197,6 +220,9 @@ export function generateLeaveOfficialFormHTML(data: LeaveOfficialFormData, appUr
   fields.push(text(POS.written_day, written.day, { center: true }))
   fields.push(text(POS.written_month, written.month, { center: true }))
   fields.push(text(POS.written_year, written.year, { center: true }))
+  // 2026-07-14 (part 2), item 2.2: "เรียน ผู้จัดการฝ่าย ___" — department
+  // parsed from the supervisor's own position title (see parseDeptLabel).
+  fields.push(text(POS.dept_manager, parseDeptLabel(data.approver?.position_th)))
   fields.push(text(POS.employee_name, employeeName))
   fields.push(text(POS.employee_position, data.employee.position_th ?? ''))
 
@@ -219,8 +245,10 @@ export function generateLeaveOfficialFormHTML(data: LeaveOfficialFormData, appUr
   fields.push(text(POS.to_year, to.year, { center: true }))
   fields.push(text(POS.total_days, String(data.leave.total_days), { center: true }))
 
-  fields.push(text(POS.contact_address, data.leave.contact_during_leave ?? '', { size: 9.5 }))
-  fields.push(text(POS.contact_phone, '', { size: 9.5 }))
+  // 2026-07-14 (part 2), items 2.5/2.6: pulled live from Profile, not typed
+  // per leave request (see LeaveOfficialFormData.employee comment above).
+  fields.push(text(POS.contact_address, data.employee.address ?? '', { size: 9.5 }))
+  fields.push(text(POS.contact_phone, data.employee.phone ?? '', { size: 9.5 }))
 
   fields.push(sigImg(POS.employee_sig_img, data.signatures.employee_url))
   fields.push(text(POS.employee_name_paren, employeeName, { center: true }))

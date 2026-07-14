@@ -38,7 +38,10 @@ interface CreateLeaveBody {
   // 2026-07-14: paper-form fields ("ใบลา") — all optional.
   place_written?: string
   medical_cert_provided?: boolean
-  contact_during_leave?: string
+  // contact_during_leave removed from here (2026-07-14, part 2) — "ติดต่อ
+  // ได้ที่" / "เบอร์โทร" are now pulled live from the requester's Profile
+  // (users.address / users.phone) at PDF-render time instead of being
+  // re-typed per leave request. The column still exists on old rows.
 }
 
 // ── Fetchers ─────────────────────────────────────────────────
@@ -134,6 +137,29 @@ export function useCreateLeave() {
   })
 }
 
+// Medical certificate file upload — separate step right after creating a
+// sick leave request with "มีใบรับรองแพทย์" checked. See
+// /api/leave/[id]/medical-cert. 2026-07-14.
+export function useUploadMedicalCert() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, file }: { id: string; file: File }) => {
+      const form = new FormData()
+      form.append('file', file)
+      const res  = await fetch(`/api/leave/${id}/medical-cert`, { method: 'POST', body: form })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Failed to upload')
+      return json.data
+    },
+    onSuccess: (_, { id }) => {
+      qc.invalidateQueries({ queryKey: ['leave', id] })
+    },
+    onError: (err: Error) => {
+      toast.error('แนบใบรับรองแพทย์ไม่สำเร็จ', err.message + ' — ยื่นใบลาสำเร็จแล้ว แนบไฟล์ใหม่ได้ภายหลัง')
+    },
+  })
+}
+
 export function useApproveLeave() {
   const qc = useQueryClient()
   return useMutation({
@@ -182,11 +208,11 @@ export function useRejectLeave() {
 export function useHRCheckLeave() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async ({ id, comment }: { id: string; comment?: string }) => {
+    mutationFn: async ({ id, comment, decision }: { id: string; comment?: string; decision?: 'approved' | 'rejected' }) => {
       const res  = await fetch(`/api/leave/${id}/hr-check`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ comment }),
+        body: JSON.stringify({ comment, decision }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? 'Failed')
