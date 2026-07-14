@@ -11,7 +11,7 @@ import {
   formatDateRangeTH, formatDateTime, formatDays,
   fullNameTH,
 } from '@/utils'
-import { ArrowLeft, Download, Loader2, Trash2 } from 'lucide-react'
+import { ArrowLeft, Download, FileText, Loader2, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { useState } from 'react'
 
@@ -92,6 +92,18 @@ export default function LeaveDetailPage() {
         >
           <Download className="w-4 h-4" />
           ดาวน์โหลด PDF
+        </button>
+        {/* "พิมพ์แบบฟอร์มทางการ" — 2026-07-14, overlays the same data onto
+            the company's real paper form (see leave-official-form-template.ts)
+            instead of the styled/branded PDF above. Additive — both stay
+            available. */}
+        <button
+          type="button"
+          onClick={() => window.open(`/api/pdf/leave/${id}/official`, '_blank')}
+          className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50"
+        >
+          <FileText className="w-4 h-4" />
+          พิมพ์แบบฟอร์มทางการ
         </button>
       </div>
 

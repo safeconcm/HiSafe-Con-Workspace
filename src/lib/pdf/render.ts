@@ -52,7 +52,16 @@ const CHROMIUM_BIN_DIR = join(process.cwd(), 'chromium-bin')
 // accepted as a NextResponse BodyInit ("Type 'Buffer<ArrayBufferLike>' is
 // missing the following properties from type 'URLSearchParams'..."), which
 // broke the Vercel type-check step. A plain Uint8Array is a valid BodyInit.
-export async function renderPdfFromHtml(html: string): Promise<Uint8Array> {
+// 2026-07-14: optional per-call margin override, added for the new
+// "official form" leave PDF (src/lib/pdf/leave-official-form-template.ts),
+// which overlays filled-in text on top of a scanned company form at exact
+// pixel/point coordinates — any nonzero page margin would shift the overlay
+// off the background image. Defaults to the original hardcoded 10mm on all
+// sides, so every existing caller (leave, timesheet, ...) is unaffected.
+export async function renderPdfFromHtml(
+  html: string,
+  opts?: { margin?: { top: string; bottom: string; left: string; right: string } }
+): Promise<Uint8Array> {
   // @sparticuz/chromium-min v141's Chromium class dropped the
   // `defaultViewport` and `headless` static getters that older versions
   // (like the v123 we started with) exposed — confirmed by reading the
@@ -70,7 +79,7 @@ export async function renderPdfFromHtml(html: string): Promise<Uint8Array> {
     const pdf = await page.pdf({
       format: 'A4',
       printBackground: true,
-      margin: { top: '10mm', bottom: '10mm', left: '10mm', right: '10mm' },
+      margin: opts?.margin ?? { top: '10mm', bottom: '10mm', left: '10mm', right: '10mm' },
     })
     return new Uint8Array(pdf)
   } finally {
