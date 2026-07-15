@@ -38,6 +38,9 @@ interface CreateLeaveBody {
   // 2026-07-14: paper-form fields ("ใบลา") — all optional.
   place_written?: string
   medical_cert_provided?: boolean
+  // 2026-07-16: sub-classification of leave_type='other', used only by the
+  // Timesheet official-form PDF (T/I/M absence codes). Optional.
+  other_subtype?: 'training' | 'injury' | 'authorized'
   // contact_during_leave removed from here (2026-07-14, part 2) — "ติดต่อ
   // ได้ที่" / "เบอร์โทร" are now pulled live from the requester's Profile
   // (users.address / users.phone) at PDF-render time instead of being

@@ -24,7 +24,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
     .select(`
       *,
       user:users!timesheets_user_id_fkey(
-        id, employee_code, first_name_th, last_name_th, position_th, department
+        id, employee_code, first_name_th, last_name_th, position_th, department, nickname, based
       ),
       approver:users!timesheets_current_approver_id_fkey(
         id, first_name_th, last_name_th
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
         id, first_name_th, last_name_th
       ),
       lines:timesheet_lines(
-        id, work_date, job_id, hours, line_type, leave_request_id, remark,
+        id, work_date, job_id, hours, line_type, leave_request_id, remark, activity_code,
         job:jobs(id, job_code, name_th)
       ),
       approvals:timesheet_approvals(
@@ -126,7 +126,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     return badRequest('สามารถแก้ไขได้เฉพาะ Timesheet ที่เป็น Draft หรือถูกส่งคืน')
   }
 
-  let body: { lines: { work_date: string; job_id: string; hours: number; remark?: string }[] }
+  let body: { lines: { work_date: string; job_id: string; hours: number; remark?: string; activity_code?: string }[] }
   try { body = await req.json() } catch { return badRequest('Invalid JSON') }
   if (!Array.isArray(body.lines)) return badRequest('lines array required')
 
@@ -212,6 +212,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       hours:        l.hours,
       line_type:    'work',
       remark:       l.remark ?? null,
+      activity_code: l.activity_code ?? null,
     }))
 
   if (workLines.length) {

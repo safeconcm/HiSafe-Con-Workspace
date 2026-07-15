@@ -153,6 +153,9 @@ export async function POST(req: NextRequest) {
     // 2026-07-14: paper-form fields ("ใบลา") — all optional, purely
     // additive to the existing required fields above.
     place_written, medical_cert_provided, contact_during_leave,
+    // 2026-07-16: sub-classification for leave_type='other' — only used by
+    // the Timesheet official-form PDF's T/I/M absence codes.
+    other_subtype,
   } = body
 
   if (!leave_type || !start_date || !end_date) {
@@ -255,6 +258,7 @@ export async function POST(req: NextRequest) {
       place_written:          place_written ?? null,
       medical_cert_provided:  leave_type === 'sick' ? (medical_cert_provided ?? null) : null,
       contact_during_leave:   contact_during_leave ?? null,
+      other_subtype:          leave_type === 'other' ? (other_subtype ?? null) : null,
       signature_employee_url: signer?.signature_url ?? null,
       signature_employee_at:  signer?.signature_url ? new Date().toISOString() : null,
     })

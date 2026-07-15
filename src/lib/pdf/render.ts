@@ -58,9 +58,14 @@ const CHROMIUM_BIN_DIR = join(process.cwd(), 'chromium-bin')
 // pixel/point coordinates — any nonzero page margin would shift the overlay
 // off the background image. Defaults to the original hardcoded 10mm on all
 // sides, so every existing caller (leave, timesheet, ...) is unaffected.
+// 2026-07-16: optional landscape flag, added for the new Timesheet
+// official-form PDF (src/lib/pdf/timesheet-official-form-template.ts),
+// which replicates the company's real paper form — a wide Job x Date grid
+// laid out on Landscape A4. Defaults to false (portrait), so every existing
+// caller (leave, timesheet, leave-official) is unaffected.
 export async function renderPdfFromHtml(
   html: string,
-  opts?: { margin?: { top: string; bottom: string; left: string; right: string } }
+  opts?: { margin?: { top: string; bottom: string; left: string; right: string }; landscape?: boolean }
 ): Promise<Uint8Array> {
   // @sparticuz/chromium-min v141's Chromium class dropped the
   // `defaultViewport` and `headless` static getters that older versions
@@ -78,6 +83,7 @@ export async function renderPdfFromHtml(
     await page.setContent(html, { waitUntil: 'networkidle0' })
     const pdf = await page.pdf({
       format: 'A4',
+      landscape: opts?.landscape ?? false,
       printBackground: true,
       margin: opts?.margin ?? { top: '10mm', bottom: '10mm', left: '10mm', right: '10mm' },
     })

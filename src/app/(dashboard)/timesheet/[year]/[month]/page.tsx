@@ -38,6 +38,8 @@ export default function TimesheetMonthPage() {
   const leaves     = data?.leaves     ?? []
   const lines      = ts?.lines        ?? []
   const workingDays = data?.workingDays ?? {}
+  const profile     = data?.user ?? null
+  const BASED_LABEL: Record<string, string> = { office: 'Office', field: 'Field' }
 
   const pendingLines   = useRef<any[]>([])
   const handleChange   = useCallback((l: any[]) => { pendingLines.current = l }, [])
@@ -109,6 +111,20 @@ export default function TimesheetMonthPage() {
 
         {ts && <TimesheetStatusBadge status={ts.status} />}
 
+        {/* 2026-07-16: nickname + Based — set in Profile, shown here so it's
+            visible before printing the official-form PDF. If not set yet,
+            links to Profile to fill it in (needed for the official form). */}
+        {profile && (profile.nickname || profile.based) ? (
+          <span className="text-xs text-gray-400">
+            {profile.nickname ? `[${profile.nickname}]` : ''}
+            {profile.based ? ` Based: ${BASED_LABEL[profile.based] ?? profile.based}` : ''}
+          </span>
+        ) : (
+          <Link href="/profile" className="text-xs text-amber-600 hover:underline">
+            ยังไม่ได้ตั้งชื่อย่อ/Based ในโปรไฟล์
+          </Link>
+        )}
+
         <div className="ml-auto flex items-center gap-2">
           {/* PDF download — renders on demand via /api/pdf/timesheet/:id
               (see src/lib/pdf/render.ts); not the raw ts.pdf_url storage
@@ -122,6 +138,19 @@ export default function TimesheetMonthPage() {
             >
               <Download className="w-4 h-4" />
               ดาวน์โหลด PDF
+            </button>
+          )}
+          {/* 2026-07-16: "แบบฟอร์มทางการ" — replicates the company's real
+              shared paper Timesheet form (Landscape A4), separate from the
+              styled PDF above. See timesheet-official-form-template.ts. */}
+          {ts && (
+            <button
+              type="button"
+              onClick={() => window.open(`/api/pdf/timesheet/${ts.id}/official`, '_blank')}
+              className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50"
+            >
+              <Download className="w-4 h-4" />
+              พิมพ์แบบฟอร์มทางการ
             </button>
           )}
           {/* Excel / CSV export — same job x date matrix as the PDF, via

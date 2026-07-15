@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
   const supabase = createAdminSupabaseClient()
   const { data, error } = await supabase
     .from('users')
-    .select('id, employee_code, email, first_name_th, last_name_th, first_name_en, last_name_en, position_th, department, role, hire_date, phone, address, avatar_url, line_user_id')
+    .select('id, employee_code, email, first_name_th, last_name_th, first_name_en, last_name_en, position_th, department, role, hire_date, phone, address, avatar_url, line_user_id, nickname, based')
     .eq('id', session.id)
     .single()
   if (error) return serverError(error)
@@ -67,6 +67,21 @@ export async function PATCH(req: NextRequest) {
   if (typeof address === 'string') {
     if (address.length > 300) return badRequest('ที่อยู่ยาวเกินไป')
     updates.address = address.trim() || null
+  }
+
+  // 2026-07-16: "ชื่อย่อ" (short code, e.g. "UCC") + "Based" (Office/Field)
+  // — shown on the Timesheet official-form export (see
+  // timesheet-official-form-template.ts) and set by the user themselves.
+  const nickname = form.get('nickname')
+  if (typeof nickname === 'string') {
+    if (nickname.length > 20) return badRequest('ชื่อย่อยาวเกินไป')
+    updates.nickname = nickname.trim().toUpperCase() || null
+  }
+
+  const based = form.get('based')
+  if (typeof based === 'string') {
+    if (based !== '' && based !== 'office' && based !== 'field') return badRequest('ค่า Based ไม่ถูกต้อง')
+    updates.based = based || null
   }
 
   const avatar = form.get('avatar')

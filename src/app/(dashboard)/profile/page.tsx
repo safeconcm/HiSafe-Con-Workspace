@@ -34,6 +34,8 @@ type ProfileUser = {
   address: string | null
   avatar_url: string | null
   line_user_id: string | null
+  nickname: string | null
+  based: 'office' | 'field' | null
 }
 
 type ProfileData = {
@@ -74,6 +76,8 @@ export default function ProfilePage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [phone, setPhone] = useState<string | null>(null)
   const [address, setAddress] = useState<string | null>(null)
+  const [nickname, setNickname] = useState<string | null>(null)
+  const [based, setBased] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
 
@@ -85,8 +89,10 @@ export default function ProfilePage() {
   const contracts     = data?.contracts ?? []
   const certificates   = data?.certificates ?? []
 
-  const phoneValue   = phone   ?? user?.phone   ?? ''
-  const addressValue = address ?? user?.address ?? ''
+  const phoneValue    = phone    ?? user?.phone    ?? ''
+  const addressValue  = address  ?? user?.address  ?? ''
+  const nicknameValue = nickname ?? user?.nickname ?? ''
+  const basedValue    = based    ?? user?.based    ?? ''
 
   // Self-service e-signature — set up once here, reused automatically when
   // this person submits a leave request (as requester) or clicks "อนุมัติ"
@@ -116,6 +122,8 @@ export default function ProfilePage() {
       const form = new FormData()
       form.append('phone', phoneValue)
       form.append('address', addressValue)
+      form.append('nickname', nicknameValue)
+      form.append('based', basedValue)
       const res  = await fetch('/api/profile', { method: 'PATCH', body: form })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error)
@@ -222,6 +230,27 @@ export default function ProfilePage() {
             rows={2} className="form-input resize-none"
             placeholder="ที่อยู่ที่ติดต่อได้ระหว่างลา"
           />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label className="form-label">ชื่อย่อ (เช่น UCC)</label>
+            <input
+              value={nicknameValue} onChange={e => setNickname(e.target.value.toUpperCase())}
+              maxLength={20} className="form-input" placeholder="UCC"
+            />
+            <p className="text-xs text-gray-400 mt-1">ใช้แสดงในแบบฟอร์ม Timesheet ทางการ</p>
+          </div>
+          <div>
+            <label className="form-label">Based</label>
+            <select
+              value={basedValue} onChange={e => setBased(e.target.value)}
+              className="form-input"
+            >
+              <option value="">— ไม่ระบุ —</option>
+              <option value="office">Office</option>
+              <option value="field">Field</option>
+            </select>
+          </div>
         </div>
         <button
           onClick={saveContact} disabled={saving}

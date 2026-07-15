@@ -21,6 +21,17 @@ const PLACE_OPTIONS = [
   { value: 'other', label: 'อื่นๆ',        needsDetail: true },
 ] as const
 
+// 2026-07-16: sub-classification for leave_type='other', used only by the
+// Timesheet official-form PDF to pick the right absence letter code
+// (T=Training/Seminar, I=Work injury, M=Other authorized e.g. Examination).
+// Optional — HR can also set/adjust this later; it never affects approval
+// or balance logic.
+const OTHER_SUBTYPE_OPTIONS = [
+  { value: 'training',   label: 'ฝึกอบรม / สัมมนา (T)' },
+  { value: 'injury',     label: 'บาดเจ็บจากการทำงาน (I)' },
+  { value: 'authorized', label: 'อื่นๆ ที่ได้รับอนุมัติ เช่น สอบ (M)' },
+] as const
+
 const MAX_CERT_BYTES = 2 * 1024 * 1024
 
 // Images over the 2MB cap get compressed client-side (re-encoded as JPEG,
@@ -63,6 +74,7 @@ const schema = z.object({
   place_type:             z.enum(['hq', 'field', 'home', 'other']).optional(),
   place_detail:           z.string().optional(),
   medical_cert_provided:  z.boolean().optional(),
+  other_subtype:          z.enum(['training', 'injury', 'authorized']).optional(),
 }).refine(d => new Date(d.end_date) >= new Date(d.start_date), {
   message: 'วันสิ้นสุดต้องไม่ก่อนวันเริ่มต้น',
   path: ['end_date'],
@@ -156,6 +168,7 @@ export function CreateLeaveForm() {
       reason:                  values.reason,
       place_written,
       medical_cert_provided:   values.medical_cert_provided,
+      other_subtype:           values.other_subtype,
     })
 
     if (certFile && leave?.id) {
@@ -329,6 +342,20 @@ export function CreateLeaveForm() {
               {certError && <p className="mt-1 text-xs text-red-600">{certError}</p>}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ประเภทย่อยของ "อื่นๆ" — 2026-07-16, ใช้เลือกรหัส T/I/M บนแบบฟอร์ม
+          Timesheet ทางการเท่านั้น ไม่กระทบการอนุมัติ/ยอดวันลา */}
+      {leaveType === 'other' && (
+        <div>
+          <label htmlFor="other_subtype" className="form-label">ประเภทย่อย (สำหรับแบบฟอร์ม Timesheet)</label>
+          <select id="other_subtype" {...register('other_subtype')} className="form-input">
+            <option value="">— ไม่ระบุ (HR สามารถระบุภายหลังได้) —</option>
+            {OTHER_SUBTYPE_OPTIONS.map(o => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
         </div>
       )}
 

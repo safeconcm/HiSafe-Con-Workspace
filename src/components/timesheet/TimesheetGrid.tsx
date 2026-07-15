@@ -51,6 +51,7 @@ interface TimesheetLine {
   line_type:       'work' | 'leave'
   leave_request_id?: string | null
   remark?:         string | null
+  activity_code?:  string | null
 }
 
 interface Props {
@@ -67,11 +68,30 @@ interface Props {
   workingDays?: Record<number, boolean>
   savedLines: TimesheetLine[]
   disabled:   boolean           // true when submitted/approved
-  onChange:   (lines: { work_date: string; job_id: string; hours: number; remark?: string }[]) => void
+  onChange:   (lines: { work_date: string; job_id: string; hours: number; remark?: string; activity_code?: string }[]) => void
 }
 
 const TH_DAYS = ['อา', 'จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส']
 const NO_JOB = '' // sentinel for "not yet selected" in the trailing blank row
+
+// 2026-07-16: "Activity Code" — Section B classification on the official
+// paper Timesheet form (Staff Monthly Attendance Time Allocation Record),
+// transcribed verbatim (incl. the form's own "Bussiness"/"Planing" spelling)
+// so the printed official-form PDF matches the source 100%. One value per
+// job-row per month — same storage pattern as the existing `remark` field.
+const ACTIVITY_CODES = [
+  { value: '01', label: '01 - Pre-tendering/Tendering' },
+  { value: '02', label: '02 - Design/Engineering' },
+  { value: '03', label: '03 - Bussiness Development' },
+  { value: '04', label: '04 - Project/Site Supervision' },
+  { value: '05', label: '05 - Project/Site Administration' },
+  { value: '06', label: '06 - Project/Site Management' },
+  { value: '07', label: '07 - Project/Site Support and Planing' },
+  { value: '08', label: '08 - Plant' },
+  { value: '09', label: '09 - Safety' },
+  { value: '10', label: '10 - General Administration Work' },
+  { value: '11', label: '11 - Other Work' },
+] as const
 
 function cellKey(jobId: string, dateStr: string) {
   return `${jobId}::${dateStr}`
@@ -144,6 +164,14 @@ export function TimesheetGrid({ year, month, jobs, holidays, leaves, workingDays
     return m
   })
 
+  const [rowActivityCode, setRowActivityCode] = useState<Map<string, string>>(() => {
+    const m = new Map<string, string>()
+    for (const l of savedLines) {
+      if (l.line_type === 'work' && l.activity_code) m.set(l.job_id, l.activity_code)
+    }
+    return m
+  })
+
   const [errors, setErrors] = useState<Map<string, string>>(new Map())
 
   // Recompute per-date over-8-hours errors whenever cell data changes
@@ -165,15 +193,19 @@ export function TimesheetGrid({ year, month, jobs, holidays, leaves, workingDays
 
   // Emit the flat lines array to the parent whenever anything changes
   useEffect(() => {
-    const out: { work_date: string; job_id: string; hours: number; remark?: string }[] = []
+    const out: { work_date: string; job_id: string; hours: number; remark?: string; activity_code?: string }[] = []
     cells.forEach((hours, key) => {
       if (hours <= 0) return
       const [jobId, dateStr] = key.split('::')
       if (!jobId) return
-      out.push({ work_date: dateStr, job_id: jobId, hours, remark: rowRemarks.get(jobId) ?? undefined })
+      out.push({
+        work_date: dateStr, job_id: jobId, hours,
+        remark:        rowRemarks.get(jobId) ?? undefined,
+        activity_code: rowActivityCode.get(jobId) ?? undefined,
+      })
     })
     onChange(out)
-  }, [cells, rowRemarks, onChange])
+  }, [cells, rowRemarks, rowActivityCode, onChange])
 
   const updateCell = useCallback((jobId: string, dateStr: string, hours: number) => {
     setCells(prev => {
@@ -217,6 +249,15 @@ export function TimesheetGrid({ year, month, jobs, holidays, leaves, workingDays
       next.set(newJobId, val)
       return next
     })
+    setRowActivityCode(prev => {
+      const oldJobId = rowJobIds[rowIndex]
+      if (!oldJobId || !prev.has(oldJobId)) return prev
+      const next = new Map(prev)
+      const val = next.get(oldJobId)!
+      next.delete(oldJobId)
+      next.set(newJobId, val)
+      return next
+    })
   }, [rowJobIds])
 
   const removeRow = useCallback((rowIndex: number) => {
@@ -231,6 +272,12 @@ export function TimesheetGrid({ year, month, jobs, holidays, leaves, workingDays
         return next
       })
       setRowRemarks(prev => {
+        if (!prev.has(jobId)) return prev
+        const next = new Map(prev)
+        next.delete(jobId)
+        return next
+      })
+      setRowActivityCode(prev => {
         if (!prev.has(jobId)) return prev
         const next = new Map(prev)
         next.delete(jobId)
@@ -309,7 +356,7 @@ export function TimesheetGrid({ year, month, jobs, holidays, leaves, workingDays
           <table className="w-full text-xs border-collapse">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
-                <th className="px-2 py-2 text-left font-medium text-gray-600 min-w-[160px] sticky left-0 bg-gray-50 z-10">Job</th>
+                <th className="px-2 py-2 text-left font-medium text-gray-600 min-w-[190px] sticky left-0 bg-gray-50 z-10">Job / Activity Code</th>
                 {dateInfo.map(d => (
                   <th
                     key={d.dateStr}
@@ -336,7 +383,7 @@ export function TimesheetGrid({ year, month, jobs, holidays, leaves, workingDays
 
                 return (
                   <tr key={rowIndex} className={cn('border-b border-gray-100', isBlankRow && 'bg-gray-50/40')}>
-                    <td className="px-2 py-1 sticky left-0 bg-white z-10">
+                    <td className="px-2 py-1 sticky left-0 bg-white z-10 space-y-1">
                       <select
                         value={jobId}
                         onChange={e => changeRowJob(rowIndex, e.target.value)}
@@ -348,6 +395,25 @@ export function TimesheetGrid({ year, month, jobs, holidays, leaves, workingDays
                           <option key={j.id} value={j.id}>{j.job_code} · {j.name_th}</option>
                         ))}
                       </select>
+                      {!isBlankRow && (
+                        <select
+                          value={rowActivityCode.get(jobId) ?? ''}
+                          onChange={e => setRowActivityCode(prev => {
+                            const next = new Map(prev)
+                            if (e.target.value) next.set(jobId, e.target.value)
+                            else next.delete(jobId)
+                            return next
+                          })}
+                          disabled={disabled}
+                          title="Activity Code (สำหรับแบบฟอร์มทางการ)"
+                          className="w-full text-[10px] rounded border border-gray-200 px-1.5 py-0.5 bg-white text-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-400 disabled:bg-gray-50"
+                        >
+                          <option value="">— Activity Code —</option>
+                          {ACTIVITY_CODES.map(a => (
+                            <option key={a.value} value={a.value}>{a.label}</option>
+                          ))}
+                        </select>
+                      )}
                     </td>
 
                     {dateInfo.map(d => {

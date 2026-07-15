@@ -85,9 +85,16 @@ export async function GET(req: NextRequest) {
     // Map isn't JSON-serializable.
     const workingDayMap = await getWorkingDayMapForMonth(supabase, session.company_id, y, m)
 
+    // 2026-07-16: nickname + Based — shown in the editor header and used on
+    // the Timesheet official-form export. Small additive lookup; session
+    // already carries id/company_id/role, not the profile fields below.
+    const { data: profile } = await supabase
+      .from('users').select('nickname, based').eq('id', session.id).single()
+
     return ok({
       timesheet: ts, holidays: holidays ?? [], leaves: leaves ?? [], jobs: jobs ?? [],
       workingDays: Object.fromEntries(workingDayMap),
+      user: profile ?? null,
     })
   }
 
