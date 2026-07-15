@@ -39,20 +39,13 @@ const LEAVE_TYPE_CHECKBOX: Record<string, 'sick' | 'personal' | 'annual' | 'othe
   maternity: 'other',
 }
 
-// 2026-07-14 (part 2), item 2.2: "เรียน ผู้จัดการฝ่าย ___" pulls the
-// department name straight from the supervisor's own position_th, e.g.
-// "ผู้จัดการแผนกออกแบบ" → "ออกแบบ" (confirmed against real data: SC-002 =
-// "ผู้จัดการแผนกออกแบบ", dept "Engineering" — the Thai position string is
-// the reliable source, not the English department column). Falls back to
-// the supervisor's full position title if it doesn't match either prefix
-// (e.g. "กรรมการผู้จัดการ" has no department suffix) — per user decision,
-// auto-parsing is fine since a wrong/unexpected title just prints in full
-// instead of silently blank.
-function parseDeptLabel(position: string | null | undefined): string {
-  if (!position) return ''
-  const m = position.match(/^ผู้จัดการ(?:แผนก|ฝ่าย)(.+)$/)
-  return m ? m[1].trim() : position
-}
+// 2026-07-15: item 2.2 originally tried to parse just the department name
+// out of the supervisor's position_th to fill into the pre-printed "เรียน
+// ผู้จัดการฝ่าย ___" line (e.g. "ผู้จัดการแผนกออกแบบ" → "ออกแบบ"). Per user
+// feedback this read as confusing/inconsistent once real data was on the
+// page, so that whole pre-printed line is now whited out (see
+// POS.dept_manager_cover) and replaced with the supervisor's full,
+// unparsed position_th instead — no more parsing needed.
 
 export interface LeaveOfficialFormData {
   company: { code: string }
@@ -113,7 +106,16 @@ const POS = {
   written_day:       { left: 337,   top: 136 },
   written_month:     { left: 401,   top: 136 },
   written_year:      { left: 505,   top: 136 },
-  dept_manager:      { left: 200,   top: 176 },
+  // 2026-07-15: the pre-printed "เรียน ผู้จัดการฝ่าย ....................."
+  // line (measured at x:72.7-310.3pt, y:171-193pt on the source form) reads
+  // confusingly once a real position title is appended after it — per user
+  // request, this whole line gets whited out (dept_manager_cover) and
+  // replaced with just the approver's own position_th, no "เรียน ผู้จัดการ
+  // ฝ่าย" label and no dotted line. Cover rect sampled as pure white
+  // (255,255,255) against the scanned background, so a plain white patch
+  // blends in seamlessly.
+  dept_manager_cover: { left: 55,  top: 170, width: 275, height: 24 },
+  dept_manager:      { left: 60,   top: 176 },
   employee_name:     { left: 143,   top: 216 },
   employee_position: { left: 414,   top: 216 },
 
@@ -175,9 +177,22 @@ function text(pos: { left: number; top: number; width?: number }, value: string,
   return `<div class="fld" style="left:${pos.left}pt;top:${pos.top}pt;${w}${align}font-size:${size}pt;">${value}</div>`
 }
 
+// 2026-07-15: was '✕' (U+2715 MULTIPLICATION X, Dingbats block) — Sarabun
+// (the only font loaded for this template) doesn't ship that glyph, so
+// every checkbox mark rendered invisibly in production even though the
+// underlying data (leave type, medical cert, approval status) was correct
+// — confirmed by checking the DB directly for a case where the marks
+// weren't showing: leave_type/status/etc were all correct. Plain 'X'
+// (U+0058, Basic Latin) is guaranteed present in every font, Sarabun
+// included, so this is a minimal, low-risk fix for all the "checkbox
+// doesn't tick" reports (leave type, medical cert, คำสั่ง).
 function mark(pos: { left: number; top: number }, show: boolean) {
   if (!show) return ''
-  return `<div class="chk" style="left:${pos.left}pt;top:${pos.top}pt;">✕</div>`
+  return `<div class="chk" style="left:${pos.left}pt;top:${pos.top}pt;">X</div>`
+}
+
+function cover(pos: { left: number; top: number; width: number; height: number }) {
+  return `<div class="cover" style="left:${pos.left}pt;top:${pos.top}pt;width:${pos.width}pt;height:${pos.height}pt;"></div>`
 }
 
 function sigImg(pos: { left: number; top: number; width: number; height: number }, url?: string | null) {
@@ -200,9 +215,16 @@ export function generateLeaveOfficialFormHTML(data: LeaveOfficialFormData, appUr
     ? `ลาคลอด${data.leave.reason ? ' — ' + data.leave.reason : ''}`
     : (cbType === 'other' ? (data.leave.reason ?? '') : '')
 
-  const approverComment = data.approver?.comment ?? ''
-  const commentLine1 = approverComment.slice(0, 60)
-  const commentLine2 = approverComment.slice(60, 120)
+  // 2026-07-15, item 1.3: always show "อนุมัติ" here when the supervisor
+  // has approved (data.approver is only populated on approval — see
+  // official/route.ts), even if they didn't type a free-text comment.
+  // Previously this area stayed blank whenever comment was empty, which
+  // read as if the supervisor hadn't actually decided.
+  const approverCommentFull = data.approver
+    ? (data.approver.comment ? `อนุมัติ — ${data.approver.comment}` : 'อนุมัติ')
+    : ''
+  const commentLine1 = approverCommentFull.slice(0, 60)
+  const commentLine2 = approverCommentFull.slice(60, 120)
 
   const employeeName = `${data.employee.first_name_th} ${data.employee.last_name_th}`
   const bossName = data.approver ? `${data.approver.first_name_th} ${data.approver.last_name_th}` : ''
@@ -220,9 +242,12 @@ export function generateLeaveOfficialFormHTML(data: LeaveOfficialFormData, appUr
   fields.push(text(POS.written_day, written.day, { center: true }))
   fields.push(text(POS.written_month, written.month, { center: true }))
   fields.push(text(POS.written_year, written.year, { center: true }))
-  // 2026-07-14 (part 2), item 2.2: "เรียน ผู้จัดการฝ่าย ___" — department
-  // parsed from the supervisor's own position title (see parseDeptLabel).
-  fields.push(text(POS.dept_manager, parseDeptLabel(data.approver?.position_th)))
+  // 2026-07-15, item 1.1: white out the pre-printed "เรียน ผู้จัดการฝ่าย
+  // ....." line entirely and just show the supervisor's own position_th —
+  // avoids the confusing/redundant read of a parsed department name sitting
+  // next to a pre-printed "ผู้จัดการฝ่าย" label.
+  fields.push(cover(POS.dept_manager_cover))
+  fields.push(text(POS.dept_manager, data.approver?.position_th ?? ''))
   fields.push(text(POS.employee_name, employeeName))
   fields.push(text(POS.employee_position, data.employee.position_th ?? ''))
 
@@ -318,6 +343,9 @@ export function generateLeaveOfficialFormHTML(data: LeaveOfficialFormData, appUr
     transform: translate(-50%, -50%);
   }
   .sigimg { position: absolute; object-fit: contain; }
+  /* 2026-07-15: plain white patch to blot out a pre-printed line on the
+     scanned background (sampled as pure #fff, so this blends in). */
+  .cover { position: absolute; background: #fff; }
 </style>
 </head>
 <body>
