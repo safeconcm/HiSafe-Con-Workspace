@@ -110,8 +110,10 @@ const POS = {
   // line (measured at x:72.7-310.3pt, y:171-193pt on the source form) reads
   // confusingly once a real position title is appended after it — per user
   // request, this whole line gets whited out (dept_manager_cover) and
-  // replaced with just the approver's own position_th, no "เรียน ผู้จัดการ
-  // ฝ่าย" label and no dotted line. Cover rect sampled as pure white
+  // replaced with "เรียน " + the approver's own position_th (round 3, item
+  // 1.1 — dropping the pre-printed "เรียน" made the line feel too abrupt,
+  // so it's re-added as part of the dynamic text instead, right before the
+  // live position title). No dotted line. Cover rect sampled as pure white
   // (255,255,255) against the scanned background, so a plain white patch
   // blends in seamlessly.
   dept_manager_cover: { left: 55,  top: 170, width: 275, height: 24 },
@@ -161,7 +163,15 @@ const POS = {
 
   boss_comment_line1: { left: 331, top: 598.5, width: 170 },
   boss_comment_line2: { left: 331, top: 616.1, width: 170 },
-  boss_sig_img:       { left: 390, top: 646, width: 95, height: 15 },
+  // 2026-07-15 (round 3), item 1.3: re-measured against the scanned
+  // background — the comment area's own dashed underline sits at ~625pt and
+  // the "(ลงชื่อ)" dashed signature line sits at ~659.4pt (with the
+  // "(ลงชื่อ)" label text itself occupying x:332-358pt, so the blank dash
+  // portion runs roughly x:358-492pt). Previous box (top:646,height:15,
+  // bottom:661) crossed straight through the 659.4pt line. New box fills
+  // the space between the two dashed lines, bottom sitting ~4.4pt
+  // (~0.16cm) above the signature line, within the requested 0.1-0.3cm gap.
+  boss_sig_img:       { left: 372, top: 628, width: 108, height: 27 },
   boss_name_paren:    { left: 364.2, top: 668.5, width: 122.4 },
   boss_position:      { left: 365, top: 703.5 },
   boss_day:           { left: 350, top: 721 },
@@ -242,12 +252,13 @@ export function generateLeaveOfficialFormHTML(data: LeaveOfficialFormData, appUr
   fields.push(text(POS.written_day, written.day, { center: true }))
   fields.push(text(POS.written_month, written.month, { center: true }))
   fields.push(text(POS.written_year, written.year, { center: true }))
-  // 2026-07-15, item 1.1: white out the pre-printed "เรียน ผู้จัดการฝ่าย
-  // ....." line entirely and just show the supervisor's own position_th —
-  // avoids the confusing/redundant read of a parsed department name sitting
-  // next to a pre-printed "ผู้จัดการฝ่าย" label.
+  // 2026-07-15, item 1.1 (round 2): white out the pre-printed "เรียน
+  // ผู้จัดการฝ่าย ....." line entirely — avoids the confusing/redundant
+  // read of a parsed department name sitting next to a pre-printed
+  // "ผู้จัดการฝ่าย" label. Round 3 then re-added a dynamic "เรียน " prefix
+  // (see below) since dropping it made the line read too abruptly.
   fields.push(cover(POS.dept_manager_cover))
-  fields.push(text(POS.dept_manager, data.approver?.position_th ?? ''))
+  fields.push(text(POS.dept_manager, data.approver?.position_th ? `เรียน ${data.approver.position_th}` : ''))
   fields.push(text(POS.employee_name, employeeName))
   fields.push(text(POS.employee_position, data.employee.position_th ?? ''))
 
@@ -256,8 +267,14 @@ export function generateLeaveOfficialFormHTML(data: LeaveOfficialFormData, appUr
   fields.push(mark(POS.cb_annual, cbType === 'annual'))
   fields.push(mark(POS.cb_other, cbType === 'other'))
   if (cbType === 'sick') {
+    // 2026-07-15 (round 3), item 1.2: previously only ticked "ไม่มี" when
+    // the value was strictly `false` — leave requests created before this
+    // field existed (or where it was never set) store `null`, so NEITHER
+    // box ticked. Per user decision, treat "not explicitly มี" as "ไม่มี",
+    // matching how the regular styled PDF already renders this same field
+    // (see leave-template.ts: `medical_cert_provided ? 'มี' : 'ไม่มี'`).
     fields.push(mark(POS.cb_medcert_yes, data.leave.medical_cert_provided === true))
-    fields.push(mark(POS.cb_medcert_no, data.leave.medical_cert_provided === false))
+    fields.push(mark(POS.cb_medcert_no, data.leave.medical_cert_provided !== true))
   }
   if (cbType === 'personal') fields.push(text(POS.personal_reason, data.leave.reason ?? '', { size: 9.5 }))
   if (cbType === 'other') fields.push(text(POS.other_reason, otherReasonText, { size: 9.5 }))

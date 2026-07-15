@@ -12,16 +12,15 @@ import {
   unauthorized, forbidden, notFound,
 } from '@/lib/api-helpers'
 import { generateLeaveOfficialFormHTML, type LeaveOfficialFormData } from '@/lib/pdf/leave-official-form-template'
-import { generateLeaveHTML, type LeaveTemplateData } from '@/lib/pdf/leave-template'
 import { renderPdfFromHtml } from '@/lib/pdf/render'
-import { LEAVE_TYPE_LABEL } from '@/utils'
-import type { LeaveType } from '@/types/database'
 import { PDFDocument } from 'pdf-lib'
 
-// 2026-07-15: bumped from 30s — this route now renders TWO full PDFs
-// (the official-form overlay + the system-styled PDF, per item 1.5) plus
-// an optional medical-cert merge, so the old 30s budget got tighter.
-export const maxDuration = 45
+// 2026-07-15 (round 3), item 1.4: previously bumped to 45s to also render
+// the system-styled PDF and attach it as reference pages (item 1.5 from
+// round 2) — per explicit user feedback that leaves the official form and
+// the system's own PDF are separate downloads and shouldn't be merged, so
+// that attach step is removed below and the budget is back to 30s.
+export const maxDuration = 30
 
 // A4 in pt — matches the base form's own page size (see
 // leave-official-form-template.ts's html/body width/height).
@@ -50,18 +49,11 @@ async function appendMedicalCertPage(basePdf: Uint8Array, certBuf: Buffer, certM
 
   return doc.save()
 }
-
-// 2026-07-15, item 1.5: appends another PDF's pages as-is — used to attach
-// the regular system-styled leave PDF (leave-template.ts) as reference
-// pages after the official form, so whoever prints/checks the official
-// form can cross-check it against the system's own record on paper.
-async function appendPdfPages(basePdf: Uint8Array, otherPdf: Uint8Array): Promise<Uint8Array> {
-  const doc = await PDFDocument.load(basePdf)
-  const otherDoc = await PDFDocument.load(otherPdf)
-  const pages = await doc.copyPages(otherDoc, otherDoc.getPageIndices())
-  pages.forEach(p => doc.addPage(p))
-  return doc.save()
-}
+// 2026-07-15 (round 3), item 1.4: the "attach the system-styled PDF as
+// reference pages" feature (appendPdfPages, added round 2 per the old item
+// 1.5) has been removed per explicit user feedback — the official form and
+// the system's own styled PDF are already separate downloads and should
+// stay that way. Only the medical-cert page merge above remains.
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const params = await ctx.params
@@ -84,10 +76,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
       hr_checked_by:users!leave_requests_hr_checked_by_id_fkey(
         first_name_th, last_name_th, position_th
       ),
-      approvals:leave_approvals(
-        action, comment, approver_name, acted_at,
-        approver:users!leave_approvals_approver_id_fkey(first_name_th, last_name_th)
-      )
+      approvals:leave_approvals(action, comment)
     `)
     .eq('id', params.id)
     .eq('company_id', session.company_id)
@@ -96,11 +85,8 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   if (error || !leave) return notFound('Leave request')
   if (session.role === 'employee' && leave.user_id !== session.id) return forbidden()
 
-  // 2026-07-15: full company row (not just `code`) — needed to also render
-  // the system-styled PDF (see appendPdfPages / item 1.5 below), which uses
-  // the same header/letterhead fields as leave-template.ts's other caller.
   const { data: company } = await supabase
-    .from('companies').select('code, name_th, name_en, logo_url, legal_name_th, address_th, tax_id, phone, contact_email')
+    .from('companies').select('code')
     .eq('id', session.company_id).single()
 
   async function signatureDataUri(path: string | null): Promise<string | null> {
@@ -185,97 +171,11 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
 
   const html = generateLeaveOfficialFormHTML(templateData, appUrl)
 
-  // 2026-07-15, item 1.5: also render the regular system-styled PDF (same
-  // one behind the "ดาวน์โหลด PDF" button) so it can be attached as
-  // reference pages after the official form. Built from the SAME `leave`
-  // row already fetched above — mirrors src/app/api/pdf/leave/[id]/
-  // route.ts's own mapping so the two stay visually identical.
-  const styledTemplateData: LeaveTemplateData = {
-    company: {
-      code:     company?.code     ?? '',
-      name_th:  company?.name_th  ?? '',
-      name_en:  company?.name_en  ?? '',
-      logo_url: company?.logo_url ?? null,
-      legal_name_th: company?.legal_name_th ?? null,
-      address_th:    company?.address_th    ?? null,
-      tax_id:        company?.tax_id        ?? null,
-      phone:         company?.phone         ?? null,
-      contact_email: company?.contact_email ?? null,
-    },
-    employee: {
-      employee_code: (leave.user as any)?.employee_code ?? '',
-      first_name_th: (leave.user as any)?.first_name_th ?? '',
-      last_name_th:  (leave.user as any)?.last_name_th  ?? '',
-      position_th:   (leave.user as any)?.position_th   ?? null,
-      department:    (leave.user as any)?.department    ?? null,
-      address:       (leave.user as any)?.address        ?? null,
-      phone:         (leave.user as any)?.phone          ?? null,
-    },
-    leave: {
-      id:              leave.id,
-      leave_type:      leave.leave_type,
-      leave_type_th:   LEAVE_TYPE_LABEL[leave.leave_type as LeaveType] ?? leave.leave_type,
-      start_date:      leave.start_date,
-      end_date:        leave.end_date,
-      total_days:      leave.total_days,
-      is_half_day:     leave.is_half_day,
-      half_day_period: leave.half_day_period,
-      reason:          leave.reason,
-      status:          leave.status,
-      created_at:      leave.created_at,
-      place_written:          leave.place_written ?? null,
-      contact_during_leave:   leave.contact_during_leave ?? null,
-      medical_cert_provided:  leave.medical_cert_provided ?? null,
-    },
-    approver: leave.approved_by ? {
-      first_name_th: (leave.approved_by as any).first_name_th,
-      last_name_th:  (leave.approved_by as any).last_name_th,
-      approved_at:   leave.approved_at,
-    } : null,
-    hrChecker: leave.hr_checked_by ? {
-      first_name_th: (leave.hr_checked_by as any).first_name_th,
-      last_name_th:  (leave.hr_checked_by as any).last_name_th,
-      checked_at:    leave.hr_checked_at,
-    } : null,
-    signatures: {
-      employee_url: employeeSigUri,
-      employee_at:  leave.signature_employee_at ?? null,
-      approver_url: approverSigUri,
-      approver_at:  leave.signature_approver_at  ?? null,
-      hr_url:       hrSigUri,
-      hr_at:        leave.hr_checked_at ?? null,
-    },
-    approvals: ((leave.approvals as any[]) ?? []).map(ap => ({
-      action:        ap.action,
-      approver_name: ap.approver
-        ? `${ap.approver.first_name_th} ${ap.approver.last_name_th}`
-        : ap.approver_name ?? 'ระบบ',
-      comment:       ap.comment,
-      acted_at:      ap.acted_at,
-    })).sort((a: any, b: any) => new Date(a.acted_at).getTime() - new Date(b.acted_at).getTime()),
-    balanceStats: balanceStats.map(s => ({
-      leave_type:    s.leave_type,
-      leave_type_th: ({ sick: 'ป่วย', personal: 'กิจส่วนตัว', annual: 'ลาพักร้อน', other: 'อื่นๆ' } as Record<string, string>)[s.leave_type],
-      used_before:   s.used_before, this_time: s.this_time, total: s.total,
-    })),
-  }
-  const styledHtml = generateLeaveHTML(styledTemplateData, appUrl)
-
   try {
     // Zero margin — the overlay coordinates were measured assuming the page
     // starts flush at (0,0), matching the background image 1:1. See
     // render.ts's opts.margin comment.
     let pdfBuffer: Uint8Array = await renderPdfFromHtml(html, { margin: { top: '0', bottom: '0', left: '0', right: '0' } })
-
-    // item 1.5: attach the system-styled PDF right after the official
-    // form, as a reference page — non-fatal if it fails, the official form
-    // itself still renders fine on its own.
-    try {
-      const styledPdfBuffer = await renderPdfFromHtml(styledHtml)
-      pdfBuffer = await appendPdfPages(pdfBuffer, styledPdfBuffer)
-    } catch (styledErr) {
-      console.error('[pdf/leave/official] styled-PDF attach failed', styledErr)
-    }
 
     // 2026-07-14 (part 2), item 2.4: sick leave + "มีใบรับรองแพทย์" +
     // an actual uploaded file → append it as an extra page after the form
