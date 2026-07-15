@@ -168,10 +168,13 @@ const POS = {
   // the "(ลงชื่อ)" dashed signature line sits at ~659.4pt (with the
   // "(ลงชื่อ)" label text itself occupying x:332-358pt, so the blank dash
   // portion runs roughly x:358-492pt). Previous box (top:646,height:15,
-  // bottom:661) crossed straight through the 659.4pt line. New box fills
-  // the space between the two dashed lines, bottom sitting ~4.4pt
-  // (~0.16cm) above the signature line, within the requested 0.1-0.3cm gap.
-  boss_sig_img:       { left: 372, top: 628, width: 108, height: 27 },
+  // bottom:661) crossed straight through the 659.4pt line. Round 3 box
+  // filled the space between the two dashed lines with a ~4.4pt gap above
+  // the signature line. Round 4, item 1.1: still read as sitting too high
+  // (too much whitespace under the signature ink before the line) — shifted
+  // down another ~6pt (~0.2cm) per user request, so the box now sits right
+  // at/just touching the line, matching how a real signature rests on it.
+  boss_sig_img:       { left: 372, top: 634, width: 108, height: 27 },
   boss_name_paren:    { left: 364.2, top: 668.5, width: 122.4 },
   boss_position:      { left: 365, top: 703.5 },
   boss_day:           { left: 350, top: 721 },
@@ -258,7 +261,14 @@ export function generateLeaveOfficialFormHTML(data: LeaveOfficialFormData, appUr
   // "ผู้จัดการฝ่าย" label. Round 3 then re-added a dynamic "เรียน " prefix
   // (see below) since dropping it made the line read too abruptly.
   fields.push(cover(POS.dept_manager_cover))
-  fields.push(text(POS.dept_manager, data.approver?.position_th ? `เรียน ${data.approver.position_th}` : ''))
+  // 2026-07-15 (round 4), item 1.2: "เรียน" itself needs to render in black
+  // (matching the pre-printed form's ink) while the live position title
+  // after it keeps the usual blue used for all other filled-in fields — a
+  // plain <span> override on just that word, nested inside the same .fld
+  // div so it still inherits position/size from the `text()` helper.
+  fields.push(text(POS.dept_manager, data.approver?.position_th
+    ? `<span style="color:#000">เรียน</span> ${data.approver.position_th}`
+    : ''))
   fields.push(text(POS.employee_name, employeeName))
   fields.push(text(POS.employee_position, data.employee.position_th ?? ''))
 
@@ -276,7 +286,11 @@ export function generateLeaveOfficialFormHTML(data: LeaveOfficialFormData, appUr
     fields.push(mark(POS.cb_medcert_yes, data.leave.medical_cert_provided === true))
     fields.push(mark(POS.cb_medcert_no, data.leave.medical_cert_provided !== true))
   }
-  if (cbType === 'personal') fields.push(text(POS.personal_reason, data.leave.reason ?? '', { size: 9.5 }))
+  // 2026-07-15 (round 4), item 1.3: the "เนื่องจาก...." blank was only ever
+  // filled in for cbType === 'personal' — per repeated user feedback, it
+  // should always show the leave's reason regardless of leave type (sick,
+  // annual, etc. all have a reason too, not just กิจส่วนตัว).
+  fields.push(text(POS.personal_reason, data.leave.reason ?? '', { size: 9.5 }))
   if (cbType === 'other') fields.push(text(POS.other_reason, otherReasonText, { size: 9.5 }))
 
   fields.push(text(POS.from_day, from.day, { center: true }))
