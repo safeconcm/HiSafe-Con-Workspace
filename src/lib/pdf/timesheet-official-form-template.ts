@@ -230,10 +230,17 @@ export function generateTimesheetOfficialFormHTML(data: TimesheetOfficialFormDat
      pagination (the real page size comes from render.ts's puppeteer
      page.pdf({format:'A4', landscape:true})), but it invited stacking content past
      the real printable area without any visual warning. Trimmed padding
-     (8mm -> 6mm top/bottom) and every fixed row-height below so the whole
-     form actually fits the ~198mm usable height on one page — see the
-     per-section height budget in this file's comments. */
-  .page { width: 297mm; padding: 6mm 8mm; background: #fff; }
+     and every fixed row-height below so the whole form actually fits on
+     one page — see the per-section height budget in this file's comments.
+     2026-07-21b: the first pass (6mm top/bottom padding, secB rows at
+     4.0mm) still overflowed to a 2nd page in the actual rendered PDF —
+     verified by reloading the redeployed production build, not just by
+     re-reading the CSS. Real Sarabun/Arial line-height in headless
+     Chromium runs taller than the hand-estimated budget, so this pass
+     trims harder and leaves real slack (~20mm) instead of a razor-thin
+     fit: page padding down to 5mm top/bottom, secB rows down to 3.5mm,
+     signature/footer margins cut further. */
+  .page { width: 297mm; padding: 5mm 8mm; background: #fff; }
   h1.title { font-size: 12px; font-weight: 700; margin-bottom: 3px; }
 
   table { border-collapse: collapse; table-layout: fixed; }
@@ -255,11 +262,11 @@ export function generateTimesheetOfficialFormHTML(data: TimesheetOfficialFormDat
   .info-row .name-val { max-width: 70mm; }
   .info-row .pos-val { max-width: 45mm; }
 
-  .section-title { font-size: 10px; font-weight: 700; font-style: italic; padding: 2px 4px; border: 1px solid #000; border-top: none; }
+  .section-title { font-size: 10px; font-weight: 700; font-style: italic; padding: 1.5px 4px; border: 1px solid #000; border-top: none; }
 
   /* Legend (4 cols x 2 rows) */
   .legend-table { width: 100%; }
-  .legend-table td { padding: 1px 6px; border: none; font-size: 8.5px; white-space: nowrap; }
+  .legend-table td { padding: 0.5px 6px; border: none; font-size: 8.5px; white-space: nowrap; }
   .legend-table .legend-lbl { width: 14%; }
 
   /* Section A grid */
@@ -270,16 +277,17 @@ export function generateTimesheetOfficialFormHTML(data: TimesheetOfficialFormDat
   .secA-table th.day, .secA-table td.day { width: 6mm; }
   .secA-table th.sum, .secA-table td.sum { width: 6mm; font-weight: 700; }
   .secA-table td.shaded { background: repeating-linear-gradient(45deg, #eee, #eee 2px, #fff 2px, #fff 4px); }
-  .secA-table td { height: 4.2mm; font-weight: 700; }
+  .secA-table td { height: 3.8mm; font-weight: 700; }
 
   /* Section B legend (activity codes, 4 cols x 3 rows) */
   .actlegend-table { width: 100%; border: 1px solid #000; border-top: none; }
-  .actlegend-table td { padding: 1px 6px; border: none; font-size: 8.5px; white-space: nowrap; }
+  .actlegend-table td { padding: 0.5px 6px; border: none; font-size: 8.5px; white-space: nowrap; }
 
   /* Section B grid — row height is the single biggest lever on total page
-     height (28 rows + 1 total row, confirmed row cap). Kept at 4.0mm
-     (down from 4.6mm) purely to fit one page; ~7mm of visual row height is
-     lost overall, no data/columns removed. */
+     height (28 rows + 1 total row, confirmed row cap). 2026-07-21b: 4.0mm
+     still overflowed to page 2 in the actual rendered PDF (verified on the
+     live redeploy), so cut further to 3.5mm — over 29 rows that alone
+     recovers ~14.5mm versus the previous pass. No data/columns removed. */
   .secB-table { width: 100%; border: 1px solid #000; border-top: none; }
   .secB-table th, .secB-table td { text-align: center; font-size: 7px; }
   .secB-table th.alloc-code, .secB-table td.alloc-code { width: 14mm; font-weight: 700; }
@@ -287,18 +295,18 @@ export function generateTimesheetOfficialFormHTML(data: TimesheetOfficialFormDat
   .secB-table th.activity-code, .secB-table td.activity-code { width: 12mm; color: #1e3a8a; font-weight: 700; }
   .secB-table th.day, .secB-table td.day { width: 6mm; }
   .secB-table th.total-days, .secB-table td.total-days { width: 16mm; font-weight: 700; }
-  .secB-table td { height: 4mm; }
+  .secB-table td { height: 3.5mm; }
   .secB-table td.shaded { background: repeating-linear-gradient(45deg, #eee, #eee 2px, #fff 2px, #fff 4px); }
   .secB-table thead th { padding: 2px 0; font-weight: 700; }
   .secB-table .total-row td { font-weight: 700; }
   .secB-table .total-row .total-days { color: #b91c1c; }
 
   /* Signatures */
-  .sig-row { display: flex; justify-content: space-around; margin-top: 5mm; font-size: 9.5px; }
+  .sig-row { display: flex; justify-content: space-around; margin-top: 2.5mm; font-size: 9.5px; }
   .sig-row .sig-img { display: block; height: 10mm; object-fit: contain; margin: 0 auto 2px; }
   .sig-row .sig-line { display: inline-block; border-bottom: 1px solid #000; width: 55mm; }
 
-  .footer { margin-top: 2mm; font-size: 7px; color: #999; display: flex; justify-content: space-between; }
+  .footer { margin-top: 1mm; font-size: 7px; color: #999; display: flex; justify-content: space-between; }
 </style>
 </head>
 <body>
