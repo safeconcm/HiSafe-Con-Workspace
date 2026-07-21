@@ -228,7 +228,7 @@ export function generateTimesheetOfficialFormHTML(data: TimesheetOfficialFormDat
   /* 2026-07-21, item 1: page height is no longer forced to a literal 210mm
      box — that was purely a sizing reference and didn't actually control
      pagination (the real page size comes from render.ts's puppeteer
-     `format:'A4', landscape:true`), but it invited stacking content past
+     page.pdf({format:'A4', landscape:true})), but it invited stacking content past
      the real printable area without any visual warning. Trimmed padding
      (8mm -> 6mm top/bottom) and every fixed row-height below so the whole
      form actually fits the ~198mm usable height on one page — see the
@@ -240,12 +240,12 @@ export function generateTimesheetOfficialFormHTML(data: TimesheetOfficialFormDat
   td, th { border: 0.5px solid #000; }
 
   /* 2026-07-21, item 2: Name/Position/Based/Month row — was a <table
-     table-layout:fixed> with label cells at `width:1%`, intending them to
+     table-layout:fixed> with label cells at width:1%, intending them to
      shrink to their text ("Name:", "Position:" ...). That trick only works
-     under table-layout:auto; under `fixed` the browser takes 1% literally
+     under table-layout:auto; under table-layout:fixed the browser takes 1% literally
      (a couple px), so the label text overflowed its cell and visually
      collided with the value text next to it. Switched to a flex row —
-     labels are `white-space:nowrap` and size to their own content
+     labels are white-space:nowrap and size to their own content
      naturally, values that could run long (name/position) get an explicit
      max-width + ellipsis instead of overlapping their neighbor. */
   .info-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: nowrap; white-space: nowrap; padding: 2px 5px; font-size: 9.5px; border-bottom: 1px solid #000; margin-bottom: 2px; }
