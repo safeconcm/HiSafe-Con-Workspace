@@ -224,19 +224,36 @@ export function generateTimesheetOfficialFormHTML(data: TimesheetOfficialFormDat
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap');
   * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: Arial, 'Sarabun', sans-serif; font-size: 8.5px; color: #000; background: #fff; }
-  .page { width: 297mm; height: 210mm; padding: 8mm; background: #fff; }
-  h1.title { font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+  body { font-family: Arial, 'Sarabun', sans-serif; font-size: 8.5px; line-height: 1.15; color: #000; background: #fff; }
+  /* 2026-07-21, item 1: page height is no longer forced to a literal 210mm
+     box — that was purely a sizing reference and didn't actually control
+     pagination (the real page size comes from render.ts's puppeteer
+     `format:'A4', landscape:true`), but it invited stacking content past
+     the real printable area without any visual warning. Trimmed padding
+     (8mm -> 6mm top/bottom) and every fixed row-height below so the whole
+     form actually fits the ~198mm usable height on one page — see the
+     per-section height budget in this file's comments. */
+  .page { width: 297mm; padding: 6mm 8mm; background: #fff; }
+  h1.title { font-size: 12px; font-weight: 700; margin-bottom: 3px; }
 
   table { border-collapse: collapse; table-layout: fixed; }
   td, th { border: 0.5px solid #000; }
 
-  /* Name / nickname / position / based / month row */
-  .info-table { width: 100%; margin-bottom: 2px; }
-  .info-table td { padding: 2px 5px; font-size: 9.5px; border: none; border-bottom: 1px solid #000; }
-  .info-table .lbl { white-space: nowrap; width: 1%; }
-  .info-table .val { font-weight: 700; font-style: italic; color: #7a1010; }
-  .info-table .val-blue { font-weight: 700; color: #1e3a8a; }
+  /* 2026-07-21, item 2: Name/Position/Based/Month row — was a <table
+     table-layout:fixed> with label cells at `width:1%`, intending them to
+     shrink to their text ("Name:", "Position:" ...). That trick only works
+     under table-layout:auto; under `fixed` the browser takes 1% literally
+     (a couple px), so the label text overflowed its cell and visually
+     collided with the value text next to it. Switched to a flex row —
+     labels are `white-space:nowrap` and size to their own content
+     naturally, values that could run long (name/position) get an explicit
+     max-width + ellipsis instead of overlapping their neighbor. */
+  .info-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: nowrap; white-space: nowrap; padding: 2px 5px; font-size: 9.5px; border-bottom: 1px solid #000; margin-bottom: 2px; }
+  .info-row .lbl { white-space: nowrap; }
+  .info-row .val { font-weight: 700; font-style: italic; color: #7a1010; overflow: hidden; text-overflow: ellipsis; }
+  .info-row .val-blue { font-weight: 700; color: #1e3a8a; white-space: nowrap; }
+  .info-row .name-val { max-width: 70mm; }
+  .info-row .pos-val { max-width: 45mm; }
 
   .section-title { font-size: 10px; font-weight: 700; font-style: italic; padding: 2px 4px; border: 1px solid #000; border-top: none; }
 
@@ -253,13 +270,16 @@ export function generateTimesheetOfficialFormHTML(data: TimesheetOfficialFormDat
   .secA-table th.day, .secA-table td.day { width: 6mm; }
   .secA-table th.sum, .secA-table td.sum { width: 6mm; font-weight: 700; }
   .secA-table td.shaded { background: repeating-linear-gradient(45deg, #eee, #eee 2px, #fff 2px, #fff 4px); }
-  .secA-table td { height: 5mm; font-weight: 700; }
+  .secA-table td { height: 4.2mm; font-weight: 700; }
 
   /* Section B legend (activity codes, 4 cols x 3 rows) */
   .actlegend-table { width: 100%; border: 1px solid #000; border-top: none; }
   .actlegend-table td { padding: 1px 6px; border: none; font-size: 8.5px; white-space: nowrap; }
 
-  /* Section B grid */
+  /* Section B grid — row height is the single biggest lever on total page
+     height (28 rows + 1 total row, confirmed row cap). Kept at 4.0mm
+     (down from 4.6mm) purely to fit one page; ~7mm of visual row height is
+     lost overall, no data/columns removed. */
   .secB-table { width: 100%; border: 1px solid #000; border-top: none; }
   .secB-table th, .secB-table td { text-align: center; font-size: 7px; }
   .secB-table th.alloc-code, .secB-table td.alloc-code { width: 14mm; font-weight: 700; }
@@ -267,18 +287,18 @@ export function generateTimesheetOfficialFormHTML(data: TimesheetOfficialFormDat
   .secB-table th.activity-code, .secB-table td.activity-code { width: 12mm; color: #1e3a8a; font-weight: 700; }
   .secB-table th.day, .secB-table td.day { width: 6mm; }
   .secB-table th.total-days, .secB-table td.total-days { width: 16mm; font-weight: 700; }
-  .secB-table td { height: 4.6mm; }
+  .secB-table td { height: 4mm; }
   .secB-table td.shaded { background: repeating-linear-gradient(45deg, #eee, #eee 2px, #fff 2px, #fff 4px); }
   .secB-table thead th { padding: 2px 0; font-weight: 700; }
   .secB-table .total-row td { font-weight: 700; }
   .secB-table .total-row .total-days { color: #b91c1c; }
 
   /* Signatures */
-  .sig-row { display: flex; justify-content: space-around; margin-top: 8mm; font-size: 9.5px; }
-  .sig-row .sig-img { display: block; height: 12mm; object-fit: contain; margin: 0 auto 2px; }
+  .sig-row { display: flex; justify-content: space-around; margin-top: 5mm; font-size: 9.5px; }
+  .sig-row .sig-img { display: block; height: 10mm; object-fit: contain; margin: 0 auto 2px; }
   .sig-row .sig-line { display: inline-block; border-bottom: 1px solid #000; width: 55mm; }
 
-  .footer { margin-top: 3mm; font-size: 7px; color: #999; display: flex; justify-content: space-between; }
+  .footer { margin-top: 2mm; font-size: 7px; color: #999; display: flex; justify-content: space-between; }
 </style>
 </head>
 <body>
@@ -286,20 +306,18 @@ export function generateTimesheetOfficialFormHTML(data: TimesheetOfficialFormDat
 
   <h1 class="title">Staff Monthly Attendance Time Allocation Rechord</h1>
 
-  <table class="info-table">
-    <tr>
-      <td class="lbl">Name:</td>
-      <td class="val" style="width:38%">${employeeName}</td>
-      <td class="val-blue" style="width:8%">${data.employee.nickname ?? ''}</td>
-      <td class="lbl">Position:</td>
-      <td class="val" style="width:14%">${position}</td>
-      <td class="lbl">Based:</td>
-      <td class="val" style="width:8%">${basedLabel}</td>
-      <td class="lbl">Month:</td>
-      <td class="val-blue">${EN_MONTHS[month - 1]}</td>
-      <td class="val-blue">${year}</td>
-    </tr>
-  </table>
+  <div class="info-row">
+    <span class="lbl">Name:</span>
+    <span class="val name-val" title="${employeeName}">${employeeName}</span>
+    <span class="val-blue">${data.employee.nickname ?? ''}</span>
+    <span class="lbl">Position:</span>
+    <span class="val pos-val" title="${position}">${position}</span>
+    <span class="lbl">Based:</span>
+    <span class="val-blue">${basedLabel}</span>
+    <span class="lbl">Month:</span>
+    <span class="val-blue">${EN_MONTHS[month - 1]}</span>
+    <span class="val-blue">${year}</span>
+  </div>
 
   <div class="section-title">Section A : Work Absence</div>
   <table class="legend-table">
