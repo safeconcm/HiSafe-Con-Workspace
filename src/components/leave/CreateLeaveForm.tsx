@@ -228,7 +228,12 @@ export function CreateLeaveForm() {
             id="start_date"
             type="date"
             {...register('start_date')}
-            min={today}
+            // 2026-08-08: no `min` here on purpose — the old min={today}
+            // blocked filing leave for a past date entirely (sick leave,
+            // urgent personal leave, or just forgetting to file on time),
+            // even though the API/DB never enforced that restriction
+            // server-side. Per user decision, all leave types can now be
+            // backdated with no extra flag/reason required.
             className="form-input"
           />
           {errors.start_date && <p className="mt-1 text-xs text-red-600">{errors.start_date.message}</p>}
