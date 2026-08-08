@@ -254,13 +254,20 @@ export function generateTimesheetOfficialFormHTML(data: TimesheetOfficialFormDat
      collided with the value text next to it. Switched to a flex row —
      labels are white-space:nowrap and size to their own content
      naturally, values that could run long (name/position) get an explicit
-     max-width + ellipsis instead of overlapping their neighbor. */
-  .info-row { display: flex; align-items: baseline; gap: 10px; flex-wrap: nowrap; white-space: nowrap; padding: 2px 5px; font-size: 9.5px; border-bottom: 1px solid #000; margin-bottom: 2px; }
+     max-width + ellipsis instead of overlapping their neighbor.
+     2026-08-08: that flex row only had a small fixed gap, so every field
+     packed to the left with a big dead gap on the right — didn't match the
+     reference form, which spreads Name/Position/Based/Month evenly across
+     the full row. Fixed by grouping each label+value pair into its own
+     info-grp span and letting the outer row's justify-content:space-between
+     distribute the groups across the full width instead. */
+  .info-row { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: nowrap; padding: 2px 5px; font-size: 9.5px; border-bottom: 1px solid #000; margin-bottom: 2px; }
+  .info-row .info-grp { display: flex; align-items: baseline; gap: 6px; white-space: nowrap; min-width: 0; }
   .info-row .lbl { white-space: nowrap; }
   .info-row .val { font-weight: 700; font-style: italic; color: #7a1010; overflow: hidden; text-overflow: ellipsis; }
   .info-row .val-blue { font-weight: 700; color: #1e3a8a; white-space: nowrap; }
-  .info-row .name-val { max-width: 70mm; }
-  .info-row .pos-val { max-width: 45mm; }
+  .info-row .name-val { max-width: 55mm; }
+  .info-row .pos-val { max-width: 40mm; }
 
   .section-title { font-size: 10px; font-weight: 700; font-style: italic; padding: 1.5px 4px; border: 1px solid #000; border-top: none; }
 
@@ -315,16 +322,23 @@ export function generateTimesheetOfficialFormHTML(data: TimesheetOfficialFormDat
   <h1 class="title">Staff Monthly Attendance Time Allocation Rechord</h1>
 
   <div class="info-row">
-    <span class="lbl">Name:</span>
-    <span class="val name-val" title="${employeeName}">${employeeName}</span>
-    <span class="val-blue">${data.employee.nickname ?? ''}</span>
-    <span class="lbl">Position:</span>
-    <span class="val pos-val" title="${position}">${position}</span>
-    <span class="lbl">Based:</span>
-    <span class="val-blue">${basedLabel}</span>
-    <span class="lbl">Month:</span>
-    <span class="val-blue">${EN_MONTHS[month - 1]}</span>
-    <span class="val-blue">${year}</span>
+    <span class="info-grp">
+      <span class="lbl">Name:</span>
+      <span class="val name-val" title="${employeeName}">${employeeName}</span>
+      ${data.employee.nickname ? `<span class="val-blue">${data.employee.nickname}</span>` : ''}
+    </span>
+    <span class="info-grp">
+      <span class="lbl">Position:</span>
+      <span class="val pos-val" title="${position}">${position}</span>
+    </span>
+    <span class="info-grp">
+      <span class="lbl">Based:</span>
+      <span class="val-blue">${basedLabel}</span>
+    </span>
+    <span class="info-grp">
+      <span class="lbl">Month:</span>
+      <span class="val-blue">${EN_MONTHS[month - 1]} ${year}</span>
+    </span>
   </div>
 
   <div class="section-title">Section A : Work Absence</div>
