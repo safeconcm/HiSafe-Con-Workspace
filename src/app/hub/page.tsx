@@ -78,9 +78,9 @@ const APPS = [
     name: 'CONNEX AI',
     description: 'AI Assistant',
     icon: Bot,
-    href: null,
+    href: '/ai', // v1 basic starter — live 2026-10-16, see src/app/(dashboard)/ai/page.tsx
     color: 'bg-gradient-to-br from-indigo-500 to-fuchsia-600',
-    available: true, // everyone can access once built — just not built yet
+    available: true,
   },
 ] as const
 
