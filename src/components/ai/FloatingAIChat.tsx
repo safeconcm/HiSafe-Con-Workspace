@@ -12,6 +12,14 @@
 //
 // Client component imported into the server-component hub page
 // (src/app/hub/page.tsx) — Next.js allows this directly, no wrapper needed.
+//
+// Made more noticeable (2026-10-16, same-day follow-up, after the "CONNEX
+// AI" grid card was removed as redundant with this widget): added a
+// pulsing ring around the toggle button plus a small greeting bubble that
+// appears next to it on load, so the widget doesn't get missed now that
+// it's the only entry point. The greeting also makes clear this isn't an
+// HR-only bot — the suggestion chips below had all read as HR questions,
+// which gave that impression even though the text box was always free-form.
 
 import { useState, useRef, useEffect } from 'react'
 import { Bot, Send, Loader2, X, Sparkles, Maximize2 } from 'lucide-react'
@@ -19,18 +27,30 @@ import Link from 'next/link'
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string }
 
+// Mixed on purpose (not all HR) — signals this is a general assistant,
+// not a dressed-up HR FAQ bot.
 const SUGGESTIONS = [
+  'ถามอะไรก็ได้ ไม่จำกัดแค่เรื่องงาน',
   'สรุปขั้นตอนการลาพักร้อนโดยทั่วไปให้หน่อย',
-  'ช่วยร่างอีเมลแจ้งลาป่วย 1 วัน',
 ]
 
 export function FloatingAIChat() {
   const [open, setOpen]         = useState(false)
+  const [showGreeting, setShowGreeting] = useState(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput]       = useState('')
   const [loading, setLoading]   = useState(false)
   const [error, setError]       = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
+
+  // Show a greeting bubble a moment after load (lets the hero's own
+  // fade-in finish first), auto-hide after a while so it doesn't linger
+  // forever for people who aren't interested.
+  useEffect(() => {
+    const showTimer = setTimeout(() => setShowGreeting(true), 1200)
+    const hideTimer = setTimeout(() => setShowGreeting(false), 9000)
+    return () => { clearTimeout(showTimer); clearTimeout(hideTimer) }
+  }, [])
 
   useEffect(() => {
     if (open) bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -185,14 +205,37 @@ export function FloatingAIChat() {
         </div>
       )}
 
-      {/* Toggle button */}
-      <button
-        onClick={() => setOpen((o) => !o)}
-        aria-label={open ? 'ปิดแชท CONNEX AI' : 'เปิดแชท CONNEX AI'}
-        className="w-14 h-14 rounded-full bg-gradient-to-br from-indigo-500 to-fuchsia-600 text-white shadow-2xl shadow-black/40 flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
-      >
-        {open ? <X className="w-6 h-6" /> : <Bot className="w-6 h-6" />}
-      </button>
+      {/* Greeting bubble — draws attention to the widget on first load */}
+      {!open && showGreeting && (
+        <div className="absolute bottom-1 right-[4.5rem] max-w-[13rem] animate-fade-in-up">
+          <div className="relative bg-white rounded-2xl rounded-br-sm shadow-2xl shadow-black/30 px-3.5 py-2.5">
+            <button
+              onClick={() => setShowGreeting(false)}
+              aria-label="ปิดข้อความ"
+              className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-gray-200 text-gray-500 flex items-center justify-center hover:bg-gray-300 transition-colors"
+            >
+              <X className="w-3 h-3" />
+            </button>
+            <p className="text-xs text-gray-700 leading-snug">
+              👋 มีอะไรให้ช่วยไหม? ถาม <span className="font-semibold">CONNEX AI</span> ได้เลย — เรื่องอะไรก็ได้
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Toggle button — pulsing ring while closed so it doesn't get missed */}
+      <div className="relative">
+        {!open && (
+          <span className="absolute inset-0 rounded-full bg-fuchsia-500 opacity-40 animate-ping pointer-events-none" />
+        )}
+        <button
+          onClick={() => { setOpen((o) => !o); setShowGreeting(false) }}
+          aria-label={open ? 'ปิดแชท CONNEX AI' : 'เปิดแชท CONNEX AI'}
+          className="relative w-14 h-14 rounded-full bg-gradient-to-br from-indigo-500 to-fuchsia-600 text-white shadow-2xl shadow-black/40 flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
+        >
+          {open ? <X className="w-6 h-6" /> : <Bot className="w-6 h-6" />}
+        </button>
+      </div>
     </div>
   )
 }

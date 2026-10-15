@@ -24,13 +24,19 @@
 // chat moved from src/app/(dashboard)/ai to a standalone src/app/ai (no EM
 // sidebar — see that file's own header note), and a floating chat widget
 // (src/components/ai/FloatingAIChat.tsx) was added directly to this page.
+//
+// CONNEX AI card removed (2026-10-16, same-day follow-up): once the
+// floating widget existed, a 5th icon pointing to the same feature was
+// redundant — back to the original 4 apps. The widget itself got a
+// pulsing ring + a "ถาม CONNEX AI ได้เลย" greeting bubble so it's not
+// missed (see FloatingAIChat.tsx) instead of relying on a grid icon.
 import type { Metadata } from 'next'
 import { createAdminClient, createServerSupabaseClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { pickActiveRow, ACTIVE_COMPANY_COOKIE } from '@/lib/company-context'
 import { fullNameTH } from '@/utils'
-import { Users, ShoppingCart, HardHat, BarChart3, Bot, LogOut, Lock } from 'lucide-react'
+import { Users, ShoppingCart, HardHat, BarChart3, LogOut, Lock } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { Card } from '@/components/ui/Card'
@@ -80,15 +86,6 @@ const APPS = [
     href: null,
     color: 'bg-violet-600',
     available: false, // restricted — only specific people, once built
-  },
-  {
-    key: 'ai',
-    name: 'CONNEX AI',
-    description: 'AI Assistant',
-    icon: Bot,
-    href: '/ai', // v1 basic starter — live 2026-10-16, see src/app/ai/page.tsx
-    color: 'bg-gradient-to-br from-indigo-500 to-fuchsia-600',
-    available: true,
   },
 ] as const
 
