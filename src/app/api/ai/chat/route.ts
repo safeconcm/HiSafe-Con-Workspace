@@ -14,19 +14,27 @@
 // CONNEX Biz once that ships).
 //
 // Provider (2026-10-16, updated): switched from Anthropic to Google's
-// Gemini API — Gemini has a genuinely free tier (no billing required for
-// gemini-2.5-flash, unlike Anthropic/OpenAI which both require a payment
-// method on file even for light use). Trade-off: free-tier requests are
-// rate-limited per Google Cloud project, and free-tier content may be used
-// by Google to improve their products — fine for this general-Q&A v1, but
-// worth remembering before pointing this at anything sensitive later.
+// Gemini API — Gemini has a genuinely free tier (no billing required,
+// unlike Anthropic/OpenAI which both require a payment method on file even
+// for light use). Trade-off: free-tier requests are rate-limited per
+// Google Cloud project, and free-tier content may be used by Google to
+// improve their products — fine for this general-Q&A v1, but worth
+// remembering before pointing this at anything sensitive later.
+//
+// Model (2026-10-16, corrected): started on gemini-2.5-flash and hit a 404
+// on every request — turns out Google now restricts the whole 2.5 family to
+// projects that already used it before; a brand-new API key/project 404s
+// instead of getting a clean permission error. Their own docs (as of
+// 2026-10-13) tell new projects to use 3.5 Flash-Lite or 3.8 Flash instead.
+// Picked gemini-3.5-flash-lite — it's the one they describe as "fastest,
+// most cost-effective," which matters most for a free-tier chat feature.
 // No SDK dependency — calls the REST API directly via fetch (avoids adding
 // a new package; this repo's node_modules install has been flaky in
 // CI/sandbox).
 import { NextRequest } from 'next/server'
 import { getSessionFromHeaders, ok, badRequest, unauthorized, serverError } from '@/lib/api-helpers'
 
-const GEMINI_MODEL = 'gemini-2.5-flash'
+const GEMINI_MODEL = 'gemini-3.5-flash-lite'
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`
 const MAX_TURNS = 20 // cap conversation history sent per request
 
