@@ -15,8 +15,15 @@
 // a server component — no cursor-follow JS, the glow/grid CSS already has
 // static fallback positions (--mx/--my default to 50%/30% in globals.css).
 // Also: swapped the "SC"/"HC" text initials badge for the real company
-// logo image, added a 5th "CONNEX AI" coming-soon card, and replaced the
-// tagline with the new copy.
+// logo image, added a 5th "CONNEX AI" card, and replaced the tagline with
+// the new copy.
+//
+// CONNEX AI placement (2026-10-16, follow-up feedback): AI shouldn't live
+// inside CONNEX EM's dashboard shell, and there should be a chat box right
+// here on the hub, not just an icon leading elsewhere. So: the full-page
+// chat moved from src/app/(dashboard)/ai to a standalone src/app/ai (no EM
+// sidebar — see that file's own header note), and a floating chat widget
+// (src/components/ai/FloatingAIChat.tsx) was added directly to this page.
 import type { Metadata } from 'next'
 import { createAdminClient, createServerSupabaseClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
@@ -27,6 +34,7 @@ import { Users, ShoppingCart, HardHat, BarChart3, Bot, LogOut, Lock } from 'luci
 import Image from 'next/image'
 import Link from 'next/link'
 import { Card } from '@/components/ui/Card'
+import { FloatingAIChat } from '@/components/ai/FloatingAIChat'
 
 export const metadata: Metadata = { title: 'เลือกระบบ' }
 
@@ -78,7 +86,7 @@ const APPS = [
     name: 'CONNEX AI',
     description: 'AI Assistant',
     icon: Bot,
-    href: '/ai', // v1 basic starter — live 2026-10-16, see src/app/(dashboard)/ai/page.tsx
+    href: '/ai', // v1 basic starter — live 2026-10-16, see src/app/ai/page.tsx
     color: 'bg-gradient-to-br from-indigo-500 to-fuchsia-600',
     available: true,
   },
@@ -216,6 +224,10 @@ export default async function HubPage() {
           &copy; 2026 CONNEX
         </footer>
       </div>
+
+      {/* Floating chat bubble (2026-10-16) — lets people ask CONNEX AI right
+          from the launcher instead of only through the full /ai page. */}
+      <FloatingAIChat />
     </div>
   )
 }
