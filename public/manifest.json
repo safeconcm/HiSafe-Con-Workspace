@@ -1,7 +1,7 @@
 {
   "name": "CONNEX",
   "short_name": "CONNEX",
-  "description": "Smart Platform เชื่อมต่อทุกการทำงานในระบบเดียว",
+  "description": "Connect Everything. Move Forward. แพลตฟอร์มที่เชื่อมโยงคน กระบวนการ และข้อมูลขององค์กรไว้ในระบบเดียว",
   "start_url": "/hub",
   "display": "standalone",
   "background_color": "#ffffff",
