@@ -2,7 +2,7 @@
   "name": "CONNEX",
   "short_name": "CONNEX",
   "description": "Smart Platform เชื่อมต่อทุกการทำงานในระบบเดียว",
-  "start_url": "/dashboard",
+  "start_url": "/hub",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#1e3a8a",
