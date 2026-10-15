@@ -17,7 +17,10 @@ const sarabun = Sarabun({
 // an absolute image URL, a relative path is silently ignored by most of
 // them. Safe to hardcode: this is the actual Vercel production domain
 // (see Vercel → Overview → Domains), not something that changes.
-const siteUrl = 'https://hi-safe-con-workspace.vercel.app'
+// Updated 2026-10-15: project renamed hi-safe-con-workspace -> connex;
+// connex.vercel.app and connexone.vercel.app were already taken by other
+// Vercel teams, so connnexwins.vercel.app is the production domain in use.
+const siteUrl = 'https://connnexwins.vercel.app'
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
