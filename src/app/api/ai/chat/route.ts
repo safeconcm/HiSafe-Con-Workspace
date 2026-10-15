@@ -1,27 +1,40 @@
 // src/app/api/ai/chat/route.ts
-// CONNEX AI — v1 "basic starter" chat endpoint (2026-10-16).
+// CONNEX AI — v1 "basic starter" chat endpoint.
 //
 // Scope, on purpose: general-purpose Q&A only. This does NOT read company
 // data (no HR records, leave balances, payroll, policies, etc.) — it is a
-// plain pass-through to the Anthropic Messages API so the module can go
-// live quickly. A follow-up version can ground answers in company data
-// (policies, employee-facing docs) the same way /api/inquiries threads
-// human HR questions, but that's a separate, bigger scoping task.
+// plain pass-through to an LLM API so the module can go live quickly. A
+// follow-up version can ground answers in company data (policies,
+// employee-facing docs) the same way /api/inquiries threads human HR
+// questions, but that's a separate, bigger scoping task.
 //
 // Auth: same pattern as every other API route — session comes from headers
 // middleware.ts injects (see getSessionFromHeaders), so this is already
 // gated behind login; no role restriction (everyone can use it, same as
 // CONNEX Biz once that ships).
 //
-// No @anthropic-ai/sdk dependency — calls the REST API directly via fetch
-// to avoid adding a new package (this repo's node_modules install has been
-// flaky in CI/sandbox; a plain fetch call needs nothing extra).
+// Provider (2026-10-16, updated): switched from Anthropic to Google's
+// Gemini API — Gemini has a genuinely free tier (no billing required for
+// gemini-2.5-flash, unlike Anthropic/OpenAI which both require a payment
+// method on file even for light use). Trade-off: free-tier requests are
+// rate-limited per Google Cloud project, and free-tier content may be used
+// by Google to improve their products — fine for this general-Q&A v1, but
+// worth remembering before pointing this at anything sensitive later.
+// No SDK dependency — calls the REST API directly via fetch (avoids adding
+// a new package; this repo's node_modules install has been flaky in
+// CI/sandbox).
 import { NextRequest } from 'next/server'
 import { getSessionFromHeaders, ok, badRequest, unauthorized, serverError } from '@/lib/api-helpers'
 
-const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages'
-const MODEL = 'claude-sonnet-4-5-20250929'
+const GEMINI_MODEL = 'gemini-2.5-flash'
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`
 const MAX_TURNS = 20 // cap conversation history sent per request
+
+const SYSTEM_PROMPT =
+  'คุณคือ CONNEX AI ผู้ช่วย AI ของระบบ CONNEX (แพลตฟอร์มภายในองค์กรของ SAFECON/HIGHCON) ' +
+  'ตอบเป็นภาษาไทยอย่างกระชับ สุภาพ และเป็นมิตร หากคำถามเกี่ยวข้องกับข้อมูลเฉพาะของพนักงาน ' +
+  'เงินเดือน วันลาคงเหลือ หรือข้อมูลบริษัทที่คุณไม่มีสิทธิ์เข้าถึง ให้แจ้งผู้ใช้อย่างตรงไปตรงมาว่า ' +
+  'ยังไม่สามารถดึงข้อมูลเหล่านั้นได้ในเวอร์ชันนี้ และแนะนำให้ไปที่เมนู HR/Time/Leave หรือสอบถาม HR โดยตรง'
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string }
 
@@ -29,9 +42,9 @@ export async function POST(req: NextRequest) {
   const session = getSessionFromHeaders(req)
   if (!session) return unauthorized()
 
-  const apiKey = process.env.ANTHROPIC_API_KEY
+  const apiKey = process.env.GEMINI_API_KEY
   if (!apiKey) {
-    return serverError(new Error('ยังไม่ได้ตั้งค่า ANTHROPIC_API_KEY บนเซิร์ฟเวอร์ — กรุณาติดต่อผู้ดูแลระบบ'))
+    return serverError(new Error('ยังไม่ได้ตั้งค่า GEMINI_API_KEY บนเซิร์ฟเวอร์ — กรุณาติดต่อผู้ดูแลระบบ'))
   }
 
   const body = await req.json().catch(() => null)
@@ -40,43 +53,44 @@ export async function POST(req: NextRequest) {
   const messages: ChatMessage[] = Array.isArray(body.messages) ? body.messages : []
   if (messages.length === 0) return badRequest('messages ต้องไม่เว้นว่าง')
 
-  const trimmed = messages.slice(-MAX_TURNS).map((m) => ({
-    role: m.role === 'assistant' ? 'assistant' : 'user',
-    content: String(m.content ?? '').slice(0, 8000),
+  // Gemini's "contents" format uses role 'model' instead of 'assistant',
+  // and has no separate system-message slot in the messages array itself
+  // (system prompt goes in its own top-level `systemInstruction` field).
+  const contents = messages.slice(-MAX_TURNS).map((m) => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: String(m.content ?? '').slice(0, 8000) }],
   }))
 
   try {
-    const res = await fetch(ANTHROPIC_API_URL, {
+    const res = await fetch(GEMINI_API_URL, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
+        'x-goog-api-key': apiKey,
       },
       body: JSON.stringify({
-        model: MODEL,
-        max_tokens: 1024,
-        system:
-          'คุณคือ CONNEX AI ผู้ช่วย AI ของระบบ CONNEX (แพลตฟอร์มภายในองค์กรของ SAFECON/HIGHCON) ' +
-          'ตอบเป็นภาษาไทยอย่างกระชับ สุภาพ และเป็นมิตร หากคำถามเกี่ยวข้องกับข้อมูลเฉพาะของพนักงาน ' +
-          'เงินเดือน วันลาคงเหลือ หรือข้อมูลบริษัทที่คุณไม่มีสิทธิ์เข้าถึง ให้แจ้งผู้ใช้อย่างตรงไปตรงมาว่า ' +
-          'ยังไม่สามารถดึงข้อมูลเหล่านั้นได้ในเวอร์ชันนี้ และแนะนำให้ไปที่เมนู HR/Time/Leave หรือสอบถาม HR โดยตรง',
-        messages: trimmed,
+        contents,
+        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+        generationConfig: { maxOutputTokens: 1024 },
       }),
     })
 
     if (!res.ok) {
       const text = await res.text().catch(() => '')
-      console.error('[AI chat] Anthropic API error', res.status, text)
-      return serverError(new Error(`AI service error (${res.status})`))
+      console.error('[AI chat] Gemini API error', res.status, text)
+      const friendly = res.status === 429
+        ? 'ตอนนี้มีคนใช้งานเยอะเกินโควตาฟรีของระบบ กรุณาลองใหม่อีกสักครู่'
+        : `AI service error (${res.status})`
+      return serverError(new Error(friendly))
     }
 
     const data = await res.json()
-    const reply = Array.isArray(data.content)
-      ? data.content.map((block: { type: string; text?: string }) => block.text ?? '').join('')
-      : ''
+    const reply: string =
+      data?.candidates?.[0]?.content?.parts
+        ?.map((p: { text?: string }) => p.text ?? '')
+        .join('') ?? ''
 
-    return ok({ reply })
+    return ok({ reply: reply || 'ขอโทษครับ ไม่สามารถสร้างคำตอบได้ กรุณาลองใหม่อีกครั้ง' })
   } catch (err) {
     return serverError(err)
   }
