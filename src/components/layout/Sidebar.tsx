@@ -6,7 +6,7 @@ import {
   LayoutDashboard, CalendarDays, Clock, Briefcase,
   Bell, Users, Building2, Settings, ChevronDown,
   ClipboardList, BarChart3, ShieldCheck, LogOut, Wallet, MessageCircle, Megaphone, User,
-  MessageCircleQuestion,
+  MessageCircleQuestion, ArrowLeft,
 } from 'lucide-react'
 import { cn, fullNameTH } from '@/utils'
 import type { SessionUser } from '@/types/database'
@@ -287,6 +287,18 @@ export function Sidebar({ session, company, mobileOpen = false, onClose }: Sideb
         mobileOpen ? 'flex translate-x-0' : 'hidden -translate-x-full'
       )}
     >
+
+      {/* Back to the app launcher (2026-10-16, follow-up: "ควรจะมีปุ่มย้อนกลับ
+          ด้วย ไม่ใช่แค่กด back จาก Webbrowser") — the only way out of here
+          before this was the logout button at the very bottom. */}
+      <Link
+        href="/hub"
+        onClick={() => onClose?.()}
+        className="flex items-center gap-2 px-4 py-2.5 text-xs text-gray-500 hover:text-gray-800 hover:bg-gray-50 border-b border-gray-100 transition-colors shrink-0"
+      >
+        <ArrowLeft className="w-3.5 h-3.5" />
+        <span>กลับไปหน้าเลือกระบบ</span>
+      </Link>
 
       {/* Company logo / switcher */}
       <CompanySwitcher current={company} companies={session.available_companies ?? []} />

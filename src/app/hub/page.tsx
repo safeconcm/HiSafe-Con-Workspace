@@ -30,25 +30,29 @@
 // redundant — back to the original 4 apps. The widget itself got a
 // pulsing ring + a "ถาม CONNEX AI ได้เลย" greeting bubble so it's not
 // missed (see FloatingAIChat.tsx) instead of relying on a grid icon.
+//
+// CONNEX SAFETY placeholder + multi-company switcher (2026-10-16, follow-up
+// request): added a "CONNEX SAFETY" coming-soon card (same treatment as
+// CONNEX Biz) ahead of actually scoping/building it. Also: an admin who
+// manages both SAFECON and HIGHCON had no way to pick a company from this
+// page — it just showed whichever company the cookie happened to point at.
+// Added HubCompanySwitcher (src/components/hub/HubCompanySwitcher.tsx),
+// fetching available_companies the same way src/app/(dashboard)/layout.tsx
+// does for the EM sidebar's switcher.
 import type { Metadata } from 'next'
 import { createAdminClient, createServerSupabaseClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { pickActiveRow, ACTIVE_COMPANY_COOKIE } from '@/lib/company-context'
 import { fullNameTH } from '@/utils'
-import { Users, ShoppingCart, HardHat, BarChart3, LogOut, Lock } from 'lucide-react'
+import { Users, ShoppingCart, HardHat, BarChart3, ShieldAlert, LogOut, Lock } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { Card } from '@/components/ui/Card'
 import { FloatingAIChat } from '@/components/ai/FloatingAIChat'
+import { HubCompanySwitcher } from '@/components/hub/HubCompanySwitcher'
 
 export const metadata: Metadata = { title: 'เลือกระบบ' }
-
-function companyLogo(code?: string) {
-  return code === 'HIGHCON'
-    ? { src: '/logos/highcon.png', alt: 'HIGHCON' }
-    : { src: '/logos/safecon.png', alt: 'SAFECON' }
-}
 
 const APPS = [
   {
@@ -87,6 +91,15 @@ const APPS = [
     color: 'bg-violet-600',
     available: false, // restricted — only specific people, once built
   },
+  {
+    key: 'safety',
+    name: 'CONNEX SAFETY',
+    description: 'ความปลอดภัยหน้างาน',
+    icon: ShieldAlert,
+    href: null,
+    color: 'bg-red-600',
+    available: true, // everyone can access once built — just not built yet
+  },
 ] as const
 
 export default async function HubPage() {
@@ -108,13 +121,16 @@ export default async function HubPage() {
   if (!me) redirect('/login?error=no_profile')
   if (me.must_change_password) redirect('/change-password')
 
-  const { data: company } = await admin
+  // Fetch every company this person belongs to (not just the active one) so
+  // HubCompanySwitcher can offer a dropdown for admins linked to more than
+  // one — same pattern as src/app/(dashboard)/layout.tsx.
+  const companyIds = Array.from(new Set((meRows ?? []).map((r) => r.company_id)))
+  const { data: companyRows } = await admin
     .from('companies')
-    .select('code, name_th, logo_url')
-    .eq('id', me.company_id)
-    .maybeSingle()
+    .select('id, code, name_th')
+    .in('id', companyIds)
 
-  const logo = companyLogo(company?.code)
+  const company = companyRows?.find((c) => c.id === me.company_id) ?? null
 
   return (
     <div className="min-h-screen relative overflow-hidden bg-[#0a0f1a] blueprint-grid">
@@ -132,17 +148,11 @@ export default async function HubPage() {
       <div className="relative z-10 min-h-screen flex flex-col">
         <header className="border-b border-white/10">
           <div className="max-w-5xl mx-auto px-6 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="relative w-10 h-10 rounded-lg bg-white shrink-0 overflow-hidden">
-                <Image src={logo.src} alt={logo.alt} fill className="object-contain p-1" />
-              </div>
-              <div className="min-w-0">
-                <p className="text-sm font-semibold text-white truncate">
-                  {company?.name_th ?? 'CONNEX'}
-                </p>
-                <p className="text-xs text-slate-400 truncate">{fullNameTH(me)}</p>
-              </div>
-            </div>
+            <HubCompanySwitcher
+              current={company}
+              companies={companyRows ?? []}
+              userName={fullNameTH(me)}
+            />
             <form action="/api/auth/logout" method="POST">
               <button
                 type="submit"
