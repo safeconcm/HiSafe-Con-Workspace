@@ -47,10 +47,13 @@ export default async function AccessLayout({
 
   if (userRow.must_change_password) redirect('/change-password')
 
-  // Only HR/Admin have any reason to be in this module at all (middleware
-  // also enforces this per-route — see ROLE_ROUTES['/access'] — this is a
-  // friendlier full-page bounce rather than relying solely on that redirect).
-  if (!['hr', 'admin'].includes(userRow.role)) redirect('/hub')
+  // Admin-only (2026-10-16, follow-up: "ต้องจำกัดให้ Admin เข้าใช้" — HR used
+  // to be let in here too since this doubled as HR's employee directory;
+  // that's now its own page at /hr/employees instead, so this module no
+  // longer needs to admit HR at all). Middleware also enforces this
+  // per-route (see ROLE_ROUTES['/access'] in src/middleware.ts) — this is a
+  // friendlier full-page bounce rather than relying solely on that redirect.
+  if (userRow.role !== 'admin') redirect('/hub')
 
   const companyIds = Array.from(new Set((userRows ?? []).map(r => r.company_id)))
   const { data: companyRows } = await admin

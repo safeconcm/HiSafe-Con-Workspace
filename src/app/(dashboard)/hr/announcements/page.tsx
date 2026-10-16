@@ -8,6 +8,7 @@ import { toast } from '@/components/ui/Toaster'
 import { Plus, Megaphone, Loader2, ImageIcon, FileText, AlertTriangle, Trash2, X } from 'lucide-react'
 import { cn, formatDateTH, stripAnnouncementMarkdown } from '@/utils'
 import { createClient } from '@/lib/supabase/client'
+import { AIDraftButton } from '@/components/ai/AIDraftButton'
 
 type Category = 'general' | 'policy' | 'event' | 'emergency'
 type Tab = 'all' | 'must_ack'
@@ -502,13 +503,27 @@ export default function HrAnnouncementsPage() {
           </div>
 
           <div>
-            <label className="form-label">เนื้อหา *</label>
+            <div className="flex items-center justify-between gap-2">
+              <label className="form-label mb-0">เนื้อหา *</label>
+              <AIDraftButton
+                buildPrompt={() => {
+                  if (!title.trim()) return ''
+                  return (
+                    `ช่วยร่างเนื้อหาประกาศภายในบริษัทเป็นภาษาไทย หมวดหมู่ "${CATEGORY_LABEL[category]}" ` +
+                    `หัวข้อ "${title.trim()}" ${body.trim() ? `(มีร่างเดิมบางส่วนแล้ว: "${body.trim()}") ` : ''}` +
+                    'เขียนแบบทางการ กระชับ อ่านง่าย ความยาวพอเหมาะสำหรับประกาศภายในองค์กร ' +
+                    'ส่งกลับมาเฉพาะเนื้อหาประกาศเท่านั้น ไม่ต้องมีคำนำหรือคำอธิบายอื่น'
+                  )
+                }}
+                onDraft={(text) => setBody(prev => prev.trim() ? `${prev}\n\n---\n${text}` : text)}
+              />
+            </div>
             <textarea
               value={body} onChange={e => setBody(e.target.value)}
-              rows={4} className="form-input" placeholder="รายละเอียดประกาศ"
+              rows={4} className="form-input" placeholder="รายละเอียดประกาศ หรือกรอกหัวข้อด้านบนแล้วกด &quot;ให้ AI ช่วยร่าง&quot;"
             />
             <p className="text-xs text-gray-400 mt-1">
-              จัดรูปแบบได้: **ตัวหนา**, ==ไฮไลต์==, ขึ้นบรรทัดด้วย &quot;- &quot; ทำ bullet list หรือ &quot;1. &quot; ทำลิสต์ลำดับเลข (แสดงในอีเมลและหน้าประกาศ ยกเว้นการ์ด LINE ที่ยังเป็นข้อความล้วน)
+              จัดรูปแบบได้: **ตัวหนา**, ==ไฮไลต์==, ขึ้นบรรทัดด้วย &quot;- &quot; ทำ bullet list หรือ &quot;1. &quot; ทำลิสต์ลำดับเลข (แสดงในอีเมลและหน้าประกาศ ยกเว้นการ์ด LINE ที่ยังเป็นข้อความล้วน) — ร่างจาก AI ควรตรวจทานก่อนเผยแพร่เสมอ
             </p>
           </div>
 

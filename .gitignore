@@ -52,3 +52,17 @@ test-letterhead*.mjs
 # the actual asset lives at public/logos/connex-logo.png, this is just the
 # original upload and isn't meant to be committed
 /CONNEX3_LogoAPP.PNG
+
+# Sandbox-editor leftovers (2026-10-16): the dev sandbox's filesystem leaves
+# behind ".fuse_hidden<inode>" temp files when a file open in another process
+# gets in-place-edited, and undeletable "*.tsx.bak" files from the
+# rename-instead-of-delete workaround used when a route file can't be
+# removed (see git history around the CONNEX Access split for why — the
+# sandbox blocks `rm`/`os.remove` on certain files). Neither is meant to be
+# committed; this line exists because one slipped into a commit by accident
+# once already (missing src/app/access/settings/page.tsx, 2026-10-16) when a
+# .fuse_hidden file got checked instead of the real page during manual
+# file selection in GitHub Desktop.
+.fuse_hidden*
+*.tsx.bak
+*.ts.bak

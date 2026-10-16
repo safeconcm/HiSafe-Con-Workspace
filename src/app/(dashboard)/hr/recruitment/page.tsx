@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast }      from '@/components/ui/Toaster'
 import { cn }         from '@/utils'
 import { Briefcase, Plus, Users, Loader2, ChevronDown, ChevronUp } from 'lucide-react'
+import { AIDraftButton } from '@/components/ai/AIDraftButton'
 
 const RECRUIT_STATUS_LABEL: Record<string,string> = {
   open:'เปิดรับ', screening:'คัดกรอง', interviewing:'สัมภาษณ์',
@@ -120,10 +121,31 @@ export default function RecruitmentPage() {
                 onChange={e => setJobForm(f => ({ ...f, salary_max: e.target.value }))} className="form-input" placeholder="35000" />
             </div>
             <div className="sm:col-span-2">
-              <label className="form-label">คุณสมบัติ</label>
+              <div className="flex items-center justify-between gap-2">
+                <label className="form-label mb-0">คุณสมบัติ</label>
+                <AIDraftButton
+                  buildPrompt={() => {
+                    if (!jobForm.title_th.trim()) return ''
+                    const salaryBit = jobForm.salary_min
+                      ? ` งบประมาณเงินเดือนประมาณ ${jobForm.salary_min}${jobForm.salary_max ? `-${jobForm.salary_max}` : ''} บาท`
+                      : ''
+                    return (
+                      `ช่วยร่างคุณสมบัติผู้สมัครงานตำแหน่ง "${jobForm.title_th.trim()}"` +
+                      `${jobForm.department.trim() ? ` แผนก ${jobForm.department.trim()}` : ''}${salaryBit} เป็นภาษาไทย ` +
+                      `${jobForm.requirements.trim() ? `(มีร่างเดิมบางส่วนแล้ว: "${jobForm.requirements.trim()}") ` : ''}` +
+                      'เขียนเป็นข้อๆ กระชับ ครอบคลุมวุฒิการศึกษา ประสบการณ์ และทักษะที่เกี่ยวข้องกับตำแหน่งนี้ ' +
+                      'ส่งกลับมาเฉพาะรายการคุณสมบัติเท่านั้น ไม่ต้องมีคำนำหรือคำอธิบายอื่น'
+                    )
+                  }}
+                  onDraft={(text) => setJobForm(f => ({
+                    ...f,
+                    requirements: f.requirements.trim() ? `${f.requirements.trim()}\n${text}` : text,
+                  }))}
+                />
+              </div>
               <textarea rows={3} value={jobForm.requirements}
                 onChange={e => setJobForm(f => ({ ...f, requirements: e.target.value }))}
-                className="form-input resize-none" placeholder="ปริญญาตรีขึ้นไป, มีประสบการณ์ 2 ปี..." />
+                className="form-input resize-none" placeholder="ปริญญาตรีขึ้นไป, มีประสบการณ์ 2 ปี... หรือกรอกชื่อตำแหน่งด้านบนแล้วกด &quot;ให้ AI ช่วยร่าง&quot;" />
             </div>
           </div>
           <div className="flex gap-3">

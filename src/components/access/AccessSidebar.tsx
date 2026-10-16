@@ -105,8 +105,12 @@ function AccessCompanySwitcher({
   )
 }
 
+// All admin-only now (2026-10-16) — CONNEX Access as a whole is gated to
+// Admin at the layout/middleware level, so every nav item here is reachable
+// by the same single role. Kept the `roles` field anyway rather than
+// dropping it, in case a narrower-than-admin item shows up later.
 const NAV_ITEMS = [
-  { label: 'จัดการผู้ใช้',    href: '/access/users',        icon: Users,       roles: ['hr', 'admin'] },
+  { label: 'จัดการผู้ใช้',    href: '/access/users',        icon: Users,       roles: ['admin'] },
   { label: 'โครงสร้างองค์กร', href: '/access/organization', icon: Building2,   roles: ['admin'] },
   { label: 'Job Codes',        href: '/access/jobs',         icon: Briefcase,   roles: ['admin'] },
   { label: 'ตั้งค่า',          href: '/access/settings',     icon: SettingsIcon, roles: ['admin'] },

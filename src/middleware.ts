@@ -41,13 +41,18 @@ const ROLE_ROUTES: Record<string, string[]> = {
   // CONNEX Access pages (2026-10-16) — moved here from /admin/* (see
   // src/app/access/layout.tsx); the /admin/* entries below stay only as a
   // safety net in case anything still links to the old path mid-rollout.
+  // Admin-only across the board (2026-10-16 follow-up: "ต้องจำกัดให้ Admin
+  // เข้าใช้") — HR used to be allowed into /access/users specifically
+  // because this doubled as HR's employee directory; that's now its own
+  // page at /hr/employees (covered by the '/hr' entry below), so nothing
+  // under /access needs to admit HR anymore.
   '/access/users/new':    ['admin'],
   '/access/users/import': ['admin'],
   '/access/organization': ['admin'],
   '/access/jobs':         ['admin'],
   '/access/settings':     ['admin'],
-  '/access/users':        ['hr', 'admin'],
-  '/access':              ['hr', 'admin'],
+  '/access/users':        ['admin'],
+  '/access':              ['admin'],
   '/admin/users/new':     ['admin'],
   '/admin/users/import':  ['admin'],
   '/admin/organization':  ['admin'],

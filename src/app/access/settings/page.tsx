@@ -1,5 +1,8 @@
 'use client'
-// src/app/(dashboard)/admin/settings/page.tsx
+// src/app/access/settings/page.tsx
+// Moved here (2026-10-16) from src/app/(dashboard)/admin/settings/page.tsx —
+// see src/app/access/layout.tsx for context. Still calls /api/admin/settings
+// — only the page route moved, not the API route.
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from '@/components/ui/Toaster'

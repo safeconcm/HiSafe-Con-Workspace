@@ -216,7 +216,7 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'ใบสมัครออนไลน์', href: '/hr/job-applications' },
       { label: 'เงินเดือน',       href: '/hr/salary'          },
       { label: 'จัดการอัปเดต',   href: '/hr/announcements'   },
-      { label: 'ข้อมูลพนักงานทั้งหมด', href: '/access/users'  },
+      { label: 'ข้อมูลพนักงานทั้งหมด', href: '/hr/employees'  },
     ],
   },
   {

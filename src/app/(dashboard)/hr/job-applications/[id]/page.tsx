@@ -406,7 +406,14 @@ export default function JobApplicationDetailPage() {
               <div className="flex items-center gap-2 text-green-700 bg-green-50 rounded-lg px-4 py-3 text-sm">
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
                 <span>รับเข้าทำงานแล้ว —{' '}
-                  <Link href={`/access/users/${hiredUserId ?? app.converted_user_id}`} className="underline font-medium">
+                  {/* Points at the HR directory list, not a specific profile
+                      (2026-10-16): the per-employee detail page now lives
+                      inside the Admin-only CONNEX Access module, which an
+                      HR user (who can open this job-applications page) can
+                      no longer enter — linking straight to /access/users/id
+                      would just bounce them back out. Search by name/code
+                      in the list instead. */}
+                  <Link href="/hr/employees" className="underline font-medium">
                     ดูข้อมูลพนักงาน
                   </Link>
                 </span>

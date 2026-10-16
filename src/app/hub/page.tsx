@@ -67,7 +67,12 @@ const APPS = [
     icon: ShieldCheck,
     href: '/access',
     color: 'bg-red-600',
-    roles: ['hr', 'admin'] as const,
+    // Admin-only (2026-10-16, follow-up: "ต้องจำกัดให้ Admin เข้าใช้") — HR
+    // used to be able to open this too (it used to double as HR's employee
+    // directory), but that's what caused the overlap with CONNEX HR's own
+    // "ข้อมูลพนักงานทั้งหมด" tab. HR's directory is now its own read-only
+    // page at /hr/employees instead — see Sidebar.tsx and that route.
+    roles: ['admin'] as const,
   },
 ] as const
 
