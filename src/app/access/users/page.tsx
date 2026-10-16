@@ -1,5 +1,8 @@
 'use client'
-// src/app/(dashboard)/admin/users/page.tsx
+// src/app/access/users/page.tsx
+// Moved here (2026-10-16) from src/app/(dashboard)/admin/users/page.tsx — see
+// src/app/access/layout.tsx for why this is now its own top-level module
+// ("CONNEX Access") instead of living inside CONNEX EM's dashboard shell.
 import { useState }     from 'react'
 import Link             from 'next/link'
 import { useUsers }     from '@/hooks/useAdmin'
@@ -69,14 +72,14 @@ export default function AdminUsersPage() {
         {isAdmin && (
           <div className="flex items-center gap-2">
             <Link
-              href="/admin/users/import"
+              href="/access/users/import"
               className="flex items-center gap-2 rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
             >
               <Upload className="w-4 h-4" />
               Import CSV
             </Link>
             <Link
-              href="/admin/users/new"
+              href="/access/users/new"
               className="flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800"
             >
               <Plus className="w-4 h-4" />
@@ -188,7 +191,7 @@ export default function AdminUsersPage() {
                     </td>
                     <td className="text-sm text-gray-600 whitespace-nowrap">{u.hire_date}</td>
                     <td>
-                      <Link href={`/admin/users/${u.id}`} className="text-gray-400 hover:text-gray-700">
+                      <Link href={`/access/users/${u.id}`} className="text-gray-400 hover:text-gray-700">
                         <ChevronRight className="w-4 h-4" />
                       </Link>
                     </td>
@@ -204,7 +207,7 @@ export default function AdminUsersPage() {
           {/* Mobile */}
           <div className="sm:hidden divide-y divide-gray-100">
             {users.map((u: any) => (
-              <Link key={u.id} href={`/admin/users/${u.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50">
+              <Link key={u.id} href={`/access/users/${u.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50">
                 <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-sm font-medium shrink-0">
                   {u.first_name_th.charAt(0)}
                 </div>

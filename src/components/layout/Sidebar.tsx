@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, CalendarDays, Clock, Briefcase,
   Bell, Users, Building2, Settings, ChevronDown,
-  ClipboardList, BarChart3, ShieldCheck, LogOut, Wallet, MessageCircle, Megaphone, User,
+  ClipboardList, BarChart3, LogOut, Wallet, MessageCircle, Megaphone, User,
   MessageCircleQuestion, ArrowLeft,
 } from 'lucide-react'
 import { cn, fullNameTH } from '@/utils'
@@ -216,7 +216,7 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'ใบสมัครออนไลน์', href: '/hr/job-applications' },
       { label: 'เงินเดือน',       href: '/hr/salary'          },
       { label: 'จัดการอัปเดต',   href: '/hr/announcements'   },
-      { label: 'ข้อมูลพนักงานทั้งหมด', href: '/admin/users'  },
+      { label: 'ข้อมูลพนักงานทั้งหมด', href: '/access/users'  },
     ],
   },
   {
@@ -225,19 +225,12 @@ const NAV_ITEMS: NavItem[] = [
     icon:  Wallet,
     roles: ['hr', 'admin', 'supervisor'],
   },
-  // Admin section
-  {
-    label: 'ผู้ดูแลระบบ',
-    href:  '/admin/users',
-    icon:  ShieldCheck,
-    roles: ['admin'],
-    children: [
-      { label: 'จัดการผู้ใช้',   href: '/admin/users'        },
-      { label: 'โครงสร้างองค์กร', href: '/admin/organization' },
-      { label: 'Job Codes',       href: '/admin/jobs'         },
-      { label: 'ตั้งค่า',         href: '/admin/settings'     },
-    ],
-  },
+  // Admin/role-management moved out to its own module (2026-10-16) — see
+  // src/app/access/layout.tsx. What used to be the "ผู้ดูแลระบบ" section
+  // here is now reached via the "CONNEX Access" card on /hub, same as how
+  // CONNEX AI isn't in this sidebar either. Kept out of this nav entirely
+  // rather than linking out to /access from inside EM, so it's clear this
+  // is a separate app, not an EM sub-page.
 ]
 
 interface SidebarProps {

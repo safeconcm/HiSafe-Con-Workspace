@@ -406,7 +406,7 @@ export default function JobApplicationDetailPage() {
               <div className="flex items-center gap-2 text-green-700 bg-green-50 rounded-lg px-4 py-3 text-sm">
                 <CheckCircle2 className="w-4 h-4 shrink-0" />
                 <span>รับเข้าทำงานแล้ว —{' '}
-                  <Link href={`/admin/users/${hiredUserId ?? app.converted_user_id}`} className="underline font-medium">
+                  <Link href={`/access/users/${hiredUserId ?? app.converted_user_id}`} className="underline font-medium">
                     ดูข้อมูลพนักงาน
                   </Link>
                 </span>

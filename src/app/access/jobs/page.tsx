@@ -1,5 +1,7 @@
 'use client'
-// src/app/(dashboard)/admin/jobs/page.tsx
+// src/app/access/jobs/page.tsx
+// Moved here (2026-10-16) from src/app/(dashboard)/admin/jobs/page.tsx — see
+// src/app/access/layout.tsx for context.
 import { useState }        from 'react'
 import { useJobs, useCreateJob, useUpdateJob } from '@/hooks/useAdmin'
 import { JOB_STATUS_LABEL, cn } from '@/utils'

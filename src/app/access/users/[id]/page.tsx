@@ -1,5 +1,7 @@
 'use client'
-// src/app/(dashboard)/admin/users/[id]/page.tsx
+// src/app/access/users/[id]/page.tsx
+// Moved here (2026-10-16) from src/app/(dashboard)/admin/users/[id]/page.tsx
+// — see src/app/access/layout.tsx for context.
 // Employee "360" detail page for Admin/HR — one place to see everything
 // about an employee instead of hunting across separate pages: basic info +
 // leave balances (ทั่วไป), contracts + certificates (เอกสารและสัญญา),
@@ -22,7 +24,7 @@ import { useState, useEffect, useRef } from 'react'
 import type { UserRole, UserStatus, LeaveType } from '@/types/database'
 
 // Reads the session cookie directly instead of useAuthStore — see the
-// comment in src/app/(dashboard)/admin/users/page.tsx for why: that
+// comment in src/app/(dashboard)/access/users/page.tsx for why: that
 // store's setSession() is never called anywhere, so isAdmin was always
 // false here too, silently disabling every editable field on this page
 // (department/position/phone/email/hire_date/role/status, photo upload,
@@ -183,7 +185,7 @@ export default function UserDetailPage() {
 
       {/* Header */}
       <div className="flex items-center gap-3">
-        <Link href="/admin/users" className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
+        <Link href="/access/users" className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -449,7 +451,7 @@ export default function UserDetailPage() {
                 )}
               </div>
               {isAdmin && (
-                <Link href="/admin/organization" className="mt-3 inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
+                <Link href="/access/organization" className="mt-3 inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
                   แก้ไขใน Org Structure →
                 </Link>
               )}

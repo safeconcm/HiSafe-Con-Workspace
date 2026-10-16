@@ -1,5 +1,7 @@
 'use client'
-// src/app/(dashboard)/admin/users/import/page.tsx
+// src/app/access/users/import/page.tsx
+// Moved here (2026-10-16) from src/app/(dashboard)/admin/users/import/page.tsx
+// — see src/app/access/layout.tsx for context.
 // Parse CSV file client-side → preview → confirm → POST to API
 
 import { useState, useRef } from 'react'
@@ -151,7 +153,7 @@ export default function ImportUsersPage() {
     <div className="page-container max-w-4xl space-y-5">
 
       <div className="flex items-center gap-3">
-        <Link href="/admin/users" className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
+        <Link href="/access/users" className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500">
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <h1>นำเข้าพนักงานจาก CSV</h1>
@@ -318,7 +320,7 @@ export default function ImportUsersPage() {
               className="flex-1 rounded-lg border border-gray-300 px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
               นำเข้าเพิ่มเติม
             </button>
-            <Link href="/admin/users"
+            <Link href="/access/users"
               className="flex-1 rounded-lg bg-blue-700 text-white px-4 py-2.5 text-sm font-medium hover:bg-blue-800 text-center">
               ดูรายชื่อผู้ใช้
             </Link>

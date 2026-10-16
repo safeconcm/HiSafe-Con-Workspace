@@ -1,51 +1,39 @@
 // src/app/hub/page.tsx
 // App launcher shown right after login — lets the person pick which CONNEX
 // module to open instead of dropping them straight into CONNEX EM (the old
-// behavior). Added 2026-10-15 per request to split the single HR/Time/Leave
-// system into 4 separate "apps": EM (live), Biz / Project / Insights (not
-// built yet — rendered as disabled "coming soon" cards for now, no routes
-// exist for them). See src/app/page.tsx and the login/callback `next`
-// fallback, which now point here instead of straight to /dashboard.
+// behavior). Added 2026-10-15. See src/app/page.tsx and the login/callback
+// `next` fallback, which now point here instead of straight to /dashboard.
 //
-// Visual refresh (2026-10-15, follow-up feedback: "ดูจืดไปหน่อย ... สไตล์
-// บริษัทระดับโลก"): reused the dark "blueprint-grid" hero scene + brand-color
-// blob glows + white Card primitive from the login page (src/app/(auth)/
-// login/page.tsx) so the launcher and the login screen read as one
-// consistent visual identity, instead of a plain light-gray page. This stays
-// a server component — no cursor-follow JS, the glow/grid CSS already has
+// Visual refresh (2026-10-15): dark "blueprint-grid" hero scene + brand-color
+// blob glows + white Card primitive, shared with the login page
+// (src/app/(auth)/login/page.tsx) so the two screens read as one identity.
+// Server component — no cursor-follow JS, the glow/grid CSS already has
 // static fallback positions (--mx/--my default to 50%/30% in globals.css).
-// Also: swapped the "SC"/"HC" text initials badge for the real company
-// logo image, added a 5th "CONNEX AI" card, and replaced the tagline with
-// the new copy.
 //
-// CONNEX AI placement (2026-10-16, follow-up feedback): AI shouldn't live
-// inside CONNEX EM's dashboard shell, and there should be a chat box right
-// here on the hub, not just an icon leading elsewhere. So: the full-page
-// chat moved from src/app/(dashboard)/ai to a standalone src/app/ai (no EM
-// sidebar — see that file's own header note), and a floating chat widget
-// (src/components/ai/FloatingAIChat.tsx) was added directly to this page.
+// CONNEX AI (2026-10-16): lives as a floating chat widget on this page
+// (src/components/ai/FloatingAIChat.tsx), not as a grid card — AI shouldn't
+// be "a module to pick", it should just be available everywhere on the hub.
+// Full-page version at the standalone src/app/ai (no EM sidebar).
 //
-// CONNEX AI card removed (2026-10-16, same-day follow-up): once the
-// floating widget existed, a 5th icon pointing to the same feature was
-// redundant — back to the original 4 apps. The widget itself got a
-// pulsing ring + a "ถาม CONNEX AI ได้เลย" greeting bubble so it's not
-// missed (see FloatingAIChat.tsx) instead of relying on a grid icon.
+// Multi-company switcher (2026-10-16): an admin managing more than one
+// company had no way to pick one from this page. Added
+// HubCompanySwitcher (src/components/hub/HubCompanySwitcher.tsx), fetching
+// available_companies the same way src/app/(dashboard)/layout.tsx does.
 //
-// CONNEX SAFETY placeholder + multi-company switcher (2026-10-16, follow-up
-// request): added a "CONNEX SAFETY" coming-soon card (same treatment as
-// CONNEX Biz) ahead of actually scoping/building it. Also: an admin who
-// manages both SAFECON and HIGHCON had no way to pick a company from this
-// page — it just showed whichever company the cookie happened to point at.
-// Added HubCompanySwitcher (src/components/hub/HubCompanySwitcher.tsx),
-// fetching available_companies the same way src/app/(dashboard)/layout.tsx
-// does for the EM sidebar's switcher.
+// Coming-soon cards removed (2026-10-16, follow-up feedback: pre-listing
+// unbuilt modules "ดูเหมือนคาดหวังมากไป" — looked like promises the hub
+// hadn't earned yet): CONNEX Biz / Project / Insights / Safety were all
+// removed from APPS below. Only modules that actually exist show up here
+// now — each comes back the day it's really built. CONNEX Access
+// (src/app/access) was added the same day as the first genuinely new
+// module since this cleanup, split out of CONNEX EM's old /admin pages.
 import type { Metadata } from 'next'
 import { createAdminClient, createServerSupabaseClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { pickActiveRow, ACTIVE_COMPANY_COOKIE } from '@/lib/company-context'
 import { fullNameTH } from '@/utils'
-import { Users, ShoppingCart, HardHat, BarChart3, ShieldAlert, LogOut, Lock } from 'lucide-react'
+import { Users, ShieldCheck, LogOut } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { Card } from '@/components/ui/Card'
@@ -54,6 +42,15 @@ import { HubCompanySwitcher } from '@/components/hub/HubCompanySwitcher'
 
 export const metadata: Metadata = { title: 'เลือกระบบ' }
 
+// Only modules that are actually built and live go here (2026-10-16, per
+// feedback: pre-listing unbuilt modules as "Coming Soon" cards reads like
+// promises the hub hasn't earned yet — "เหมือนโดนด่าเลย ว่าคาดหวังมากไป").
+// CONNEX Biz / Project / Insights / Safety were removed from this list for
+// that reason, not abandoned — each comes back the day it's actually built,
+// which also means it gets pulled straight into active work instead of
+// sitting half-visible on the hub for months. `roles` is optional —
+// omit it for anything everyone should see; EM and Access are the only two
+// modules live right now.
 const APPS = [
   {
     key: 'em',
@@ -62,43 +59,15 @@ const APPS = [
     icon: Users,
     href: '/dashboard',
     color: 'bg-blue-600',
-    available: true,
   },
   {
-    key: 'biz',
-    name: 'CONNEX Biz',
-    description: 'Procurement / Expenses',
-    icon: ShoppingCart,
-    href: null,
-    color: 'bg-emerald-600',
-    available: true, // everyone can access once built — just not built yet
-  },
-  {
-    key: 'project',
-    name: 'CONNEX Project',
-    description: 'Construction Management',
-    icon: HardHat,
-    href: null,
-    color: 'bg-amber-600',
-    available: false, // restricted — only specific people, once built
-  },
-  {
-    key: 'insights',
-    name: 'CONNEX Insights',
-    description: 'Reports / Analytics',
-    icon: BarChart3,
-    href: null,
-    color: 'bg-violet-600',
-    available: false, // restricted — only specific people, once built
-  },
-  {
-    key: 'safety',
-    name: 'CONNEX SAFETY',
-    description: 'ความปลอดภัยหน้างาน',
-    icon: ShieldAlert,
-    href: null,
+    key: 'access',
+    name: 'CONNEX Access',
+    description: 'สิทธิ์ผู้ใช้ / โครงสร้างองค์กร',
+    icon: ShieldCheck,
+    href: '/access',
     color: 'bg-red-600',
-    available: true, // everyone can access once built — just not built yet
+    roles: ['hr', 'admin'] as const,
   },
 ] as const
 
@@ -181,45 +150,28 @@ export default async function HubPage() {
             </div>
 
             <div className="flex flex-wrap justify-center gap-5">
-              {APPS.map((app) => {
+              {APPS
+                .filter((app) => !('roles' in app) || (app.roles as readonly string[]).includes(me.role))
+                .map((app) => {
                 const Icon = app.icon
                 const content = (
                   <Card
-                    accent={!!app.href}
-                    className={`h-full p-6 flex flex-col items-center text-center gap-3 transition-all duration-200 ${
-                      app.href
-                        ? 'hover:-translate-y-1 hover:shadow-black/60 cursor-pointer'
-                        : 'opacity-75'
-                    }`}
+                    accent
+                    className="h-full p-6 flex flex-col items-center text-center gap-3 transition-all duration-200 hover:-translate-y-1 hover:shadow-black/60 cursor-pointer"
                   >
-                    {!app.available && (
-                      <span className="absolute top-3 right-3 flex items-center gap-1 text-[10px] font-medium text-gray-500 bg-gray-200 rounded-full px-2 py-0.5">
-                        <Lock className="w-3 h-3" />
-                        จำกัดสิทธิ์
-                      </span>
-                    )}
-                    <div className={`w-14 h-14 rounded-xl flex items-center justify-center text-white ${app.color} ${app.href ? '' : 'grayscale opacity-60'}`}>
+                    <div className={`w-14 h-14 rounded-xl flex items-center justify-center text-white ${app.color}`}>
                       <Icon className="w-7 h-7" />
                     </div>
                     <div>
                       <p className="font-semibold text-gray-900">{app.name}</p>
                       <p className="text-xs text-gray-500 mt-0.5">{app.description}</p>
                     </div>
-                    {!app.href && (
-                      <span className="text-[11px] font-medium text-gray-400 bg-gray-200 rounded-full px-2.5 py-0.5">
-                        Coming Soon
-                      </span>
-                    )}
                   </Card>
                 )
 
                 return (
                   <div key={app.key} className="w-full sm:w-56">
-                    {app.href ? (
-                      <Link href={app.href} className="block h-full">{content}</Link>
-                    ) : (
-                      <div aria-disabled="true" className="h-full">{content}</div>
-                    )}
+                    <Link href={app.href} className="block h-full">{content}</Link>
                   </div>
                 )
               })}

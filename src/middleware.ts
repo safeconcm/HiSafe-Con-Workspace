@@ -38,6 +38,16 @@ const PUBLIC_ROUTES = ['/login', '/forgot-password', '/reset-password', '/api/au
 // users, org structure, job codes, and system settings stay Admin-only.
 const ROLE_ROUTES: Record<string, string[]> = {
   '/hr':                  ['hr', 'admin'],
+  // CONNEX Access pages (2026-10-16) — moved here from /admin/* (see
+  // src/app/access/layout.tsx); the /admin/* entries below stay only as a
+  // safety net in case anything still links to the old path mid-rollout.
+  '/access/users/new':    ['admin'],
+  '/access/users/import': ['admin'],
+  '/access/organization': ['admin'],
+  '/access/jobs':         ['admin'],
+  '/access/settings':     ['admin'],
+  '/access/users':        ['hr', 'admin'],
+  '/access':              ['hr', 'admin'],
   '/admin/users/new':     ['admin'],
   '/admin/users/import':  ['admin'],
   '/admin/organization':  ['admin'],
