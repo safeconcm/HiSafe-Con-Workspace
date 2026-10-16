@@ -215,6 +215,7 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'สมัครงาน',       href: '/hr/recruitment'     },
       { label: 'ใบสมัครออนไลน์', href: '/hr/job-applications' },
       { label: 'เงินเดือน',       href: '/hr/salary'          },
+      { label: 'ปิดเงินเดือนประจำเดือน (Staff)', href: '/hr/payroll-salary' },
       { label: 'จัดการอัปเดต',   href: '/hr/announcements'   },
       { label: 'ข้อมูลพนักงานทั้งหมด', href: '/hr/employees'  },
     ],

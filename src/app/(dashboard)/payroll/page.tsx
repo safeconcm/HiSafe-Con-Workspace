@@ -57,6 +57,11 @@ export default function PayrollPage() {
       <p className="text-sm text-gray-500">
         คำนวณจาก Timesheet ที่อนุมัติแล้วเท่านั้น — ค่าแรง/วัน = เงินเดือน ÷ วันทำงานของเดือนนั้น (หักวันอาทิตย์) ยังไม่รวมวันหยุดเสาร์เฉพาะของแต่ละบริษัท
       </p>
+      <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+        หน้านี้ใช้คำนวณต้นทุนแรงงานลงแต่ละ Job Code (Job Cost) เท่านั้น ไม่ใช่ยอดจ่ายเงินเดือนจริง —
+        สำหรับเงินเดือน Staff ที่จ่ายจริง ไปที่{' '}
+        <a href="/hr/payroll-salary" className="underline font-medium">เงินเดือนประจำเดือน (Staff)</a>
+      </p>
 
       {isLoading ? (
         <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>
