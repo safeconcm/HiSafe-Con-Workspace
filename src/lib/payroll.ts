@@ -286,6 +286,7 @@ export async function computeJobCostSummary(
             job_name: j.job_name,
             hours: j.hours,
             cost: j.cost,
+            employee_count: 1,
             employees: new Set([empRow.user_id]),
           })
         }
