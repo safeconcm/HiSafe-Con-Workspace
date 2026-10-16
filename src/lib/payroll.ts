@@ -236,3 +236,64 @@ export async function computePayroll(
 
   return rows
 }
+
+// Job Direct Cost summary (2026-10-16) — per request: "ค่าแรง/payroll ต้อง
+// เป็น Job Direct Cost summary รายเดือน รายปี ตาม Job". computePayroll()
+// above answers "how much does each employee cost, broken down by job" —
+// this answers the inverse, more useful question for project/job costing:
+// "how much labor cost landed on each Job Code", summed across every
+// employee, for either a single month or a whole year.
+//
+// Deliberately reuses computePayroll() per month rather than a separate
+// SQL aggregation — it already resolves the correct monthly rate per
+// employee (salary_records history, work-day counts, probation unpaid
+// leave, etc.), so reusing it guarantees this summary always agrees with
+// the per-employee view instead of risking two formulas drifting apart.
+// For a yearly summary this does mean up to 12 passes over computePayroll
+// — fine for this app's scale (small headcount, called on demand rather
+// than on every page load), but worth knowing if this ever needs to run
+// somewhere hot.
+export interface JobCostSummaryLine {
+  job_id: string | null
+  job_code: string
+  job_name: string
+  hours: number
+  cost: number
+  employee_count: number
+}
+
+export async function computeJobCostSummary(
+  companyId: string, year: number, month?: number
+): Promise<JobCostSummaryLine[]> {
+  const months = month ? [month] : Array.from({ length: 12 }, (_, i) => i + 1)
+
+  const jobMap = new Map<string, JobCostSummaryLine & { employees: Set<string> }>()
+
+  for (const m of months) {
+    const empRows = await computePayroll(companyId, year, m)
+    for (const empRow of empRows) {
+      for (const j of empRow.jobs) {
+        const key = j.job_id ?? `code:${j.job_code}`
+        const existing = jobMap.get(key)
+        if (existing) {
+          existing.hours += j.hours
+          existing.cost = Math.round((existing.cost + j.cost) * 100) / 100
+          existing.employees.add(empRow.user_id)
+        } else {
+          jobMap.set(key, {
+            job_id: j.job_id,
+            job_code: j.job_code,
+            job_name: j.job_name,
+            hours: j.hours,
+            cost: j.cost,
+            employees: new Set([empRow.user_id]),
+          })
+        }
+      }
+    }
+  }
+
+  return Array.from(jobMap.values())
+    .map(({ employees, ...rest }) => ({ ...rest, employee_count: employees.size }))
+    .sort((a, b) => b.cost - a.cost)
+}

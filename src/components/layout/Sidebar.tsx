@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, CalendarDays, Clock, Briefcase,
   Bell, Users, Building2, Settings, ChevronDown,
-  ClipboardList, BarChart3, LogOut, Wallet, MessageCircle, Megaphone, User,
+  ClipboardList, BarChart3, LogOut, MessageCircle, Megaphone, User,
   MessageCircleQuestion, ArrowLeft,
 } from 'lucide-react'
 import { cn, fullNameTH } from '@/utils'
@@ -215,16 +215,20 @@ const NAV_ITEMS: NavItem[] = [
       { label: 'สมัครงาน',       href: '/hr/recruitment'     },
       { label: 'ใบสมัครออนไลน์', href: '/hr/job-applications' },
       { label: 'เงินเดือน',       href: '/hr/salary'          },
-      { label: 'ปิดเงินเดือนประจำเดือน (Staff)', href: '/hr/payroll-salary' },
+      { label: 'Payroll พนักงานประจำ (Staff)', href: '/hr/payroll-salary' },
+      // Moved in here from a flat top-level nav item (2026-10-16, follow-up:
+      // "ค่าแรง/payroll ... ควรอยู่ใน Tab HR") — this is a labor-cost report
+      // for HR/management, not a page most people need one click from the
+      // main nav. Note: a supervisor could previously see this item in their
+      // sidebar too (the API at /api/payroll still supports a scoped
+      // "my team" view for supervisor — see that route's own comment) —
+      // moving it inside the HR dropdown (roles: ['hr','admin'] above) means
+      // a supervisor no longer sees a sidebar link to it. Revisit if
+      // supervisors are still expected to use this directly.
+      { label: 'ต้นทุนแรงงานตาม Job (Job Cost)', href: '/payroll' },
       { label: 'จัดการอัปเดต',   href: '/hr/announcements'   },
       { label: 'ข้อมูลพนักงานทั้งหมด', href: '/hr/employees'  },
     ],
-  },
-  {
-    label: 'ค่าแรง/Payroll',
-    href:  '/payroll',
-    icon:  Wallet,
-    roles: ['hr', 'admin', 'supervisor'],
   },
   // Admin/role-management moved out to its own module (2026-10-16) — see
   // src/app/access/layout.tsx. What used to be the "ผู้ดูแลระบบ" section

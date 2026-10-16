@@ -10,7 +10,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSessionFromHeaders, createAdminSupabaseClient, ok, badRequest, unauthorized, forbidden } from '@/lib/api-helpers'
-import { computePayroll } from '@/lib/payroll'
+import { computePayroll, computeJobCostSummary } from '@/lib/payroll'
 
 function toCSV(rows: (string | number | null)[][]): string {
   const BOM = '﻿'
@@ -24,8 +24,37 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url)
   const year   = parseInt(searchParams.get('year')  ?? String(new Date().getFullYear()))
-  const month  = parseInt(searchParams.get('month') ?? String(new Date().getMonth() + 1))
   const format = searchParams.get('format')
+  // group=job (2026-10-16, per request: "ค่าแรง/payroll ต้องเป็น Job Direct
+  // Cost summary รายเดือน รายปี ตาม Job") — same underlying computePayroll()
+  // data, pivoted to "cost per Job Code across every employee" instead of
+  // "cost per employee across their jobs". period=year aggregates all 12
+  // months instead of a single one — see computeJobCostSummary in
+  // src/lib/payroll.ts for why this is a 12x reuse of the per-month
+  // calculation rather than a new SQL aggregation.
+  if (searchParams.get('group') === 'job') {
+    const period = searchParams.get('period') === 'year' ? 'year' : 'month'
+    const month  = period === 'year' ? undefined : parseInt(searchParams.get('month') ?? String(new Date().getMonth() + 1))
+    if (month !== undefined && (month < 1 || month > 12)) return badRequest('month ต้องอยู่ระหว่าง 1-12')
+
+    const jobRows = await computeJobCostSummary(session.company_id, year, month)
+
+    if (format === 'csv') {
+      const header = ['Job Code', 'ชื่องาน', 'จำนวนพนักงาน', 'ชั่วโมงรวม', 'ต้นทุนรวม (บาท)']
+      const csvRows: (string | number | null)[][] = [header]
+      for (const j of jobRows) csvRows.push([j.job_code, j.job_name, j.employee_count, j.hours, j.cost])
+      return new NextResponse(toCSV(csvRows), {
+        headers: {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': `attachment; filename="job-cost-${year}${month ? `-${String(month).padStart(2, '0')}` : ''}.csv"`,
+        },
+      })
+    }
+
+    return ok({ year, month: month ?? null, period, rows: jobRows })
+  }
+
+  const month  = parseInt(searchParams.get('month') ?? String(new Date().getMonth() + 1))
   if (month < 1 || month > 12) return badRequest('month ต้องอยู่ระหว่าง 1-12')
 
   let userIds: string[] | undefined

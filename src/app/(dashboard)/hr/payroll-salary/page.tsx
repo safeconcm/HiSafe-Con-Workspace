@@ -18,12 +18,68 @@
 // anywhere in that log by design, matching how a real payslip, once issued,
 // isn't silently rewritten; a correction would be a new dated entry instead.
 import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueries, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from '@/components/ui/Toaster'
 import { cn } from '@/utils'
-import { Banknote, Loader2, ChevronLeft, ChevronRight, Plus, X, CheckCircle2, AlertTriangle } from 'lucide-react'
+import { Banknote, Loader2, ChevronLeft, ChevronRight, Plus, X, CheckCircle2, AlertTriangle, BarChart3 } from 'lucide-react'
 
 const MONTH_LABEL = ['', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
+
+// Yearly summary (2026-10-16, per request: "ต้อง...summary รายเดือน รายปี")
+// fetches all 12 months of the existing roster endpoint in parallel and
+// sums each month's already-closed records client-side — reuses
+// /api/hr/payroll-salary as-is rather than adding a new backend aggregation
+// endpoint, since this is only ever fetched on demand (toggled open), not
+// on every page load.
+function YearlySummary({ year }: { year: number }) {
+  const queries = useQueries({
+    queries: Array.from({ length: 12 }, (_, i) => i + 1).map((m) => ({
+      queryKey: ['payroll-salary', year, m],
+      queryFn: async () => {
+        const res  = await fetch(`/api/hr/payroll-salary?year=${year}&month=${m}`)
+        const json = await res.json()
+        if (!res.ok) throw new Error(json.error ?? 'โหลดข้อมูลไม่สำเร็จ')
+        return json.data
+      },
+    })),
+  })
+
+  const loading = queries.some(q => q.isLoading)
+  const monthTotals = queries.map((q, i) => {
+    const rows: RosterRow[] = q.data?.rows ?? []
+    const closedRows = rows.filter(r => r.existing)
+    const total = closedRows.reduce((s, r) => s + Number(r.existing!.net_salary ?? r.existing!.base_salary), 0)
+    return { month: i + 1, closedCount: closedRows.length, total }
+  })
+  const yearTotal = monthTotals.reduce((s, m) => s + m.total, 0)
+
+  if (loading) {
+    return <div className="flex justify-center py-10"><Loader2 className="w-5 h-5 animate-spin text-gray-400" /></div>
+  }
+
+  return (
+    <div className="card overflow-hidden">
+      <table className="data-table">
+        <thead>
+          <tr><th>เดือน</th><th className="text-right">จำนวนคนที่ปิดแล้ว</th><th className="text-right">ยอดรวม</th></tr>
+        </thead>
+        <tbody>
+          {monthTotals.map(m => (
+            <tr key={m.month}>
+              <td className="text-sm text-gray-700">{MONTH_LABEL[m.month]} {year + 543}</td>
+              <td className="text-right text-sm text-gray-600">{m.closedCount} คน</td>
+              <td className="text-right text-sm font-medium text-gray-900">{m.total.toLocaleString('th-TH')} ฿</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="card-body flex items-center justify-between border-t border-gray-100">
+        <span className="text-sm font-medium text-gray-700">รวมทั้งปี {year + 543}</span>
+        <span className="text-base font-semibold text-gray-900">{yearTotal.toLocaleString('th-TH')} ฿</span>
+      </div>
+    </div>
+  )
+}
 
 type DeductionRow = { label: string; amount: string }
 
@@ -46,6 +102,7 @@ export default function PayrollSalaryPage() {
   const [year,  setYear]  = useState(now.getFullYear())
   const [month, setMonth] = useState(now.getMonth() + 1)
   const [openUserId, setOpenUserId] = useState<string | null>(null)
+  const [showYearly, setShowYearly] = useState(false)
   const qc = useQueryClient()
 
   const { data, isLoading } = useQuery({
@@ -66,30 +123,63 @@ export default function PayrollSalaryPage() {
     setMonth(m); setYear(y); setOpenUserId(null)
   }
 
+  const closedRows = rows.filter(r => r.existing)
+  const monthTotal = closedRows.reduce((s, r) => s + Number(r.existing!.net_salary ?? r.existing!.base_salary), 0)
+
   return (
     <div className="page-container space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-2">
           <Banknote className="w-5 h-5 text-gray-500" />
-          <h1>เงินเดือนประจำเดือน (Staff)</h1>
+          <h1>Payroll พนักงานประจำ (Staff)</h1>
         </div>
-        <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg px-2 py-1">
-          <button onClick={() => shiftMonth(-1)} className="p-1 hover:bg-gray-100 rounded"><ChevronLeft className="w-4 h-4" /></button>
-          <span className="text-sm font-medium text-gray-700 w-24 text-center">{MONTH_LABEL[month]} {year + 543}</span>
-          <button onClick={() => shiftMonth(1)} className="p-1 hover:bg-gray-100 rounded"><ChevronRight className="w-4 h-4" /></button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setShowYearly(v => !v)}
+            className={cn(
+              'flex items-center gap-1.5 rounded-lg border px-3 py-2 text-sm transition-colors',
+              showYearly ? 'bg-blue-700 border-blue-700 text-white' : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+            )}
+          >
+            <BarChart3 className="w-4 h-4" /> สรุปรายปี
+          </button>
+          {!showYearly && (
+            <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg px-2 py-1">
+              <button onClick={() => shiftMonth(-1)} className="p-1 hover:bg-gray-100 rounded"><ChevronLeft className="w-4 h-4" /></button>
+              <span className="text-sm font-medium text-gray-700 w-24 text-center">{MONTH_LABEL[month]} {year + 543}</span>
+              <button onClick={() => shiftMonth(1)} className="p-1 hover:bg-gray-100 rounded"><ChevronRight className="w-4 h-4" /></button>
+            </div>
+          )}
+          {showYearly && (
+            <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg px-2 py-1">
+              <button onClick={() => setYear(y => y - 1)} className="p-1 hover:bg-gray-100 rounded"><ChevronLeft className="w-4 h-4" /></button>
+              <span className="text-sm font-medium text-gray-700 w-20 text-center">ปี {year + 543}</span>
+              <button onClick={() => setYear(y => y + 1)} className="p-1 hover:bg-gray-100 rounded"><ChevronRight className="w-4 h-4" /></button>
+            </div>
+          )}
         </div>
       </div>
 
       <p className="text-sm text-gray-500">
-        รายการนี้คือเงินเดือนที่จ่ายจริงของพนักงานประจำ แยกจากหน้า{' '}
-        <a href="/payroll" className="text-blue-700 hover:underline">ค่าแรงจาก Timesheet</a>{' '}
+        รายการนี้คือ Payroll เงินเดือนที่จ่ายจริงของพนักงานประจำ แยกจากหน้า{' '}
+        <a href="/payroll" className="text-blue-700 hover:underline">ต้นทุนแรงงานตาม Job (Job Direct Cost)</a>{' '}
         ซึ่งใช้คำนวณต้นทุนแรงงานลงแต่ละ Job Code เท่านั้น ไม่ใช่ยอดจ่ายจริง
       </p>
 
-      {isLoading ? (
+      {showYearly ? (
+        <YearlySummary year={year} />
+      ) : isLoading ? (
         <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-gray-400" /></div>
       ) : (
         <div className="space-y-3">
+          {!!rows.length && (
+            <div className="card card-body flex items-center justify-between">
+              <span className="text-sm font-medium text-gray-700">
+                ปิดแล้ว {closedRows.length}/{rows.length} คน · เดือน {MONTH_LABEL[month]} {year + 543}
+              </span>
+              <span className="text-base font-semibold text-gray-900">{monthTotal.toLocaleString('th-TH')} ฿</span>
+            </div>
+          )}
           {rows.map((r) => (
             <PayrollRow
               key={r.user_id}
