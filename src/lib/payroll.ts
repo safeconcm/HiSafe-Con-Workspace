@@ -397,7 +397,17 @@ export async function getUserRateForPeriod(
     weightedSalarySum += salaryForDate(d)
   }
 
-  const daily_rate  = work_days > 0 ? weightedSalarySum / work_days : 0
+  // weightedSalarySum is Σ(salary_segment × workdays_in_segment) — i.e. each
+  // segment's full monthly salary counted once per working day it covers.
+  // Dividing by work_days once only collapses that back to a single
+  // segment's monthly salary (a no-op when salary never changed — the bug
+  // this comment replaces: it was paying the full base_salary as the daily
+  // rate). The correct daily rate needs a second division by work_days: the
+  // first collapses the segments into one "blended monthly-equivalent"
+  // figure (Σ(salary_segment × workdays_in_segment) / work_days), the second
+  // spreads that monthly-equivalent evenly over the period's working days —
+  // see getUserRateForPeriod's own comment for the reconciliation check.
+  const daily_rate  = work_days > 0 ? weightedSalarySum / (work_days * work_days) : 0
   const hourly_rate = daily_rate / 8
 
   return {
