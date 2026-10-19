@@ -3,7 +3,15 @@
 
 export type UserRole = 'employee' | 'supervisor' | 'hr' | 'admin'
 export type UserStatus = 'active' | 'inactive' | 'resigned'
-export type LeaveType = 'annual' | 'sick' | 'personal' | 'maternity' | 'other'
+// 2026-10-19: 'study' added — ลาศึกษา/อบรม, split out from 'other' so it has
+// its own quota/policy and shows up separately in reports (see
+// migrations run via Supabase MCP the same day: leave_policies/leave_balances
+// seeded per company). Unlike probation-unpaid leave, study leave is still
+// fully paid — but its days are excluded from the Job Cost rate denominator
+// (see getUserRateForPeriod in src/lib/payroll.ts), which raises the
+// effective daily/hourly rate charged to whatever Job the employee actually
+// logged hours against during that pay cycle.
+export type LeaveType = 'annual' | 'sick' | 'personal' | 'maternity' | 'other' | 'study'
 export type LeaveStatus =
   | 'draft'
   | 'pending'
@@ -35,6 +43,9 @@ export type NotificationEvent =
   | 'timesheet_approved'
   | 'timesheet_rejected'
   | 'timesheet_reopened'
+  | 'comp_work_submitted'
+  | 'comp_work_approved'
+  | 'comp_work_rejected'
   | 'general'
 
 // ── Tables ──────────────────────────────────────────────────

@@ -389,10 +389,39 @@ export async function getUserRateForPeriod(
     return result
   }
 
+  // 2026-10-19: 'study' leave (ลาศึกษา) is paid in full but its days are
+  // deliberately excluded from work_days below — per request: a monthly
+  // salary spread over fewer actual working days means a higher
+  // daily/hourly rate for the days the employee DID work, so the cost of
+  // their study leave is absorbed into whatever Job they logged hours
+  // against that cycle rather than reducing their pay. Other leave types
+  // (annual/sick/personal/maternity/other) are NOT touched — those days
+  // simply have no 'work' timesheet_line, so they already don't add
+  // hours/cost anywhere; only 'study' changes the rate itself.
+  // Derived from leave_requests directly (overlap check, not a date
+  // equality filter) rather than timesheet_lines — simpler than reaching
+  // through an embedded-relation filter, and the weekday/holiday skip is
+  // already handled below by only excluding dates that are in periodDates
+  // with isWorking=true (periodDates already came from workingDayMap).
+  const { data: studyLeaves } = await supabase
+    .from('leave_requests')
+    .select('start_date, end_date')
+    .eq('user_id', userId)
+    .eq('leave_type', 'study')
+    .eq('status', 'approved')
+    .lte('start_date', periodEnd)
+    .gte('end_date', periodStart)
+  const studyLeaveDates = new Set(
+    periodDates
+      .filter(([d]) => (studyLeaves ?? []).some(l => d >= l.start_date && d <= l.end_date))
+      .map(([d]) => d)
+  )
+
   let weightedSalarySum = 0
   let work_days = 0
   for (const [d, isWorking] of periodDates) {
     if (!isWorking) continue
+    if (studyLeaveDates.has(d)) continue  // ลาศึกษา — see comment above
     work_days++
     weightedSalarySum += salaryForDate(d)
   }

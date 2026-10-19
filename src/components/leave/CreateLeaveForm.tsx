@@ -64,7 +64,7 @@ async function compressImageIfNeeded(file: File): Promise<File> {
 
 // ── Validation schema ────────────────────────────────────────
 const schema = z.object({
-  leave_type:      z.enum(['annual', 'sick', 'personal', 'maternity', 'other']),
+  leave_type:      z.enum(['annual', 'sick', 'personal', 'maternity', 'other', 'study']),
   start_date:      z.string().min(1, 'กรุณาเลือกวันที่เริ่มลา'),
   end_date:        z.string().min(1, 'กรุณาเลือกวันที่สิ้นสุดลา'),
   is_half_day:     z.boolean(),
@@ -97,6 +97,7 @@ const LEAVE_TYPES: { value: LeaveType; label: string; color: string }[] = [
   { value: 'personal',  label: 'ลากิจ',    color: 'border-amber-300 bg-amber-50 text-amber-800' },
   { value: 'maternity', label: 'ลาคลอด',  color: 'border-pink-300 bg-pink-50 text-pink-800'  },
   { value: 'other',     label: 'อื่นๆ',    color: 'border-gray-300 bg-gray-50 text-gray-800'  },
+  { value: 'study',     label: 'ลาศึกษา',  color: 'border-purple-300 bg-purple-50 text-purple-800' },
 ]
 
 export function CreateLeaveForm() {

@@ -161,14 +161,20 @@ const NAV_ITEMS: NavItem[] = [
     icon:  Clock,
   },
   {
+    label: 'ทำงานชดเชยวันหยุด',
+    href:  '/approvals/comp-work',
+    icon:  CalendarDays,
+  },
+  {
     label: 'รออนุมัติ',
     href:  '/approvals/leave',
     icon:  ClipboardList,
     roles: ['supervisor', 'hr', 'admin'],
     children: [
-      { label: 'อนุมัติใบลา',       href: '/approvals/leave'      },
-      { label: 'อนุมัติ Timesheet', href: '/approvals/timesheet'  },
-      { label: 'อนุมัติ OT',        href: '/approvals/ot'         },
+      { label: 'อนุมัติใบลา',           href: '/approvals/leave'      },
+      { label: 'อนุมัติ Timesheet',     href: '/approvals/timesheet'  },
+      { label: 'อนุมัติ OT',            href: '/approvals/ot'         },
+      { label: 'อนุมัติงานชดเชย',       href: '/approvals/comp-work'  },
     ],
   },
   {

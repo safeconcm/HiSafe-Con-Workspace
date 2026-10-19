@@ -125,6 +125,7 @@ export const LEAVE_TYPE_LABEL: Record<LeaveType, string> = {
   personal:  'ลากิจ',
   maternity: 'ลาคลอด',
   other:     'อื่นๆ',
+  study:     'ลาศึกษา',
 }
 
 export const LEAVE_TYPE_COLOR: Record<LeaveType, string> = {
@@ -133,6 +134,7 @@ export const LEAVE_TYPE_COLOR: Record<LeaveType, string> = {
   personal:  'bg-amber-100 text-amber-800',
   maternity: 'bg-pink-100 text-pink-800',
   other:     'bg-gray-100 text-gray-800',
+  study:     'bg-purple-100 text-purple-800',
 }
 
 export const LEAVE_STATUS_LABEL: Record<LeaveStatus, string> = {

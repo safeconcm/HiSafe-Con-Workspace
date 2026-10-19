@@ -7,7 +7,7 @@ import { Loader2, Save } from 'lucide-react'
 import { useState } from 'react'
 import type { LeaveType } from '@/types/database'
 
-const LEAVE_TYPES: LeaveType[] = ['annual', 'sick', 'personal', 'maternity', 'other']
+const LEAVE_TYPES: LeaveType[] = ['annual', 'sick', 'personal', 'maternity', 'other', 'study']
 
 async function fetchPolicies(year: number) {
   const res  = await fetch(`/api/hr/leave-policies?year=${year}`)
