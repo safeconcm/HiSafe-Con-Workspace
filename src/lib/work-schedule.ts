@@ -94,3 +94,37 @@ export async function isWorkingDay(
 
   return dow !== 0 && dow !== 6
 }
+
+// Timesheet submission deadline resolver (2026-10-19, per request: "ถ้าวันที่
+// 25 ตรงวันหยุดบริษัท ให้ส่งก่อนได้ 22 23 24") — walks the normal cutoff day
+// (the 25th) backward to the nearest day that is both a working day (per
+// this company's schedule/overrides) and not a company holiday, so the
+// effective deadline never lands on a day nobody's expected to be at work.
+// Used by the Timesheet submit route's hard deadline check — see that
+// route's own comment for why the deadline only applies to a timesheet's
+// very first submission.
+export async function getEffectiveSubmitDeadlineDay(
+  supabase: SupabaseAdmin,
+  companyId: string,
+  year: number,
+  month: number,
+  cutoffDay = 25
+): Promise<number> {
+  for (let day = cutoffDay; day >= 1; day--) {
+    const date = new Date(year, month - 1, day)
+    if (!(await isWorkingDay(supabase, companyId, date))) continue
+
+    const dateStr = toISODate(date)
+    const { data: holiday } = await supabase
+      .from('holidays')
+      .select('id')
+      .eq('company_id', companyId)
+      .eq('holiday_date', dateStr)
+      .eq('is_active', true)
+      .maybeSingle()
+    if (!holiday) return day
+  }
+  // Shouldn't happen in practice (would mean every day 1-25 is a day off) —
+  // fall back to the plain cutoff rather than let the loop return nothing.
+  return cutoffDay
+}

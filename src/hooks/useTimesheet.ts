@@ -176,6 +176,34 @@ export function useApproveTimesheet() {
   })
 }
 
+// Reopens an already submitted/approved Timesheet back to 'draft' so the
+// employee can fix a mistake and resubmit — see the route's own comment for
+// who's allowed to do this (HR/Admin, or specifically the supervisor who
+// approved it) and why it reverts all the way to draft instead of a partial
+// edit-in-place. Added 2026-10-19.
+export function useReopenTimesheet() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      const res  = await fetch(`/api/timesheet/${id}/reopen`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ reason }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? 'Failed')
+      return json.data
+    },
+    onSuccess: (_, { id }) => {
+      qc.invalidateQueries({ queryKey: ['timesheet-detail', id] })
+      qc.invalidateQueries({ queryKey: ['pending-timesheets'] })
+      qc.invalidateQueries({ queryKey: ['approved-timesheets'] })
+      toast.success('เปิดให้แก้ไข Timesheet แล้ว', 'กลับไปเป็นสถานะร่าง รอพนักงานแก้ไขและส่งใหม่')
+    },
+    onError: (err: Error) => toast.error('เกิดข้อผิดพลาด', err.message),
+  })
+}
+
 export function useRejectTimesheet() {
   const qc = useQueryClient()
   return useMutation({

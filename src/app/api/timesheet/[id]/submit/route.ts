@@ -7,6 +7,7 @@ import {
   ok, badRequest, unauthorized, forbidden,
   notFound, serverError, writeAuditLog, dispatchNotifications,
 } from '@/lib/api-helpers'
+import { getEffectiveSubmitDeadlineDay } from '@/lib/work-schedule'
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const params = await ctx.params
@@ -26,6 +27,32 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   if (ts.user_id !== session.id) return forbidden()
   if (!['draft', 'rejected'].includes(ts.status)) {
     return badRequest(`ไม่สามารถส่งได้ในสถานะ "${ts.status}"`)
+  }
+
+  // Hard submission deadline (2026-10-19, per request: "บล็อกส่งจริงหลังเที่ยง
+  // วันที่ 25") — 12:00 น. ไทย on the 25th, rolled back to the nearest
+  // working day if the 25th falls on a company holiday/day off (see
+  // getEffectiveSubmitDeadlineDay). Only enforced on a timesheet that has
+  // never been through the submit cycle before (no row in
+  // timesheet_approvals yet) — once it's been submitted at least once, even
+  // if later rejected/cancelled/reopened for a correction, the deadline no
+  // longer blocks a resubmission. Checked via history instead of
+  // `submitted_at` because /cancel already nulls that field on a
+  // self-withdrawn submission, which would otherwise make a legitimate
+  // same-cycle resubmit look like a fresh late one.
+  const { count: priorActionCount } = await supabase
+    .from('timesheet_approvals')
+    .select('id', { count: 'exact', head: true })
+    .eq('timesheet_id', params.id)
+
+  if (!priorActionCount) {
+    const deadlineDay = await getEffectiveSubmitDeadlineDay(supabase, session.company_id, ts.year, ts.month)
+    const deadline = new Date(Date.UTC(ts.year, ts.month - 1, deadlineDay, 5, 0, 0)) // 12:00 น. ไทย = 05:00 UTC
+    if (new Date() > deadline) {
+      return badRequest(
+        `เลยกำหนดส่ง Timesheet เดือน ${ts.month}/${ts.year} แล้ว (ตัดส่งวันที่ ${deadlineDay} เวลา 12:00 น.) กรุณาติดต่อ HR`
+      )
+    }
   }
 
   // Must have at least some hours

@@ -17,6 +17,7 @@ export type ApprovalAction =
   | 'noted'
   | 'cancelled'
   | 'auto_approved'
+  | 'reopened'
 export type HolidayType = 'national' | 'company' | 'special'
 export type JobStatus = 'active' | 'inactive' | 'closed'
 export type TimesheetStatus = 'draft' | 'submitted' | 'approved' | 'rejected'
@@ -33,6 +34,7 @@ export type NotificationEvent =
   | 'timesheet_submitted'
   | 'timesheet_approved'
   | 'timesheet_rejected'
+  | 'timesheet_reopened'
   | 'general'
 
 // ── Tables ──────────────────────────────────────────────────
@@ -226,6 +228,9 @@ export interface Timesheet {
   rejected_by_id: string | null
   rejected_at: string | null
   rejection_reason: string | null
+  reopened_at: string | null
+  reopened_by_id: string | null
+  reopen_reason: string | null
   pdf_url: string | null
   created_at: string
   updated_at: string

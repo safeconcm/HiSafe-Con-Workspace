@@ -27,17 +27,21 @@ import { useTimesheetDetail } from '@/hooks/useTimesheet'
 import { TimesheetGrid } from '@/components/timesheet/TimesheetGrid'
 import { TimesheetStatusBadge } from '@/components/timesheet/TimesheetStatusBadge'
 import { TimesheetApprovalPanel } from '@/components/timesheet/TimesheetApprovalPanel'
+import { TimesheetReopenPanel } from '@/components/timesheet/TimesheetReopenPanel'
 import { LeaveTimeline } from '@/components/leave/LeaveTimeline'
 import { formatMonthYearTH, formatDateTH, fullNameTH } from '@/utils'
 import { ArrowLeft, Loader2, Download, FileSpreadsheet } from 'lucide-react'
 
-function useCurrentUserId() {
-  if (typeof window === 'undefined') return ''
+// Added role (2026-10-19) alongside id — TimesheetReopenPanel needs to know
+// whether the viewer is HR/Admin, not just who they are.
+function useCurrentUser() {
+  if (typeof window === 'undefined') return { id: '', role: '' }
   try {
     const raw = document.cookie.split('; ').find(r => r.startsWith('connex_session='))
-    if (!raw) return ''
-    return JSON.parse(decodeURIComponent(raw.split('=').slice(1).join('=')))?.id ?? ''
-  } catch { return '' }
+    if (!raw) return { id: '', role: '' }
+    const parsed = JSON.parse(decodeURIComponent(raw.split('=').slice(1).join('=')))
+    return { id: parsed?.id ?? '', role: parsed?.role ?? '' }
+  } catch { return { id: '', role: '' } }
 }
 
 // TimesheetGrid calls onChange once on mount (and whenever its internal
@@ -49,7 +53,7 @@ export default function TimesheetDetailPage() {
   const params = useParams()
   const router = useRouter()
   const id = params.id as string
-  const userId = useCurrentUserId()
+  const { id: userId, role: userRole } = useCurrentUser()
 
   const { data, isLoading } = useTimesheetDetail(id)
 
@@ -118,12 +122,32 @@ export default function TimesheetDetailPage() {
         </div>
       )}
 
+      {/* Reopened-for-correction reason (2026-10-19) — shown while it's
+          back in draft after being reopened, same pattern as the rejection
+          banner above, so the employee sees why before they re-edit. */}
+      {ts.status === 'draft' && ts.reopened_at && ts.reopen_reason && (
+        <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-sm text-amber-700">
+          <span className="font-medium">ถูกเปิดให้แก้ไขอีกครั้ง:</span> {ts.reopen_reason}
+        </div>
+      )}
+
       {/* Approval action panel — no-ops itself unless status is submitted
           and the viewer is the current assigned approver */}
       <TimesheetApprovalPanel
         timesheetId={ts.id}
         approverId={ts.current_approver_id}
         currentUserId={userId}
+        status={ts.status}
+        onDone={() => router.refresh()}
+      />
+
+      {/* Reopen-for-correction (2026-10-19) — HR/Admin, or specifically the
+          supervisor who approved this one, can send it back to draft. */}
+      <TimesheetReopenPanel
+        timesheetId={ts.id}
+        approvedById={ts.approved_by_id}
+        currentUserId={userId}
+        currentUserRole={userRole}
         status={ts.status}
         onDone={() => router.refresh()}
       />
