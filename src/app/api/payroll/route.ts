@@ -26,12 +26,15 @@ export async function GET(req: NextRequest) {
   const year   = parseInt(searchParams.get('year')  ?? String(new Date().getFullYear()))
   const format = searchParams.get('format')
   // group=job (2026-10-16, per request: "ค่าแรง/payroll ต้องเป็น Job Direct
-  // Cost summary รายเดือน รายปี ตาม Job") — same underlying computePayroll()
-  // data, pivoted to "cost per Job Code across every employee" instead of
-  // "cost per employee across their jobs". period=year aggregates all 12
-  // months instead of a single one — see computeJobCostSummary in
-  // src/lib/payroll.ts for why this is a 12x reuse of the per-month
-  // calculation rather than a new SQL aggregation.
+  // Cost summary รายเดือน รายปี ตาม Job") — "cost per Job Code across every
+  // employee" instead of "cost per employee across their jobs". Since
+  // 2026-10-19 this no longer shares computePayroll()'s calendar-month data
+  // — computeJobCostSummary pulls timesheet_lines by real work_date over
+  // the company's actual pay cycle (26th of the previous month through the
+  // 25th of this one), not the calendar month. `month` here still means
+  // "which cycle, labelled by the month its 25th falls in" — see
+  // cyclePeriod() in src/lib/payroll.ts. period=year aggregates all 12
+  // cycles instead of a single one.
   if (searchParams.get('group') === 'job') {
     const period = searchParams.get('period') === 'year' ? 'year' : 'month'
     const month  = period === 'year' ? undefined : parseInt(searchParams.get('month') ?? String(new Date().getMonth() + 1))

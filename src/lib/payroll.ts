@@ -18,7 +18,7 @@
 // is surfaced as a separate deduction line at the same daily rate.
 
 import { createAdminSupabaseClient } from '@/lib/api-helpers'
-import { getWorkingDayMapForMonth } from '@/lib/work-schedule'
+import { getWorkingDayMapForMonth, getWorkingDayMapForRange } from '@/lib/work-schedule'
 
 export function daysInMonth(year: number, month: number): number {
   return new Date(year, month, 0).getDate()
@@ -237,22 +237,31 @@ export async function computePayroll(
   return rows
 }
 
-// Job Direct Cost summary (2026-10-16) — per request: "ค่าแรง/payroll ต้อง
-// เป็น Job Direct Cost summary รายเดือน รายปี ตาม Job". computePayroll()
-// above answers "how much does each employee cost, broken down by job" —
-// this answers the inverse, more useful question for project/job costing:
-// "how much labor cost landed on each Job Code", summed across every
-// employee, for either a single month or a whole year.
+// Job Direct Cost summary (2026-10-16, reworked 2026-10-19) — per request:
+// "ค่าแรง/payroll ต้องเป็น Job Direct Cost summary รายเดือน รายปี ตาม Job".
+// computePayroll() above answers "how much does each employee cost, broken
+// down by job" for a calendar month — this answers the inverse, more useful
+// question for project/job costing: "how much labor cost landed on each Job
+// Code", for either one pay cycle or a whole year.
 //
-// Deliberately reuses computePayroll() per month rather than a separate
-// SQL aggregation — it already resolves the correct monthly rate per
-// employee (salary_records history, work-day counts, probation unpaid
-// leave, etc.), so reusing it guarantees this summary always agrees with
-// the per-employee view instead of risking two formulas drifting apart.
-// For a yearly summary this does mean up to 12 passes over computePayroll
-// — fine for this app's scale (small headcount, called on demand rather
-// than on every page load), but worth knowing if this ever needs to run
-// somewhere hot.
+// 2026-10-19 rework: the company's real pay cycle is NOT the calendar month
+// — Timesheets are grouped by calendar month in the UI, but the actual cost
+// period the business cares about runs 26th-of-previous-month through
+// 25th-of-this-month (see cyclePeriod below). Reusing computePayroll() (as
+// this function originally did) can't express that, since computePayroll
+// fetches whole Timesheets by their (year, month) fields. This version
+// queries timesheet_lines directly by their real work_date instead, so a
+// cycle correctly picks up the tail end of the previous calendar month's
+// Timesheet together with the front end of this month's.
+//
+// The trickier part is the hourly rate, not the hours: an employee's rate
+// is "monthly salary ÷ working days", and the working-day count has to come
+// from the SAME window the rate is applied to, or the numbers stop
+// reconciling (208 hours at a blended rate across a cycle should cost
+// exactly the salary paid for that cycle, assuming full attendance — see
+// getUserRateForPeriod). A plain calendar-month rate breaks that even when
+// salary never changed, purely because 26-30 Sept and 1-25 Oct don't add up
+// to either month's own working-day count.
 export interface JobCostSummaryLine {
   job_id: string | null
   job_code: string
@@ -262,32 +271,216 @@ export interface JobCostSummaryLine {
   employee_count: number
 }
 
+function ymd(year: number, month: number, day: number): string {
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+}
+
+// Real pay-cycle boundaries. Deliberately a fixed accounting period that
+// never shifts for holidays — a separate concept from the Timesheet
+// submission deadline (which DOES roll back to the nearest working day when
+// the 25th is a day off — see getEffectiveSubmitDeadlineDay in
+// work-schedule.ts). "Cycle labelled October" = 26 Sept through 25 Oct.
+const CYCLE_CUTOFF_DAY = 25
+
+export function cyclePeriod(year: number, month: number): { start: string; end: string } {
+  const end = ymd(year, month, CYCLE_CUTOFF_DAY)
+  const prevMonth = month === 1 ? 12 : month - 1
+  const prevYear  = month === 1 ? year - 1 : year
+  const start = ymd(prevYear, prevMonth, CYCLE_CUTOFF_DAY + 1)
+  return { start, end }
+}
+
+export interface PeriodRate {
+  salary_type: string
+  base_salary: number   // salary in effect at the end of the period — kept for display, same meaning as UserRate.base_salary
+  daily_rate: number
+  hourly_rate: number
+  work_days: number
+}
+
+// Resolves a monthly-salary employee's rate for an arbitrary date range
+// (a pay cycle, not a calendar month) by weighting each of the period's
+// actual working days by whichever salary was in effect that specific day.
+// If salary never changed during the period this collapses automatically to
+// the plain "salary ÷ working days ÷ 8" formula (no special-casing needed)
+// — it only does extra work on the rare month a raise/cut lands mid-cycle,
+// and even then the result still reconciles exactly to what should have
+// been paid (old rate for the days under the old salary, new rate for the
+// days under the new one), rather than guessing which one to apply to the
+// whole cycle.
+export async function getUserRateForPeriod(
+  supabase: ReturnType<typeof createAdminSupabaseClient>,
+  userId: string,
+  periodStart: string, // YYYY-MM-DD
+  periodEnd: string,   // YYYY-MM-DD
+  workingDayMap: Map<string, boolean> // from getWorkingDayMapForRange — shared across employees for this period
+): Promise<PeriodRate> {
+  const { data: records } = await supabase
+    .from('salary_records')
+    .select('base_salary, salary_type, effective_date')
+    .eq('user_id', userId)
+    .lte('effective_date', periodEnd)
+    .order('effective_date', { ascending: true })
+
+  let salary_type = 'monthly'
+  let latestSalary = 0
+  // Ordered list of { from, salary } — the salary active from `from` onward
+  // until the next segment's `from` (or periodEnd). Sorted ascending.
+  const segments: { from: string; salary: number }[] = []
+
+  if (records && records.length > 0) {
+    const last = records[records.length - 1]
+    salary_type = last.salary_type ?? 'monthly'
+    latestSalary = Number(last.base_salary)
+
+    const beforeOrAtStart = records.filter(r => r.effective_date <= periodStart)
+    const baseline = beforeOrAtStart[beforeOrAtStart.length - 1]
+    if (baseline) segments.push({ from: periodStart, salary: Number(baseline.base_salary) })
+    for (const r of records) {
+      if (r.effective_date > periodStart) segments.push({ from: r.effective_date, salary: Number(r.base_salary) })
+    }
+    // Every record's effective_date is after periodStart (e.g. a brand-new
+    // employee whose first salary record lands mid-period) — nothing to use
+    // as a periodStart baseline, so start the one segment from that
+    // earliest record instead of leaving a gap.
+    if (segments.length === 0) segments.push({ from: records[0].effective_date, salary: Number(records[0].base_salary) })
+  } else {
+    const { data: contract } = await supabase
+      .from('contracts')
+      .select('base_salary, salary_type')
+      .eq('user_id', userId)
+      .eq('status', 'active')
+      .order('start_date', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    latestSalary = Number(contract?.base_salary ?? 0)
+    salary_type = contract?.salary_type ?? 'monthly'
+    segments.push({ from: periodStart, salary: latestSalary })
+  }
+
+  const periodDates = Array.from(workingDayMap.entries())
+    .filter(([d]) => d >= periodStart && d <= periodEnd)
+
+  // Daily/hourly salary types already pay per actual day/hour worked — no
+  // monthly-to-daily conversion needed, so no weighting either. Mirrors
+  // getUserRate()'s existing behavior, just scoped to this period's
+  // working-day count instead of a calendar month's.
+  if (salary_type === 'daily' || salary_type === 'hourly') {
+    const rate = segments[segments.length - 1].salary
+    const work_days = periodDates.filter(([, isWorking]) => isWorking).length
+    const daily_rate  = salary_type === 'daily' ? rate : rate * 8
+    const hourly_rate = salary_type === 'daily' ? rate / 8 : rate
+    return {
+      salary_type, base_salary: rate,
+      daily_rate: Math.round(daily_rate * 100) / 100,
+      hourly_rate: Math.round(hourly_rate * 100) / 100,
+      work_days,
+    }
+  }
+
+  // segments is sorted ascending by `from` — walk forward, keeping the last
+  // segment whose `from` is on/before the given date.
+  const salaryForDate = (date: string): number => {
+    let result = segments[0].salary
+    for (const seg of segments) {
+      if (seg.from <= date) result = seg.salary
+      else break
+    }
+    return result
+  }
+
+  let weightedSalarySum = 0
+  let work_days = 0
+  for (const [d, isWorking] of periodDates) {
+    if (!isWorking) continue
+    work_days++
+    weightedSalarySum += salaryForDate(d)
+  }
+
+  const daily_rate  = work_days > 0 ? weightedSalarySum / work_days : 0
+  const hourly_rate = daily_rate / 8
+
+  return {
+    salary_type, base_salary: latestSalary,
+    daily_rate: Math.round(daily_rate * 100) / 100,
+    hourly_rate: Math.round(hourly_rate * 100) / 100,
+    work_days,
+  }
+}
+
 export async function computeJobCostSummary(
   companyId: string, year: number, month?: number
 ): Promise<JobCostSummaryLine[]> {
-  const months = month ? [month] : Array.from({ length: 12 }, (_, i) => i + 1)
+  const cycles = month ? [cyclePeriod(year, month)] : Array.from({ length: 12 }, (_, i) => cyclePeriod(year, i + 1))
 
+  const supabase = createAdminSupabaseClient()
   const jobMap = new Map<string, JobCostSummaryLine & { employees: Set<string> }>()
 
-  for (const m of months) {
-    const empRows = await computePayroll(companyId, year, m)
-    for (const empRow of empRows) {
-      for (const j of empRow.jobs) {
-        const key = j.job_id ?? `code:${j.job_code}`
+  for (const { start, end } of cycles) {
+    // Shared per-cycle working-day map — computed once, reused by every
+    // employee's rate below instead of a schedule/override query per
+    // employee (see getUserRateForPeriod).
+    const workingDayMap = await getWorkingDayMapForRange(supabase, companyId, start, end)
+
+    // Which calendar-month Timesheets could possibly contain a work_date in
+    // this cycle — almost always exactly the two months the cycle's start
+    // and end fall in. Queried as plain timesheets rows (not a nested
+    // relation filter) to stay within the same query patterns already used
+    // elsewhere in this file.
+    const startYM = { y: Number(start.slice(0, 4)), m: Number(start.slice(5, 7)) }
+    const endYM   = { y: Number(end.slice(0, 4)),   m: Number(end.slice(5, 7)) }
+    const monthPairs = (startYM.y === endYM.y && startYM.m === endYM.m) ? [startYM] : [startYM, endYM]
+
+    const { data: timesheetsInRange } = await supabase
+      .from('timesheets')
+      .select('id, user_id')
+      .eq('company_id', companyId)
+      .eq('status', 'approved')
+      .or(monthPairs.map(p => `and(year.eq.${p.y},month.eq.${p.m})`).join(','))
+
+    if (!timesheetsInRange || timesheetsInRange.length === 0) continue
+
+    const userByTimesheet = new Map(timesheetsInRange.map(t => [t.id, t.user_id]))
+
+    const { data: lines } = await supabase
+      .from('timesheet_lines')
+      .select('hours, work_date, timesheet_id, job:jobs(id, job_code, name_th)')
+      .in('timesheet_id', timesheetsInRange.map(t => t.id))
+      .eq('line_type', 'work')
+      .gte('work_date', start)
+      .lte('work_date', end)
+
+    // Group by employee first so each employee's rate is resolved once per
+    // cycle, not once per job line.
+    const byUser = new Map<string, { job_id: string | null; job_code: string; job_name: string; hours: number }[]>()
+    for (const line of lines ?? []) {
+      const userId = userByTimesheet.get(line.timesheet_id)
+      if (!userId) continue
+      const job = (line as any).job
+      const arr = byUser.get(userId) ?? []
+      arr.push({
+        job_id: job?.id ?? null,
+        job_code: job?.job_code ?? '—',
+        job_name: job?.name_th ?? 'ไม่ระบุ Job',
+        hours: Number(line.hours),
+      })
+      byUser.set(userId, arr)
+    }
+
+    for (const [userId, userLines] of byUser) {
+      const rate = await getUserRateForPeriod(supabase, userId, start, end, workingDayMap)
+      for (const l of userLines) {
+        const key = l.job_id ?? `code:${l.job_code}`
+        const cost = Math.round(l.hours * rate.hourly_rate * 100) / 100
         const existing = jobMap.get(key)
         if (existing) {
-          existing.hours += j.hours
-          existing.cost = Math.round((existing.cost + j.cost) * 100) / 100
-          existing.employees.add(empRow.user_id)
+          existing.hours += l.hours
+          existing.cost = Math.round((existing.cost + cost) * 100) / 100
+          existing.employees.add(userId)
         } else {
           jobMap.set(key, {
-            job_id: j.job_id,
-            job_code: j.job_code,
-            job_name: j.job_name,
-            hours: j.hours,
-            cost: j.cost,
-            employee_count: 1,
-            employees: new Set([empRow.user_id]),
+            job_id: l.job_id, job_code: l.job_code, job_name: l.job_name,
+            hours: l.hours, cost, employee_count: 1, employees: new Set([userId]),
           })
         }
       }

@@ -68,6 +68,49 @@ export async function getWorkingDayMapForMonth(
   return result
 }
 
+// Range version of getWorkingDayMapForMonth (2026-10-19) — needed because a
+// real pay cycle (26th of one month through the 25th of the next — see
+// cyclePeriod in src/lib/payroll.ts) spans parts of two calendar months, so
+// a lookup keyed by day-of-month doesn't work. Keyed by full ISO date
+// string instead. Computed once per cycle and shared across every
+// employee's rate calculation (see getUserRateForPeriod in payroll.ts)
+// rather than querying the schedule/override tables once per employee.
+export async function getWorkingDayMapForRange(
+  supabase: SupabaseAdmin,
+  companyId: string,
+  startDate: string, // YYYY-MM-DD
+  endDate: string     // YYYY-MM-DD
+): Promise<Map<string, boolean>> {
+  const [{ data: schedule }, { data: overrides }] = await Promise.all([
+    supabase.from('company_work_schedules')
+      .select('weekday, is_working_day')
+      .eq('company_id', companyId),
+    supabase.from('company_workday_overrides')
+      .select('override_date, is_working_day')
+      .eq('company_id', companyId)
+      .gte('override_date', startDate)
+      .lte('override_date', endDate),
+  ])
+
+  const weekdayMap = new Map<number, boolean>((schedule ?? []).map(s => [s.weekday, s.is_working_day]))
+  const overrideMap = new Map<string, boolean>((overrides ?? []).map(o => [o.override_date, o.is_working_day]))
+
+  const result = new Map<string, boolean>()
+  let cur = new Date(`${startDate}T00:00:00Z`)
+  const end = new Date(`${endDate}T00:00:00Z`)
+  while (cur <= end) {
+    const dateStr = cur.toISOString().split('T')[0]
+    if (overrideMap.has(dateStr)) {
+      result.set(dateStr, overrideMap.get(dateStr)!)
+    } else {
+      const dow = cur.getUTCDay()
+      result.set(dateStr, weekdayMap.has(dow) ? weekdayMap.get(dow)! : (dow !== 0 && dow !== 6))
+    }
+    cur = new Date(cur.getTime() + 86400000)
+  }
+  return result
+}
+
 // Single-date version, for one-off checks (e.g. classifying an OT entry).
 export async function isWorkingDay(
   supabase: SupabaseAdmin,

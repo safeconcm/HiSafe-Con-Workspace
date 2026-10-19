@@ -27,6 +27,17 @@ import { cn } from '@/utils'
 
 const MONTH_LABEL = ['', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
 
+// Mirrors cyclePeriod() in src/lib/payroll.ts (26th of the previous month
+// through the 25th of this one) — client-side only for display, so the
+// month label ("ต.ค. 2569") doesn't read as a plain calendar month when
+// groupBy is 'job'. Not imported from payroll.ts since that module pulls in
+// server-only Supabase client code.
+function cycleDateRangeLabel(year: number, month: number): string {
+  const prevMonth = month === 1 ? 12 : month - 1
+  const prevYear  = month === 1 ? year - 1 : year
+  return `26 ${MONTH_LABEL[prevMonth]} ${prevYear + 543} – 25 ${MONTH_LABEL[month]} ${year + 543}`
+}
+
 type GroupBy = 'job' | 'employee'
 type Period  = 'month' | 'year'
 
@@ -125,8 +136,17 @@ export default function PayrollPage() {
         )}
       </div>
 
+      {groupBy === 'job' && effectivePeriod === 'month' && (
+        <p className="text-xs text-gray-400">รอบที่แสดง: {cycleDateRangeLabel(year, month)}</p>
+      )}
+
       <p className="text-sm text-gray-500">
-        คำนวณจาก Timesheet ที่อนุมัติแล้วเท่านั้น — ค่าแรง/วัน = เงินเดือน ÷ วันทำงานของเดือนนั้น (หักวันอาทิตย์) ยังไม่รวมวันหยุดเสาร์เฉพาะของแต่ละบริษัท
+        {groupBy === 'job'
+          // 2026-10-19: ตาม Job คิดตามรอบจ่ายจริงของบริษัท (26 เดือนก่อน–25
+          // เดือนนี้) ไม่ใช่เดือนปฏิทิน — ดูที่มาใน src/lib/payroll.ts
+          // (cyclePeriod, getUserRateForPeriod)
+          ? 'คำนวณจาก Timesheet ที่อนุมัติแล้วเท่านั้น — นับตามรอบจ่ายจริง 26 เดือนก่อน ถึง 25 เดือนนี้ (ไม่ใช่เดือนปฏิทิน) ค่าแรง/วัน = เงินเดือน ÷ วันทำงานจริงของรอบนั้นตามตารางทำงานของบริษัท'
+          : 'คำนวณจาก Timesheet ที่อนุมัติแล้วเท่านั้น — ค่าแรง/วัน = เงินเดือน ÷ วันทำงานของเดือนปฏิทินนั้นตามตารางทำงานของบริษัท'}
       </p>
       <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
         หน้านี้ใช้คำนวณต้นทุนแรงงานลงแต่ละ Job Code (Job Cost) เท่านั้น ไม่ใช่ยอดจ่ายเงินเดือนจริง —
