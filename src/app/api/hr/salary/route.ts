@@ -12,6 +12,7 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url)
   const user_id = searchParams.get('user_id')
+  const status  = searchParams.get('status') // 'pending' | 'approved' | 'rejected' | omitted = all
   const page    = parseInt(searchParams.get('page')  ?? '1')
   const limit   = parseInt(searchParams.get('limit') ?? '20')
   const from    = (page - 1) * limit
@@ -24,7 +25,8 @@ export async function GET(req: NextRequest) {
       user:users!salary_records_user_id_fkey(
         id, employee_code, first_name_th, last_name_th, department
       ),
-      approved_by:users!salary_records_approved_by_id_fkey(first_name_th, last_name_th)
+      approved_by:users!salary_records_approved_by_id_fkey(first_name_th, last_name_th),
+      created_by_user:users!salary_records_created_by_fkey(first_name_th, last_name_th)
     `, { count: 'exact' })
     .eq('company_id', session.company_id)
     .order('effective_date', { ascending: false })
@@ -32,6 +34,7 @@ export async function GET(req: NextRequest) {
 
   if (!isHROrAdmin(session)) query = query.eq('user_id', session.id)
   else if (user_id) query = query.eq('user_id', user_id)
+  if (status) query = query.eq('status', status)
 
   const { data, count, error } = await query
   if (error) return serverError(error)
@@ -60,6 +63,12 @@ export async function POST(req: NextRequest) {
   const totalDeduct = Object.values(deductions).reduce((s: number, v: any) => s + Number(v), 0)
   const net_salary  = body.net_salary ?? (base_salary + totalAllow - totalDeduct)
 
+  // 2026-10-20, "ข้อ 2" — HR submitting this no longer takes effect
+  // immediately. It starts 'pending' (approved_by_id/approved_at stay null
+  // until an Admin or org-root MD signs off via POST .../[id]/approve — see
+  // that route and isSalaryApprover() in api-helpers.ts). payroll.ts only
+  // ever reads status='approved' rows, so a pending row can't affect pay
+  // until it's actually approved.
   const { data, error } = await supabase.from('salary_records').insert({
     company_id:    session.company_id,
     user_id,
@@ -70,8 +79,7 @@ export async function POST(req: NextRequest) {
     deductions,
     net_salary,
     reason:        body.reason ?? null,
-    approved_by_id: session.id,
-    approved_at:   new Date().toISOString(),
+    status:        'pending',
     notes:         body.notes ?? null,
     created_by:    session.id,
   }).select().single()
@@ -79,7 +87,7 @@ export async function POST(req: NextRequest) {
   if (error) return serverError(error)
 
   await writeAuditLog({
-    session, action: 'salary.recorded', entity_type: 'salary_record',
+    session, action: 'salary.requested', entity_type: 'salary_record',
     entity_id: data.id, new_data: { ...data, base_salary: '[REDACTED]' }, req,
   })
   return created(data)

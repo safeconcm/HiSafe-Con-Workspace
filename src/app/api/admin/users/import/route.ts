@@ -6,7 +6,7 @@ import { NextRequest } from 'next/server'
 import {
   getSessionFromHeaders, createAdminSupabaseClient,
   ok, badRequest, unauthorized, forbidden,
-  serverError, writeAuditLog, findAuthUserByEmail,
+  serverError, writeAuditLog, findAuthUserByEmail, sendSetPasswordEmail,
 } from '@/lib/api-helpers'
 
 interface ImportRow {
@@ -372,6 +372,12 @@ export async function POST(req: NextRequest) {
           created_by:        session.id,
         }).then(() => {}, () => {})
       }
+
+      // 2026-10-20, "ข้อ 6" — same fix as the single-create route: the
+      // deterministic `Connex${employee_code}2024!` password above is never
+      // shown anywhere, so without this the imported employee has no way to
+      // learn it. Best-effort, doesn't fail the row if it errors.
+      await sendSetPasswordEmail(r.email)
 
       results.push({ row: idx, employee_code: r.employee_code, success: true })
       successCount++

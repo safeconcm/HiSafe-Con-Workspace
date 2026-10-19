@@ -46,6 +46,7 @@ export type NotificationEvent =
   | 'comp_work_submitted'
   | 'comp_work_approved'
   | 'comp_work_rejected'
+  | 'salary_adjusted'
   | 'general'
 
 // ── Tables ──────────────────────────────────────────────────

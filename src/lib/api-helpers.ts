@@ -234,6 +234,14 @@ export function isSupervisorOrAbove(session: SessionUser) {
 // so a naive "parent_id IS NULL OR no row" check would wrongly grant every
 // admin the MD dashboard). A company with two root nodes (two MDs, allowed
 // by the schema — see "ข้อ 4" discussion) both pass this check independently.
+// ── Salary adjustment approval (2026-10-20, "ข้อ 2") ──────────
+// Who can sign off a pending salary_records row before it takes effect —
+// "Admin หรือ MD คนใดคนหนึ่งอนุมัติได้" (either is sufficient, not both).
+export async function isSalaryApprover(session: SessionUser): Promise<boolean> {
+  if (session.role === 'admin') return true
+  return isOrgRoot(session)
+}
+
 export async function isOrgRoot(session: SessionUser): Promise<boolean> {
   const supabase = createAdminSupabaseClient()
   const { data } = await supabase
@@ -278,6 +286,34 @@ export async function getAccessibleCompanyIds(session: SessionUser): Promise<str
 
   const granted = (grants ?? []).map(g => g.company_id)
   return Array.from(new Set([session.company_id, ...granted]))
+}
+
+// ── New-account set-password email (2026-10-20, "ข้อ 6") ──────
+// A brand-new user's auth password is a random string nobody ever learns
+// (see /api/admin/users and /api/admin/users/import) — there was no email
+// sent and nothing shown on screen, so a new hire literally could not log
+// in except by guessing to click "ลืมรหัสผ่าน" themselves. This reuses the
+// exact same mechanism /forgot-password already uses successfully
+// (supabase.auth.resetPasswordForEmail), which goes through Supabase's own
+// built-in auth email delivery — NOT each company's custom SMTP (see
+// mailer.ts) — so it works even if a company hasn't configured Gmail/SMTP
+// at all. Best-effort: failures are logged, never thrown, so a slow/
+// misconfigured Supabase email config never blocks the user-creation
+// request itself.
+export async function sendSetPasswordEmail(email: string): Promise<void> {
+  try {
+    const anon = createSupabaseClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    )
+    const appUrl = (process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000').replace(/\/$/, '')
+    const { error } = await anon.auth.resetPasswordForEmail(email.trim().toLowerCase(), {
+      redirectTo: `${appUrl}/api/auth/callback?next=/reset-password`,
+    })
+    if (error) console.error('[sendSetPasswordEmail] failed', { email, error })
+  } catch (err) {
+    console.error('[sendSetPasswordEmail] threw', { email, err })
+  }
 }
 
 // ── Audit log writer ─────────────────────────────────────────

@@ -23,10 +23,6 @@ interface DashboardShellProps {
 
 export function DashboardShell({ session, company, children }: DashboardShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false)
-  // CONNEX AI (2026-10-20, "ข้อ 2") — owned here so the Topbar button and
-  // the widget itself (mounted once for every (dashboard) page) share one
-  // open/closed state, instead of /hub's self-contained version.
-  const [aiOpen, setAiOpen] = useState(false)
   const pathname = usePathname()
 
   // Belt-and-suspenders: also auto-close on any route change (covers
@@ -55,18 +51,17 @@ export function DashboardShell({ session, company, children }: DashboardShellPro
       />
 
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-        <Topbar
-          session={session}
-          onMenuClick={() => setMobileOpen(o => !o)}
-          onAIClick={() => setAiOpen(o => !o)}
-          aiOpen={aiOpen}
-        />
+        <Topbar session={session} onMenuClick={() => setMobileOpen(o => !o)} />
         <main className="flex-1 overflow-y-auto">
           {children}
         </main>
       </div>
 
-      <FloatingAIChat open={aiOpen} onOpenChange={setAiOpen} hideToggleButton />
+      {/* CONNEX AI — added as a Topbar toggle on 2026-10-20 ("ข้อ 2"), then
+          reverted the same day per feedback ("ดูไม่สวย คนใช้ไม่รู้ว่าคืออะไร
+          เอาลอยๆดีกว่า") back to the widget's own self-managed floating
+          round button on every EM page, same as /hub. */}
+      <FloatingAIChat />
     </>
   )
 }

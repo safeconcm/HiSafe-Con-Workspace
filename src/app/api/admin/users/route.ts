@@ -7,7 +7,7 @@ import {
   getSessionFromHeaders, createAdminSupabaseClient,
   ok, created, badRequest, unauthorized, forbidden,
   serverError, writeAuditLog, escapeForOrFilter, findAuthUserByEmail,
-  getAccessibleCompanyIds,
+  getAccessibleCompanyIds, sendSetPasswordEmail,
 } from '@/lib/api-helpers'
 
 // ── GET ──────────────────────────────────────────────────────
@@ -196,6 +196,12 @@ export async function POST(req: NextRequest) {
     session, action: 'user.created', entity_type: 'user',
     entity_id: user.id, new_data: { ...user, password: '[redacted]' }, req,
   })
+
+  // 2026-10-20, "ข้อ 6" — see sendSetPasswordEmail's own comment: the random
+  // password generated above is otherwise unrecoverable, so send the new
+  // hire a real set-password link right away instead of leaving them with
+  // no way to log in until they guess to click "ลืมรหัสผ่าน" themselves.
+  await sendSetPasswordEmail(user.email)
 
   return created(user)
 }

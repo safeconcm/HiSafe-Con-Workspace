@@ -93,6 +93,7 @@ export async function getUserRate(
     .from('salary_records')
     .select('base_salary, salary_type')
     .eq('user_id', userId)
+    .eq('status', 'approved') // 2026-10-20, "ข้อ 2" — a pending adjustment must never affect pay
     .lte('effective_date', monthEnd)
     .order('effective_date', { ascending: false })
     .limit(1)
@@ -319,6 +320,7 @@ export async function getUserRateForPeriod(
     .from('salary_records')
     .select('base_salary, salary_type, effective_date')
     .eq('user_id', userId)
+    .eq('status', 'approved') // 2026-10-20, "ข้อ 2" — a pending adjustment must never affect pay
     .lte('effective_date', periodEnd)
     .order('effective_date', { ascending: true })
 

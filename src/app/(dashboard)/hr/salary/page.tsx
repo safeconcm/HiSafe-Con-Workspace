@@ -1,14 +1,42 @@
 'use client'
 // src/app/(dashboard)/hr/salary/page.tsx
-import { useState }    from 'react'
+import { useState, useEffect }    from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useUsers }    from '@/hooks/useAdmin'
 import { toast }       from '@/components/ui/Toaster'
 import { fullNameTH, cn } from '@/utils'
-import { DollarSign, Plus, Download, Loader2, TrendingUp, Printer } from 'lucide-react'
+import { DollarSign, Plus, Download, Loader2, Printer, Upload, CheckCircle2, XCircle } from 'lucide-react'
+import Link from 'next/link'
+
+// 2026-10-20, "ข้อ 2" — same pattern as /approvals/comp-work's useCurrentUser:
+// the signed session payload is readable client-side via this non-httpOnly
+// cookie (see middleware.ts's own comment on why that's safe). is_org_root
+// was added to SessionUser the same day the MD dashboard shipped — reused
+// here so an MD (not just Admin) can approve/reject a pending adjustment.
+function useCurrentUser() {
+  const [user, setUser] = useState({ id: '', role: '', is_org_root: false })
+  useEffect(() => {
+    try {
+      const raw = document.cookie.split('; ').find(r => r.startsWith('connex_session='))
+      if (!raw) return
+      const s = JSON.parse(decodeURIComponent(raw.split('=').slice(1).join('=')))
+      setUser({ id: s.id, role: s.role, is_org_root: !!s.is_org_root })
+    } catch { /* no-op */ }
+  }, [])
+  return user
+}
+
+const STATUS_LABEL: Record<string, string> = { pending: 'รออนุมัติ', approved: 'อนุมัติแล้ว', rejected: 'ปฏิเสธ' }
+const STATUS_COLOR: Record<string, string> = {
+  pending:  'bg-amber-100 text-amber-700',
+  approved: 'bg-green-100 text-green-700',
+  rejected: 'bg-red-100 text-red-600',
+}
 
 export default function SalaryPage() {
   const qc       = useQueryClient()
+  const me       = useCurrentUser()
+  const isApprover = me.role === 'admin' || me.is_org_root
   const [userId, setUserId]   = useState('')
   const [page,   setPage]     = useState(1)
   const [showForm, setShowForm] = useState(false)
@@ -33,6 +61,18 @@ export default function SalaryPage() {
   const records = data?.records ?? []
   const total   = data?.total   ?? 0
 
+  // 2026-10-20, "ข้อ 2" — pre-fill the current (latest approved) salary the
+  // moment HR picks an employee in the form, so they don't have to go look
+  // it up elsewhere first. Only overwrites base_salary if the field is still
+  // empty (doesn't clobber a value HR already typed).
+  const prefillCurrentSalary = async (uid: string) => {
+    if (!uid) return
+    const res  = await fetch(`/api/hr/salary?user_id=${uid}&status=approved&limit=1`)
+    const json = await res.json()
+    const latest = json.data?.records?.[0]
+    if (latest) setForm(f => ({ ...f, base_salary: f.base_salary || String(latest.base_salary) }))
+  }
+
   const addRecord = useMutation({
     mutationFn: async (body: typeof form) => {
       const res  = await fetch('/api/hr/salary', {
@@ -49,11 +89,39 @@ export default function SalaryPage() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['salary'] })
-      toast.success('บันทึกประวัติเงินเดือนแล้ว')
+      toast.success('ส่งคำขอปรับเงินเดือนแล้ว', 'รอ Admin หรือ MD อนุมัติก่อนจึงจะมีผลจริง')
       setShowForm(false)
       setForm({ user_id: '', effective_date: '', base_salary: '', reason: '', net_salary: '', notes: '' })
     },
     onError: (e: Error) => toast.error('บันทึกไม่สำเร็จ', e.message),
+  })
+
+  const approveRecord = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/hr/salary/${id}/approve`, { method: 'POST' })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error)
+      return json.data
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['salary'] })
+      toast.success('อนุมัติการปรับเงินเดือนแล้ว', 'ระบบแจ้งเตือนพนักงานแล้ว')
+    },
+    onError: (e: Error) => toast.error('อนุมัติไม่สำเร็จ', e.message),
+  })
+
+  const rejectRecord = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await fetch(`/api/hr/salary/${id}/reject`, { method: 'POST' })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error)
+      return json.data
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['salary'] })
+      toast.success('ปฏิเสธคำขอแล้ว')
+    },
+    onError: (e: Error) => toast.error('ดำเนินการไม่สำเร็จ', e.message),
   })
 
   return (
@@ -72,6 +140,10 @@ export default function SalaryPage() {
             className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
             <Download className="w-4 h-4" />Export
           </button>
+          <Link href="/hr/salary/import"
+            className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
+            <Upload className="w-4 h-4" />นำเข้า CSV
+          </Link>
           <button onClick={() => setShowForm(true)}
             className="flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800">
             <Plus className="w-4 h-4" />บันทึกเงินเดือน
@@ -82,11 +154,15 @@ export default function SalaryPage() {
       {/* Add form */}
       {showForm && (
         <div className="card card-body space-y-4 no-print">
-          <h3 className="text-sm font-medium text-gray-700">บันทึกประวัติเงินเดือน / ปรับเงินเดือน</h3>
+          <h3 className="text-sm font-medium text-gray-700">ขอปรับเงินเดือน (ต้องรออนุมัติก่อนมีผล)</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="form-label">พนักงาน *</label>
-              <select value={form.user_id} onChange={e => setForm(f => ({ ...f, user_id: e.target.value }))} className="form-input">
+              <select
+                value={form.user_id}
+                onChange={e => { setForm(f => ({ ...f, user_id: e.target.value })); prefillCurrentSalary(e.target.value) }}
+                className="form-input"
+              >
                 <option value="">— เลือกพนักงาน —</option>
                 {(users as any[]).map((u: any) => (
                   <option key={u.id} value={u.id}>{u.employee_code} · {fullNameTH(u)}</option>
@@ -103,6 +179,7 @@ export default function SalaryPage() {
               <input type="number" value={form.base_salary} min={0} step={100}
                 onChange={e => setForm(f => ({ ...f, base_salary: e.target.value }))}
                 className="form-input" placeholder="25000" />
+              <p className="text-xs text-gray-400 mt-1">ดึงเงินเดือนปัจจุบันมาให้อัตโนมัติเมื่อเลือกพนักงาน แก้เป็นตัวเลขใหม่ได้เลย</p>
             </div>
             <div>
               <label className="form-label">เงินเดือนสุทธิ (บาท)</label>
@@ -123,7 +200,7 @@ export default function SalaryPage() {
               onClick={() => addRecord.mutate(form)}
               disabled={!form.user_id || !form.effective_date || !form.base_salary || addRecord.isPending}
               className="flex-1 rounded-lg bg-blue-700 text-white px-4 py-2 text-sm font-medium hover:bg-blue-800 disabled:opacity-60">
-              {addRecord.isPending ? 'กำลังบันทึก...' : 'บันทึก'}
+              {addRecord.isPending ? 'กำลังส่ง...' : 'ส่งขออนุมัติ'}
             </button>
           </div>
         </div>
@@ -153,7 +230,9 @@ export default function SalaryPage() {
                 <th className="text-right">เงินเดือนฐาน</th>
                 <th className="text-right">เงินสุทธิ</th>
                 <th>เหตุผล</th>
+                <th>สถานะ</th>
                 <th>อนุมัติโดย</th>
+                {isApprover && <th className="w-32 text-right no-print">จัดการ</th>}
               </tr>
             </thead>
             <tbody>
@@ -171,13 +250,30 @@ export default function SalaryPage() {
                     {r.net_salary ? `${Number(r.net_salary).toLocaleString('th-TH')} ฿` : '—'}
                   </td>
                   <td className="text-sm text-gray-600 max-w-[180px] truncate">{r.reason ?? '—'}</td>
+                  <td><span className={cn('badge', STATUS_COLOR[r.status] ?? STATUS_COLOR.approved)}>{STATUS_LABEL[r.status] ?? r.status}</span></td>
                   <td className="text-xs text-gray-400">
                     {r.approved_by ? `${r.approved_by.first_name_th} ${r.approved_by.last_name_th}` : '—'}
                   </td>
+                  {isApprover && (
+                    <td className="no-print">
+                      {r.status === 'pending' && (
+                        <div className="flex items-center gap-2 justify-end">
+                          <button onClick={() => approveRecord.mutate(r.id)} disabled={approveRecord.isPending}
+                            className="p-1 text-green-600 hover:text-green-700" title="อนุมัติ">
+                            <CheckCircle2 className="w-5 h-5" />
+                          </button>
+                          <button onClick={() => rejectRecord.mutate(r.id)} disabled={rejectRecord.isPending}
+                            className="p-1 text-red-500 hover:text-red-600" title="ปฏิเสธ">
+                            <XCircle className="w-5 h-5" />
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                  )}
                 </tr>
               ))}
               {!records.length && (
-                <tr><td colSpan={6} className="text-center py-10 text-gray-400 text-sm">ไม่มีข้อมูลเงินเดือน</td></tr>
+                <tr><td colSpan={isApprover ? 8 : 7} className="text-center py-10 text-gray-400 text-sm">ไม่มีข้อมูลเงินเดือน</td></tr>
               )}
             </tbody>
           </table>

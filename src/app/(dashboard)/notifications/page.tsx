@@ -6,7 +6,7 @@ import { formatDateTime, cn } from '@/utils'
 import {
   Bell, CheckCheck, CalendarDays, Clock,
   ChevronRight, Loader2, Check, FileText, UserCheck, CalendarClock,
-  MessageCircleQuestion, Megaphone, Trash2,
+  MessageCircleQuestion, Megaphone, Trash2, DollarSign,
 } from 'lucide-react'
 import Link from 'next/link'
 
@@ -23,6 +23,7 @@ const EVENT_ICON: Record<string, React.ElementType> = {
   comp_work_submitted:  CalendarClock,
   comp_work_approved:   CalendarClock,
   comp_work_rejected:   CalendarClock,
+  salary_adjusted:      DollarSign,
   contract_expiring:    FileText,
   probation_reminder:   UserCheck,
   leave_expiring:       CalendarClock,
@@ -45,6 +46,7 @@ const EVENT_COLOR: Record<string, string> = {
   comp_work_submitted:  'bg-blue-100 text-blue-700',
   comp_work_approved:   'bg-green-100 text-green-700',
   comp_work_rejected:   'bg-red-100 text-red-700',
+  salary_adjusted:      'bg-emerald-100 text-emerald-700',
   contract_expiring:    'bg-amber-100 text-amber-700',
   probation_reminder:   'bg-amber-100 text-amber-700',
   leave_expiring:       'bg-amber-100 text-amber-700',

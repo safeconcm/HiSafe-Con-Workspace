@@ -1,6 +1,6 @@
 'use client'
 // src/components/layout/Topbar.tsx
-import { Bell, Menu, Bot } from 'lucide-react'
+import { Bell, Menu } from 'lucide-react'
 import Link from 'next/link'
 import { cn, fullNameTH, ROLE_LABEL } from '@/utils'
 import type { SessionUser } from '@/types/database'
@@ -12,15 +12,9 @@ interface TopbarProps {
   // which owns the shared open/close state since Sidebar and Topbar are
   // rendered as siblings by the (dashboard) layout Server Component.
   onMenuClick?: () => void
-  // Toggles the CONNEX AI floating widget (2026-10-20, "ข้อ 2": AI should be
-  // reachable from inside the EM shell, not just /hub). Owned by
-  // DashboardShell, same pattern as onMenuClick above. Optional so Topbar
-  // still renders fine anywhere this prop isn't wired up.
-  onAIClick?: () => void
-  aiOpen?: boolean
 }
 
-export function Topbar({ session, onMenuClick, onAIClick, aiOpen }: TopbarProps) {
+export function Topbar({ session, onMenuClick }: TopbarProps) {
   // Unread notification count
   const { data: unreadCount } = useQuery({
     queryKey: ['notifications', 'unread-count'],
@@ -49,21 +43,6 @@ export function Topbar({ session, onMenuClick, onAIClick, aiOpen }: TopbarProps)
 
       {/* Right actions */}
       <div className="flex items-center gap-2">
-
-        {/* CONNEX AI toggle */}
-        {onAIClick && (
-          <button
-            onClick={onAIClick}
-            aria-label={aiOpen ? 'ปิดแชท CONNEX AI' : 'เปิดแชท CONNEX AI'}
-            title="CONNEX AI"
-            className={cn(
-              'p-2 rounded-lg transition-colors',
-              aiOpen ? 'bg-indigo-50 text-indigo-600' : 'hover:bg-gray-100 text-gray-600'
-            )}
-          >
-            <Bot className="w-5 h-5" />
-          </button>
-        )}
 
         {/* Notification bell */}
         <Link
