@@ -18,6 +18,7 @@ import {
 import {
   ArrowLeft, Save, Loader2, User,
   CalendarDays, Building2, FileText, Clock, Wallet, Camera, ExternalLink, Download,
+  Globe, Plus, X,
 } from 'lucide-react'
 import Link from 'next/link'
 import { useState, useEffect, useRef } from 'react'
@@ -59,7 +60,7 @@ const TIMESHEET_STATUS_COLOR: Record<string, string> = {
 }
 const MONTH_TH = ['', 'ม.ค.', 'ก.พ.', 'มี.ค.', 'เม.ย.', 'พ.ค.', 'มิ.ย.', 'ก.ค.', 'ส.ค.', 'ก.ย.', 'ต.ค.', 'พ.ย.', 'ธ.ค.']
 
-type Tab = 'general' | 'docs' | 'timesheet' | 'salary'
+type Tab = 'general' | 'docs' | 'timesheet' | 'salary' | 'access'
 
 export default function UserDetailPage() {
   const params  = useParams()
@@ -142,6 +143,62 @@ export default function UserDetailPage() {
     await update.mutateAsync(form)
   }
 
+  // Cross-company read grants (item 5) — admin-only tab.
+  const { data: companiesData } = useQuery({
+    queryKey: ['companies-list'],
+    queryFn: async () => {
+      const res = await fetch('/api/companies')
+      const json = await res.json()
+      return json.data?.companies ?? []
+    },
+    enabled: isAdmin,
+  })
+  const { data: grantsData } = useQuery({
+    queryKey: ['company-grants', id],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/company-grants?user_id=${id}`)
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error)
+      return json.data?.grants ?? []
+    },
+    enabled: isAdmin,
+  })
+  const companies = companiesData ?? []
+  const grants    = grantsData ?? []
+  const [grantCompanyId, setGrantCompanyId] = useState('')
+
+  const addGrant = useMutation({
+    mutationFn: async (company_id: string) => {
+      const res  = await fetch('/api/admin/company-grants', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: id, company_id }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error)
+      return json.data
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['company-grants', id] })
+      toast.success('ให้สิทธิ์แล้ว')
+      setGrantCompanyId('')
+    },
+    onError: (e: Error) => toast.error('ให้สิทธิ์ไม่สำเร็จ', e.message),
+  })
+  const removeGrant = useMutation({
+    mutationFn: async (grantId: string) => {
+      const res  = await fetch(`/api/admin/company-grants/${grantId}`, { method: 'DELETE' })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error)
+      return json.data
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['company-grants', id] })
+      toast.success('ถอดสิทธิ์แล้ว')
+    },
+    onError: (e: Error) => toast.error('ถอดสิทธิ์ไม่สำเร็จ', e.message),
+  })
+  const grantableCompanies = companies.filter((c: any) => c.id !== user?.company_id && !grants.some((g: any) => g.company_id === c.id))
+
   const onPhotoChange = async (file: File | null) => {
     if (!file) return
     setUploadingPhoto(true)
@@ -178,6 +235,12 @@ export default function UserDetailPage() {
     { key: 'docs',       label: 'เอกสารและสัญญา',   icon: FileText },
     { key: 'timesheet',  label: 'Timesheet',        icon: Clock },
     { key: 'salary',     label: 'เงินเดือน',        icon: Wallet },
+    // Cross-company read grant (item 5) — admin-only, matches the API's own
+    // admin-only guard (see /api/admin/company-grants). Lets this one
+    // employee (who still belongs to exactly one company, unchanged) also
+    // see read-only HR data from other companies, without creating a
+    // duplicate user row for them in those companies.
+    ...(isAdmin ? [{ key: 'access' as Tab, label: 'สิทธิ์ข้ามบริษัท', icon: Globe }] : []),
   ]
 
   return (
@@ -556,6 +619,57 @@ export default function UserDetailPage() {
                 {!salaryRecords.length && <tr><td colSpan={4} className="text-center text-gray-400 py-6 text-sm">ยังไม่มีประวัติเงินเดือน</td></tr>}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {tab === 'access' && isAdmin && (
+        <div className="card card-body space-y-4">
+          <div>
+            <h3 className="text-sm font-medium text-gray-700">สิทธิ์ดูข้อมูลข้ามบริษัท</h3>
+            <p className="text-xs text-gray-400 mt-1">
+              ให้สิทธิ์ดูข้อมูล HR แบบอ่านอย่างเดียว (รายชื่อพนักงาน, รายงาน, Payroll/Job Cost, รายการลา/Timesheet/OT/งานชดเชย)
+              ของอีกบริษัทหนึ่ง โดยพนักงานคนนี้ยังสังกัดบริษัทเดิมเพียงบริษัทเดียว ไม่มีการสร้างบัญชีซ้ำ
+              — ไม่รวมสิทธิ์กดอนุมัติ และไม่รวมเอกสาร PDF ที่มีหัวกระดาษบริษัท (ใบลา, สลิปเงินเดือน ฯลฯ)
+            </p>
+          </div>
+
+          <div className="flex gap-2">
+            <select value={grantCompanyId} onChange={e => setGrantCompanyId(e.target.value)} className="form-input flex-1">
+              <option value="">— เลือกบริษัทที่จะให้สิทธิ์ —</option>
+              {grantableCompanies.map((c: any) => (
+                <option key={c.id} value={c.id}>{c.name_th} ({c.code})</option>
+              ))}
+            </select>
+            <button
+              onClick={() => grantCompanyId && addGrant.mutate(grantCompanyId)}
+              disabled={!grantCompanyId || addGrant.isPending}
+              className="flex items-center gap-2 rounded-lg bg-blue-700 text-white px-4 py-2 text-sm font-medium hover:bg-blue-800 disabled:opacity-60"
+            >
+              {addGrant.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+              ให้สิทธิ์
+            </button>
+          </div>
+
+          <div className="divide-y divide-gray-100 border border-gray-100 rounded-lg">
+            {!grants.length ? (
+              <p className="text-center text-gray-400 text-sm py-6">ยังไม่มีสิทธิ์ข้ามบริษัท</p>
+            ) : grants.map((g: any) => (
+              <div key={g.id} className="flex items-center justify-between px-4 py-3">
+                <div>
+                  <p className="text-sm font-medium text-gray-900">{g.company?.name_th} ({g.company?.code})</p>
+                  <p className="text-xs text-gray-400">ให้สิทธิ์ตั้งแต่ {formatDateTH(g.effective_from)}</p>
+                </div>
+                <button
+                  onClick={() => removeGrant.mutate(g.id)}
+                  disabled={removeGrant.isPending}
+                  className="p-1.5 rounded-lg text-gray-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-60"
+                  title="ถอดสิทธิ์"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
           </div>
         </div>
       )}

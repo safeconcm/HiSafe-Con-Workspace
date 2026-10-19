@@ -9,8 +9,11 @@
 // employee role still gets no access at all (this is compensation data).
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getSessionFromHeaders, createAdminSupabaseClient, ok, badRequest, unauthorized, forbidden } from '@/lib/api-helpers'
-import { computePayroll, computeJobCostSummary } from '@/lib/payroll'
+import {
+  getSessionFromHeaders, createAdminSupabaseClient, ok, badRequest, unauthorized, forbidden,
+  isHROrAdmin, getAccessibleCompanyIds,
+} from '@/lib/api-helpers'
+import { computePayroll, computeJobCostSummary, type JobCostSummaryLine, type PayrollUserRow } from '@/lib/payroll'
 
 function toCSV(rows: (string | number | null)[][]): string {
   const BOM = '﻿'
@@ -40,7 +43,29 @@ export async function GET(req: NextRequest) {
     const month  = period === 'year' ? undefined : parseInt(searchParams.get('month') ?? String(new Date().getMonth() + 1))
     if (month !== undefined && (month < 1 || month > 12)) return badRequest('month ต้องอยู่ระหว่าง 1-12')
 
-    const jobRows = await computeJobCostSummary(session.company_id, year, month)
+    // Cross-company read grant (item 5) — computeJobCostSummary takes one
+    // companyId at a time, so HR/Admin with a grant get one call per
+    // accessible company, merged here by job key. Supervisors are left on
+    // their own single company only — a grant is an HR/Admin concept in
+    // this first cut (see getAccessibleCompanyIds' comment); a supervisor's
+    // own org-tree team is single-company by construction anyway.
+    const jobCompanyIds = isHROrAdmin(session) ? await getAccessibleCompanyIds(session) : [session.company_id]
+    const jobRowsByCompany = await Promise.all(jobCompanyIds.map(cid => computeJobCostSummary(cid, year, month)))
+    const jobMap = new Map<string, JobCostSummaryLine>()
+    for (const companyRows of jobRowsByCompany) {
+      for (const r of companyRows) {
+        const key = r.job_id ?? `code:${r.job_code}`
+        const existing = jobMap.get(key)
+        if (existing) {
+          existing.hours += r.hours
+          existing.cost = Math.round((existing.cost + r.cost) * 100) / 100
+          existing.employee_count += r.employee_count
+        } else {
+          jobMap.set(key, { ...r })
+        }
+      }
+    }
+    const jobRows = Array.from(jobMap.values()).sort((a, b) => b.cost - a.cost)
 
     if (format === 'csv') {
       const header = ['Job Code', 'ชื่องาน', 'จำนวนพนักงาน', 'ชั่วโมงรวม', 'ต้นทุนรวม (บาท)']
@@ -73,7 +98,14 @@ export async function GET(req: NextRequest) {
     userIds = (reports ?? []).map((r: any) => r.user_id)
   }
 
-  const rows = await computePayroll(session.company_id, year, month, userIds ? { userIds } : undefined)
+  // Cross-company read grant (item 5) — HR/Admin with a grant get one call
+  // per accessible company, concatenated (no merge needed: each employee
+  // belongs to exactly one company, so rows never collide across calls).
+  const payrollCompanyIds = (isHROrAdmin(session) && !userIds) ? await getAccessibleCompanyIds(session) : [session.company_id]
+  const rowsByCompany = await Promise.all(
+    payrollCompanyIds.map(cid => computePayroll(cid, year, month, userIds ? { userIds } : undefined))
+  )
+  const rows: PayrollUserRow[] = rowsByCompany.flat()
 
   if (format === 'csv') {
     const header = ['รหัสพนักงาน', 'ชื่อ-สกุล', 'แผนก', 'Job Code', 'ชื่องาน', 'ชั่วโมง', 'อัตรา/ชม.', 'ค่าแรง (บาท)']

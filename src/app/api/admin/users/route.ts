@@ -7,6 +7,7 @@ import {
   getSessionFromHeaders, createAdminSupabaseClient,
   ok, created, badRequest, unauthorized, forbidden,
   serverError, writeAuditLog, escapeForOrFilter, findAuthUserByEmail,
+  getAccessibleCompanyIds,
 } from '@/lib/api-helpers'
 
 // ── GET ──────────────────────────────────────────────────────
@@ -24,6 +25,10 @@ export async function GET(req: NextRequest) {
   const from   = (page - 1) * limit
 
   const supabase = createAdminSupabaseClient()
+  // Cross-company read grant (item 5) — see getAccessibleCompanyIds' own
+  // comment. Returns just [session.company_id] for everyone without a
+  // grant, so this is a no-op for the overwhelming majority of callers.
+  const accessibleCompanyIds = await getAccessibleCompanyIds(session)
 
   let query = supabase
     .from('users')
@@ -33,7 +38,7 @@ export async function GET(req: NextRequest) {
       position_th, department, role, status, hire_date, phone,
       avatar_url, created_at
     `, { count: 'exact' })
-    .eq('company_id', session.company_id)
+    .in('company_id', accessibleCompanyIds)
     .order('employee_code')
     .range(from, from + limit - 1)
 

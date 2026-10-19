@@ -5,6 +5,7 @@ import { NextRequest } from 'next/server'
 import {
   getSessionFromHeaders, createAdminSupabaseClient,
   ok, badRequest, unauthorized, forbidden, serverError, isHROrAdmin,
+  getAccessibleCompanyIds,
 } from '@/lib/api-helpers'
 import { computePayroll, countCompanyWorkDays, daysInMonth, getUserRate } from '@/lib/payroll'
 
@@ -30,13 +31,22 @@ export async function GET(req: NextRequest) {
   if (!type) return badRequest('type required')
 
   const supabase = createAdminSupabaseClient()
+  // Cross-company read grant (item 5) — applied only to the four plain
+  // list/aggregate reports below (1-4: simple row sums, merge correctly
+  // across companies by just unioning rows). exec_summary (5) is NOT
+  // extended — it calls computePayroll/countCompanyWorkDays per-company,
+  // whose results depend on each company's own work schedule/holidays, so
+  // "merging" sick-rate% and labor cost correctly across companies with
+  // different schedules needs its own weighted-aggregation design, not a
+  // drop-in .in() swap. Left single-company until that's worked out.
+  const accessibleCompanyIds = await getAccessibleCompanyIds(session)
 
   // ── 1. Leave summary by type and month ─────────────────────
   if (type === 'leave_summary') {
     const { data, error } = await supabase
       .from('leave_requests')
       .select('leave_type, total_days, start_date, status')
-      .eq('company_id', session.company_id)
+      .in('company_id', accessibleCompanyIds)
       .eq('status', 'approved')
       .gte('start_date', `${year}-01-01`)
       .lte('start_date', `${year}-12-31`)
@@ -72,7 +82,7 @@ export async function GET(req: NextRequest) {
           first_name_th, last_name_th, department, employee_code
         )
       `)
-      .eq('company_id', session.company_id)
+      .in('company_id', accessibleCompanyIds)
       .eq('status', 'approved')
       .gte('start_date', `${year}-01-01`)
       .lte('start_date', `${year}-12-31`)
@@ -106,7 +116,7 @@ export async function GET(req: NextRequest) {
         leave_type, total_days,
         user:users!leave_requests_user_id_fkey(department)
       `)
-      .eq('company_id', session.company_id)
+      .in('company_id', accessibleCompanyIds)
       .eq('status', 'approved')
       .gte('start_date', `${year}-01-01`)
       .lte('start_date', `${year}-12-31`)
@@ -136,7 +146,7 @@ export async function GET(req: NextRequest) {
         month, total_hours, status,
         user:users!timesheets_user_id_fkey(department)
       `)
-      .eq('company_id', session.company_id)
+      .in('company_id', accessibleCompanyIds)
       .eq('year', year)
       .eq('status', 'approved')
 

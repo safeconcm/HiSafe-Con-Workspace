@@ -7,6 +7,7 @@ import {
   getSessionFromHeaders, createAdminSupabaseClient,
   ok, created, badRequest, unauthorized, serverError,
   writeAuditLog, dispatchNotifications, isHROrAdmin,
+  getAccessibleCompanyIds,
 } from '@/lib/api-helpers'
 import { LEAVE_TYPE_LABEL, formatDateRangeSlashTH } from '@/utils'
 import type { LeaveType } from '@/types/database'
@@ -77,6 +78,13 @@ export async function GET(req: NextRequest) {
     teamUserIds = (reports ?? []).map((r: any) => r.user_id)
   }
 
+  // Cross-company read grant (item 5) — only ever widens the HR/Admin
+  // "whole company" branch below (own_only / team_only / approver_only all
+  // further filter by specific user_id, which already pins to one company,
+  // so including other accessible companies here is a no-op for them). See
+  // getAccessibleCompanyIds' own comment for why this is read-only and safe.
+  const accessibleCompanyIds = await getAccessibleCompanyIds(session)
+
   let query = supabase
     .from('leave_requests')
     .select(`
@@ -88,7 +96,7 @@ export async function GET(req: NextRequest) {
         id, first_name_th, last_name_th
       )
     `, { count: 'exact' })
-    .eq('company_id', session.company_id)
+    .in('company_id', accessibleCompanyIds)
     .order('created_at', { ascending: false })
     .range(from, from + limit - 1)
 

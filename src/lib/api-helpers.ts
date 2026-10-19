@@ -221,6 +221,40 @@ export function isSupervisorOrAbove(session: SessionUser) {
   return ['supervisor', 'hr', 'admin'].includes(session.role)
 }
 
+// ── Cross-company read access (2026-10-20) ────────────────────
+// Single point of truth for "which companies can this session read
+// (read-only) besides their own" — see company_access_grants' migration
+// comment for the full design (item 5: let one HR/supervisor see another
+// company's data without creating a duplicate user row for them there).
+//
+// Deliberately scoped to READ-ONLY list/report endpoints only — never wired
+// into approve/reject actions (those stay safe on their own, since
+// current_approver_id is always someone in the SAME company's org tree) and
+// never into PDF/letterhead-bearing documents (those assume exactly one
+// company's branding and would render wrong/break if fed rows from another
+// company — so they're intentionally left out of this helper's scope for
+// good, not just for now).
+//
+// Returns [session.company_id] for every session with no grants — i.e. the
+// exact same single-company behavior every existing call site already has
+// today. Only sessions with an active grant row get anything more, so this
+// is purely additive: nobody's existing access can be widened or narrowed
+// by this function unless a grant is explicitly created for them.
+export async function getAccessibleCompanyIds(session: SessionUser): Promise<string[]> {
+  const supabase = createAdminSupabaseClient()
+  const today = new Date().toISOString().split('T')[0]
+
+  const { data: grants } = await supabase
+    .from('company_access_grants')
+    .select('company_id')
+    .eq('user_id', session.id)
+    .lte('effective_from', today)
+    .or(`effective_to.is.null,effective_to.gte.${today}`)
+
+  const granted = (grants ?? []).map(g => g.company_id)
+  return Array.from(new Set([session.company_id, ...granted]))
+}
+
 // ── Audit log writer ─────────────────────────────────────────
 
 export async function writeAuditLog(params: {
