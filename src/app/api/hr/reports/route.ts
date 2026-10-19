@@ -5,7 +5,7 @@ import { NextRequest } from 'next/server'
 import {
   getSessionFromHeaders, createAdminSupabaseClient,
   ok, badRequest, unauthorized, forbidden, serverError, isHROrAdmin,
-  getAccessibleCompanyIds,
+  getAccessibleCompanyIds, isOrgRoot,
 } from '@/lib/api-helpers'
 import { computePayroll, countCompanyWorkDays, daysInMonth, getUserRate } from '@/lib/payroll'
 
@@ -20,8 +20,7 @@ const OT_MULTIPLIER: Record<string, number> = { weekday: 1.5, weekend: 3, holida
 
 export async function GET(req: NextRequest) {
   const session = getSessionFromHeaders(req)
-  if (!session)              return unauthorized()
-  if (!isHROrAdmin(session)) return forbidden()
+  if (!session) return unauthorized()
 
   const { searchParams } = new URL(req.url)
   const type  = searchParams.get('type')
@@ -29,6 +28,14 @@ export async function GET(req: NextRequest) {
   const month = searchParams.get('month') ? parseInt(searchParams.get('month')!) : null
 
   if (!type) return badRequest('type required')
+
+  // MD dashboard (2026-10-20, "ข้อ 1") — exec_summary is the one report type
+  // here with no employee-level detail (just company-wide aggregates: sick
+  // rate %, OT cost, labor cost, headcount), so it's safe to also open it to
+  // whoever sits at the root of the org tree (see isOrgRoot), without giving
+  // them the other four HR report types, which do carry employee names.
+  const allowed = isHROrAdmin(session) || (type === 'exec_summary' && await isOrgRoot(session))
+  if (!allowed) return forbidden()
 
   const supabase = createAdminSupabaseClient()
   // Cross-company read grant (item 5) — applied only to the four plain

@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { Sidebar } from './Sidebar'
 import { Topbar } from './Topbar'
+import { FloatingAIChat } from '@/components/ai/FloatingAIChat'
 import type { SessionUser } from '@/types/database'
 
 interface DashboardShellProps {
@@ -22,6 +23,10 @@ interface DashboardShellProps {
 
 export function DashboardShell({ session, company, children }: DashboardShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false)
+  // CONNEX AI (2026-10-20, "ข้อ 2") — owned here so the Topbar button and
+  // the widget itself (mounted once for every (dashboard) page) share one
+  // open/closed state, instead of /hub's self-contained version.
+  const [aiOpen, setAiOpen] = useState(false)
   const pathname = usePathname()
 
   // Belt-and-suspenders: also auto-close on any route change (covers
@@ -50,11 +55,18 @@ export function DashboardShell({ session, company, children }: DashboardShellPro
       />
 
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-        <Topbar session={session} onMenuClick={() => setMobileOpen(o => !o)} />
+        <Topbar
+          session={session}
+          onMenuClick={() => setMobileOpen(o => !o)}
+          onAIClick={() => setAiOpen(o => !o)}
+          aiOpen={aiOpen}
+        />
         <main className="flex-1 overflow-y-auto">
           {children}
         </main>
       </div>
+
+      <FloatingAIChat open={aiOpen} onOpenChange={setAiOpen} hideToggleButton />
     </>
   )
 }

@@ -221,6 +221,31 @@ export function isSupervisorOrAbove(session: SessionUser) {
   return ['supervisor', 'hr', 'admin'].includes(session.role)
 }
 
+// ── Org-tree-root check (2026-10-20, "ข้อ 1": MD dashboard) ───
+// True only if this user has their own ACTIVE row in organization_nodes
+// with parent_id IS NULL — i.e. literally sits at the top of the company's
+// org tree (same condition find_approver() uses to auto-approve a root
+// user's own leave/OT). Deliberately NOT based on users.is_executive — that
+// column is a separate, manually-set flag ("don't show personal leave/
+// timesheet widgets") an admin could forget to set, or set for a senior
+// exec who isn't actually the tree's root. Also deliberately NOT "no
+// matching row at all" — an admin user with zero organization_nodes rows
+// must NOT count as root (confirmed live: admin accounts have no node row,
+// so a naive "parent_id IS NULL OR no row" check would wrongly grant every
+// admin the MD dashboard). A company with two root nodes (two MDs, allowed
+// by the schema — see "ข้อ 4" discussion) both pass this check independently.
+export async function isOrgRoot(session: SessionUser): Promise<boolean> {
+  const supabase = createAdminSupabaseClient()
+  const { data } = await supabase
+    .from('organization_nodes')
+    .select('id')
+    .eq('user_id', session.id)
+    .eq('is_active', true)
+    .is('parent_id', null)
+    .maybeSingle()
+  return !!data
+}
+
 // ── Cross-company read access (2026-10-20) ────────────────────
 // Single point of truth for "which companies can this session read
 // (read-only) besides their own" — see company_access_grants' migration

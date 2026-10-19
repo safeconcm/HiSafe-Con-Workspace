@@ -141,6 +141,28 @@ export function useCreateJob() {
   })
 }
 
+export function useImportJobs() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ rows, year }: { rows: any[]; year: number }) => {
+      const res  = await fetch('/api/admin/jobs/import', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows, year }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error)
+      return json.data
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ['jobs'] })
+      if (data.created > 0) {
+        toast.success(`นำเข้า ${data.created} Job สำเร็จ`, data.failed > 0 ? `ล้มเหลว ${data.failed} รายการ` : undefined)
+      }
+    },
+    onError: (e: Error) => toast.error('นำเข้าไม่สำเร็จ', e.message),
+  })
+}
+
 export function useUpdateJob() {
   const qc = useQueryClient()
   return useMutation({

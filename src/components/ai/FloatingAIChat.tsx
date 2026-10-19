@@ -34,8 +34,27 @@ const SUGGESTIONS = [
   'สรุปขั้นตอนการลาพักร้อนโดยทั่วไปให้หน่อย',
 ]
 
-export function FloatingAIChat() {
-  const [open, setOpen]         = useState(false)
+interface FloatingAIChatProps {
+  // Controlled mode (2026-10-20, "ข้อ 2": a Topbar button inside the EM
+  // dashboard shell toggles this widget open/closed instead of the widget's
+  // own round button). When omitted (the /hub page's usage, unchanged),
+  // the widget manages its own open state exactly as before.
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  // Suppresses the widget's own floating round button + greeting bubble —
+  // used in the EM shell, where the Topbar icon is the only toggle, so
+  // there's no second (redundant) floating button on every single page.
+  hideToggleButton?: boolean
+}
+
+export function FloatingAIChat({ open: openProp, onOpenChange, hideToggleButton = false }: FloatingAIChatProps = {}) {
+  const [internalOpen, setInternalOpen] = useState(false)
+  const open = openProp !== undefined ? openProp : internalOpen
+  const setOpen = (updater: boolean | ((prev: boolean) => boolean)) => {
+    const next = typeof updater === 'function' ? (updater as (prev: boolean) => boolean)(open) : updater
+    if (onOpenChange) onOpenChange(next)
+    else setInternalOpen(next)
+  }
   const [showGreeting, setShowGreeting] = useState(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput]       = useState('')
@@ -206,7 +225,7 @@ export function FloatingAIChat() {
       )}
 
       {/* Greeting bubble — draws attention to the widget on first load */}
-      {!open && showGreeting && (
+      {!hideToggleButton && !open && showGreeting && (
         <div className="absolute bottom-1 right-[4.5rem] max-w-[13rem] animate-fade-in-up">
           <div className="relative bg-white rounded-2xl rounded-br-sm shadow-2xl shadow-black/30 px-3.5 py-2.5">
             <button
@@ -224,18 +243,20 @@ export function FloatingAIChat() {
       )}
 
       {/* Toggle button — pulsing ring while closed so it doesn't get missed */}
-      <div className="relative">
-        {!open && (
-          <span className="absolute inset-0 rounded-full bg-fuchsia-500 opacity-40 animate-ping pointer-events-none" />
-        )}
-        <button
-          onClick={() => { setOpen((o) => !o); setShowGreeting(false) }}
-          aria-label={open ? 'ปิดแชท CONNEX AI' : 'เปิดแชท CONNEX AI'}
-          className="relative w-14 h-14 rounded-full bg-gradient-to-br from-indigo-500 to-fuchsia-600 text-white shadow-2xl shadow-black/40 flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
-        >
-          {open ? <X className="w-6 h-6" /> : <Bot className="w-6 h-6" />}
-        </button>
-      </div>
+      {!hideToggleButton && (
+        <div className="relative">
+          {!open && (
+            <span className="absolute inset-0 rounded-full bg-fuchsia-500 opacity-40 animate-ping pointer-events-none" />
+          )}
+          <button
+            onClick={() => { setOpen((o) => !o); setShowGreeting(false) }}
+            aria-label={open ? 'ปิดแชท CONNEX AI' : 'เปิดแชท CONNEX AI'}
+            className="relative w-14 h-14 rounded-full bg-gradient-to-br from-indigo-500 to-fuchsia-600 text-white shadow-2xl shadow-black/40 flex items-center justify-center hover:scale-105 active:scale-95 transition-transform"
+          >
+            {open ? <X className="w-6 h-6" /> : <Bot className="w-6 h-6" />}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

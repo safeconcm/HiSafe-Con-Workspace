@@ -53,6 +53,18 @@ export default async function DashboardLayout({
 
   const companyRow = companyRows?.find(c => c.id === userRow.company_id) ?? null
 
+  // MD dashboard (2026-10-20, "ข้อ 1") — see isOrgRoot()'s comment in
+  // api-helpers.ts for why this is its own query rather than reusing
+  // is_executive. Cheap (indexed lookup, at most one row) and only runs
+  // once per full page load.
+  const { data: rootNode } = await admin
+    .from('organization_nodes')
+    .select('id')
+    .eq('user_id', userRow.id)
+    .eq('is_active', true)
+    .is('parent_id', null)
+    .maybeSingle()
+
   const sessionUser: SessionUser = {
     id:            userRow.id,
     auth_user_id:  authUser.id,
@@ -65,6 +77,7 @@ export default async function DashboardLayout({
     role:          userRow.role,
     avatar_url:    userRow.avatar_url,
     is_executive:  userRow.is_executive ?? false,
+    is_org_root:   !!rootNode,
     available_companies: companyRows ?? [],
   }
 

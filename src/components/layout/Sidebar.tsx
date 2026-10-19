@@ -6,7 +6,7 @@ import {
   LayoutDashboard, CalendarDays, Clock, Briefcase,
   Bell, Users, Building2, Settings, ChevronDown,
   ClipboardList, BarChart3, LogOut, MessageCircle, Megaphone, User,
-  MessageCircleQuestion, ArrowLeft,
+  MessageCircleQuestion, ArrowLeft, Gauge, Scale, BookOpen,
 } from 'lucide-react'
 import { cn, fullNameTH } from '@/utils'
 import type { SessionUser } from '@/types/database'
@@ -114,6 +114,10 @@ interface NavItem {
   // for approval/permission purposes, but who doesn't submit personal
   // leave/timesheet like a regular department-manager supervisor would.
   hideForExecutive?: boolean
+  // Shown ONLY for whoever sits at the root of the org tree (2026-10-20,
+  // "ข้อ 1": MD dashboard) — independent of `roles` above (a root user can
+  // hold any role; see session.is_org_root / isOrgRoot() in api-helpers.ts).
+  onlyForOrgRoot?: boolean
   children?: { label: string; href: string }[]
 }
 
@@ -127,6 +131,16 @@ const NAV_ITEMS: NavItem[] = [
     label: 'โปรไฟล์ของฉัน',
     href:  '/profile',
     icon:  User,
+  },
+  // MD dashboard (2026-10-20, "ข้อ 1") — only whoever is literally at the
+  // top of the org tree sees this link at all; the page itself re-checks
+  // the same condition server-side (via the API's isOrgRoot gate) so
+  // nothing leaks even if someone guesses the URL.
+  {
+    label: 'ภาพรวมผู้บริหาร',
+    href:  '/dashboard/executive',
+    icon:  Gauge,
+    onlyForOrgRoot: true,
   },
   {
     // HR/Admin don't submit their own leave through the system in practice
@@ -196,6 +210,19 @@ const NAV_ITEMS: NavItem[] = [
     label: 'เชื่อมต่อ LINE',
     href:  '/line/link',
     icon:  MessageCircle,
+  },
+  // ข้อ 3 — separate tab from the user guide below, per request. Content is
+  // a placeholder until HR sends the real policy document to upload.
+  {
+    label: 'กฎระเบียบบริษัท',
+    href:  '/company-policy',
+    icon:  Scale,
+  },
+  // ข้อ 4 — separate tab, built out now with its own illustrated content.
+  {
+    label: 'คู่มือการใช้งาน',
+    href:  '/user-guide',
+    icon:  BookOpen,
   },
   // HR section
   {
@@ -278,7 +305,8 @@ export function Sidebar({ session, company, mobileOpen = false, onClose }: Sideb
   const visibleItems = NAV_ITEMS.filter(
     item =>
       (!item.roles || item.roles.includes(session.role)) &&
-      !(item.hideForExecutive && session.is_executive)
+      !(item.hideForExecutive && session.is_executive) &&
+      !(item.onlyForOrgRoot && !session.is_org_root)
   )
 
   return (

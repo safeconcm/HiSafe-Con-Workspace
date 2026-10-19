@@ -330,6 +330,15 @@ export interface SessionUser {
   // personal leave/timesheet) or an executive (doesn't), see Sidebar.tsx /
   // dashboard/page.tsx.
   is_executive: boolean
+  // True only if this user has their own active organization_nodes row
+  // with parent_id IS NULL — literally sits at the top of the org tree
+  // (2026-10-20, "ข้อ 1": MD dashboard). See isOrgRoot() in api-helpers.ts
+  // for why this is deliberately NOT the same thing as is_executive above.
+  // Computed once per page load in (dashboard)/layout.tsx; defaults to
+  // false anywhere a SessionUser is built without that extra query (e.g.
+  // getSessionFromHeaders' header-only fallback) — safe, since it only
+  // ever hides the MD-dashboard nav link / page content, nothing else.
+  is_org_root?: boolean
   // Companies this auth user has an active profile in (for admins linked
   // to more than one company). Length 1 for normal single-company users.
   available_companies?: { id: string; code: string; name_th: string; logo_url: string | null }[]
