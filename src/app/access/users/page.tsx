@@ -3,7 +3,7 @@
 // Moved here (2026-10-16) from src/app/(dashboard)/admin/users/page.tsx — see
 // src/app/access/layout.tsx for why this is now its own top-level module
 // ("CONNEX Access") instead of living inside CONNEX EM's dashboard shell.
-import { useState }     from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import Link             from 'next/link'
 import { useUsers, useDeleteUser } from '@/hooks/useAdmin'
 import { ROLE_LABEL, cn, fullNameTH } from '@/utils'
@@ -47,12 +47,27 @@ const EMPLOYMENT_LABEL: Record<string, string> = {
 const EMPLOYMENT_COLOR: Record<string, string> = {
   permanent: 'bg-green-50 text-green-700', probation: 'bg-amber-50 text-amber-700',
 }
+// Sub-grouping order (2026-10-20, "เพิ่มกับ sub แบบกรณี Role") — top-down by
+// authority, so admins/HR (who manage the list) see their own accounts
+// first rather than scrolling past every employee.
+const ROLE_ORDER: UserRole[] = ['admin', 'hr', 'supervisor', 'employee']
 
 export default function AdminUsersPage() {
+  // Search box typed value vs. the debounced value actually sent to the API
+  // (2026-10-20, "เพิ่มช่องค้นหา") — typing fires a server query (q filters
+  // employee_code/email/name in the DB, not just the current page), so this
+  // waits 300ms after the last keystroke instead of firing one request per
+  // character while still feeling instant to type into.
+  const [qInput, setQInput] = useState('')
   const [q,      setQ]      = useState('')
   const [role,   setRole]   = useState('')
   const [status, setStatus] = useState('active')
   const [page,   setPage]   = useState(1)
+
+  useEffect(() => {
+    const t = setTimeout(() => { setQ(qInput); setPage(1) }, 300)
+    return () => clearTimeout(t)
+  }, [qInput])
 
   // HR can view this list (same as Admin — see /api/admin/users GET), but
   // creating/importing users stays Admin-only, matching the API guard, so
@@ -68,6 +83,75 @@ export default function AdminUsersPage() {
   // "has this user got real history" check happens server-side.
   const deleteUser = useDeleteUser()
   const [confirmDelete, setConfirmDelete] = useState<any | null>(null)
+
+  // Sub-group the current page by Role (2026-10-20, "sub แบบกรณี Role") —
+  // only when no single Role filter is already chosen, since grouping one
+  // role under its own role header would be redundant.
+  const groupedUsers = role ? null : ROLE_ORDER
+    .map(r => ({ role: r, items: users.filter((u: any) => u.role === r) }))
+    .filter(g => g.items.length > 0)
+
+  const renderRow = (u: any) => (
+    <tr key={u.id}>
+      <td>
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-xs font-medium shrink-0">
+            {u.first_name_th.charAt(0)}
+          </div>
+          <div>
+            <p className="text-sm font-medium text-gray-900">{fullNameTH(u)}</p>
+            <p className="text-xs text-gray-400">{u.email}</p>
+          </div>
+        </div>
+      </td>
+      <td className="text-sm text-gray-600 font-mono">{u.employee_code}</td>
+      <td>
+        <p className="text-sm text-gray-700">{u.department ?? '—'}</p>
+        <p className="text-xs text-gray-400">{u.position_th ?? ''}</p>
+      </td>
+      <td>
+        <span className={cn('badge', ROLE_COLOR[u.role as UserRole])}>
+          {ROLE_LABEL[u.role as UserRole]}
+        </span>
+      </td>
+      <td>
+        {u.employment_status ? (
+          <>
+            <span className={cn('badge', EMPLOYMENT_COLOR[u.employment_status])}>
+              {EMPLOYMENT_LABEL[u.employment_status]}
+            </span>
+            {u.employment_status === 'probation' && u.probation_end && (
+              <p className="text-xs text-gray-400 mt-1">ถึง {u.probation_end}</p>
+            )}
+          </>
+        ) : (
+          <span className="text-xs text-gray-400">ไม่ระบุ</span>
+        )}
+      </td>
+      <td>
+        <span className={cn('badge', STATUS_COLOR[u.status as UserStatus])}>
+          {STATUS_LABEL[u.status as UserStatus]}
+        </span>
+      </td>
+      <td className="text-sm text-gray-600 whitespace-nowrap">{u.hire_date}</td>
+      <td>
+        <div className="flex items-center gap-2 justify-end">
+          {isAdmin && (
+            <button
+              onClick={() => setConfirmDelete(u)}
+              className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+              title="ลบผู้ใช้"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
+          <Link href={`/access/users/${u.id}`} className="text-gray-400 hover:text-gray-700">
+            <ChevronRight className="w-4 h-4" />
+          </Link>
+        </div>
+      </td>
+    </tr>
+  )
 
   return (
     <div className="page-container space-y-5">
@@ -101,8 +185,8 @@ export default function AdminUsersPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
-            value={q}
-            onChange={e => { setQ(e.target.value); setPage(1) }}
+            value={qInput}
+            onChange={e => setQInput(e.target.value)}
             placeholder="ค้นหาชื่อ, รหัส, อีเมล"
             className="form-input pl-9"
           />
@@ -153,67 +237,20 @@ export default function AdminUsersPage() {
                 </tr>
               </thead>
               <tbody>
-                {users.map((u: any) => (
-                  <tr key={u.id}>
-                    <td>
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-xs font-medium shrink-0">
-                          {u.first_name_th.charAt(0)}
-                        </div>
-                        <div>
-                          <p className="text-sm font-medium text-gray-900">{fullNameTH(u)}</p>
-                          <p className="text-xs text-gray-400">{u.email}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="text-sm text-gray-600 font-mono">{u.employee_code}</td>
-                    <td>
-                      <p className="text-sm text-gray-700">{u.department ?? '—'}</p>
-                      <p className="text-xs text-gray-400">{u.position_th ?? ''}</p>
-                    </td>
-                    <td>
-                      <span className={cn('badge', ROLE_COLOR[u.role as UserRole])}>
-                        {ROLE_LABEL[u.role as UserRole]}
-                      </span>
-                    </td>
-                    <td>
-                      {u.employment_status ? (
-                        <>
-                          <span className={cn('badge', EMPLOYMENT_COLOR[u.employment_status])}>
-                            {EMPLOYMENT_LABEL[u.employment_status]}
-                          </span>
-                          {u.employment_status === 'probation' && u.probation_end && (
-                            <p className="text-xs text-gray-400 mt-1">ถึง {u.probation_end}</p>
-                          )}
-                        </>
-                      ) : (
-                        <span className="text-xs text-gray-400">ไม่ระบุ</span>
-                      )}
-                    </td>
-                    <td>
-                      <span className={cn('badge', STATUS_COLOR[u.status as UserStatus])}>
-                        {STATUS_LABEL[u.status as UserStatus]}
-                      </span>
-                    </td>
-                    <td className="text-sm text-gray-600 whitespace-nowrap">{u.hire_date}</td>
-                    <td>
-                      <div className="flex items-center gap-2 justify-end">
-                        {isAdmin && (
-                          <button
-                            onClick={() => setConfirmDelete(u)}
-                            className="p-1 text-gray-400 hover:text-red-600 transition-colors"
-                            title="ลบผู้ใช้"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        )}
-                        <Link href={`/access/users/${u.id}`} className="text-gray-400 hover:text-gray-700">
-                          <ChevronRight className="w-4 h-4" />
-                        </Link>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {groupedUsers ? (
+                  groupedUsers.map(g => (
+                    <Fragment key={g.role}>
+                      <tr className="bg-gray-50">
+                        <td colSpan={8} className="!py-1.5 text-xs font-semibold text-gray-500">
+                          {ROLE_LABEL[g.role]} <span className="text-gray-400 font-normal">({g.items.length})</span>
+                        </td>
+                      </tr>
+                      {g.items.map(renderRow)}
+                    </Fragment>
+                  ))
+                ) : (
+                  users.map(renderRow)
+                )}
                 {!users.length && (
                   <tr><td colSpan={8} className="text-center py-10 text-gray-400 text-sm">ไม่พบผู้ใช้</td></tr>
                 )}
@@ -223,17 +260,26 @@ export default function AdminUsersPage() {
 
           {/* Mobile */}
           <div className="sm:hidden divide-y divide-gray-100">
-            {users.map((u: any) => (
-              <Link key={u.id} href={`/access/users/${u.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50">
-                <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-sm font-medium shrink-0">
-                  {u.first_name_th.charAt(0)}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900">{fullNameTH(u)}</p>
-                  <p className="text-xs text-gray-400">{u.employee_code} · {ROLE_LABEL[u.role as UserRole]}</p>
-                </div>
-                <ChevronRight className="w-4 h-4 text-gray-400" />
-              </Link>
+            {(groupedUsers ?? [{ role: '' as UserRole, items: users }]).map(g => (
+              <Fragment key={g.role || 'all'}>
+                {groupedUsers && (
+                  <p className="px-4 pt-3 pb-1 text-xs font-semibold text-gray-500 bg-gray-50">
+                    {ROLE_LABEL[g.role]} <span className="text-gray-400 font-normal">({g.items.length})</span>
+                  </p>
+                )}
+                {g.items.map((u: any) => (
+                  <Link key={u.id} href={`/access/users/${u.id}`} className="flex items-center gap-3 px-4 py-3 hover:bg-gray-50">
+                    <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 text-sm font-medium shrink-0">
+                      {u.first_name_th.charAt(0)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900">{fullNameTH(u)}</p>
+                      <p className="text-xs text-gray-400">{u.employee_code} · {ROLE_LABEL[u.role as UserRole]}</p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-gray-400" />
+                  </Link>
+                ))}
+              </Fragment>
             ))}
           </div>
         </div>

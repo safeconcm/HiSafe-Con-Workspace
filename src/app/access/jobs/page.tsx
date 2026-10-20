@@ -2,12 +2,24 @@
 // src/app/access/jobs/page.tsx
 // Moved here (2026-10-16) from src/app/(dashboard)/admin/jobs/page.tsx — see
 // src/app/access/layout.tsx for context.
-import { useState }        from 'react'
+import { useState, Fragment } from 'react'
 import Link                from 'next/link'
 import { useJobs, useCreateJob, useUpdateJob, useDeleteJob } from '@/hooks/useAdmin'
 import { JOB_STATUS_LABEL, cn } from '@/utils'
-import { Plus, Pencil, Trash2, Loader2, Briefcase, Upload, AlertTriangle } from 'lucide-react'
+import { Plus, Pencil, Trash2, Loader2, Briefcase, Upload, AlertTriangle, Search } from 'lucide-react'
 import type { JobStatus } from '@/types/database'
+
+// Group Jobs by their "J-code" year prefix (2026-10-20, "Jxx 2 ตัวหน้าซ้ำกัน
+// จะได้ดูง่าย") — e.g. J24034/J24035/J24036 all cluster under one "J24"
+// sub-header. The J-code can live in either job_code (SAFECON tenant, e.g.
+// "J260001") or name_th (HIGHCON tenant, which uses a plain running number
+// as job_code and keeps the real J-code in name_th, e.g. job_code "15" /
+// name_th "J24034" — confirmed live via SQL on 2026-10-20). Jobs with no
+// recognizable J-code fall into a catch-all "อื่นๆ" group shown last.
+function jobGroupCode(job: any): string | null {
+  const m = /^J(\d{2})/i.exec(job.job_code ?? '') || /^J(\d{2})/i.exec(job.name_th ?? '')
+  return m ? `J${m[1]}` : null
+}
 
 const STATUS_COLOR: Record<JobStatus, string> = {
   active:   'bg-green-100 text-green-700',
@@ -47,8 +59,32 @@ export default function AdminJobsPage() {
   // onError toast shows the reason instead of silently doing nothing.
   const [confirmDelete, setConfirmDelete] = useState<any | null>(null)
 
+  // Search (2026-10-20, "Job มันเยอะ พิมพ์แล้วเด้งขึ้น") — client-side,
+  // instant-as-you-type, since the full year's Job list is already loaded.
+  const [search, setSearch] = useState('')
+
   const jobs = data?.jobs ?? []
   const years = Array.from({ length: 4 }, (_, i) => now.getFullYear() + 1 - i)
+
+  const q = search.trim().toLowerCase()
+  const filteredJobs = !q ? jobs : jobs.filter((job: any) =>
+    [job.job_code, job.name_th, job.name_en, job.client_name]
+      .some((v: string | null) => (v ?? '').toLowerCase().includes(q))
+  )
+
+  // Group the (already search-filtered) list by J-code prefix, newest year
+  // first; jobs with no recognizable J-code go in "อื่นๆ" at the end.
+  const groups = new Map<string, any[]>()
+  for (const job of filteredJobs) {
+    const code = jobGroupCode(job) ?? 'อื่นๆ'
+    if (!groups.has(code)) groups.set(code, [])
+    groups.get(code)!.push(job)
+  }
+  const groupKeys = Array.from(groups.keys()).sort((a, b) => {
+    if (a === 'อื่นๆ') return 1
+    if (b === 'อื่นๆ') return -1
+    return b.localeCompare(a)
+  })
 
   const handleSave = async () => {
     if (!form.job_code.trim() || !form.name_th.trim()) return
@@ -113,6 +149,18 @@ export default function AdminJobsPage() {
         </div>
       </div>
 
+      {/* Search */}
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder="ค้นหา Job Code, ชื่องาน, ลูกค้า"
+          className="form-input pl-9"
+        />
+      </div>
+
       {/* Form */}
       {showForm && (
         <div className="card card-body space-y-4">
@@ -174,45 +222,60 @@ export default function AdminJobsPage() {
               </tr>
             </thead>
             <tbody>
-              {jobs.map((job: any) => (
-                <tr key={job.id}>
-                  <td className="font-mono text-sm font-medium text-gray-900">{job.job_code}</td>
-                  <td>
-                    <p className="text-sm text-gray-900">{job.name_th}</p>
-                    {job.name_en && <p className="text-xs text-gray-400">{job.name_en}</p>}
-                  </td>
-                  <td className="text-sm text-gray-600">{job.client_name ?? '—'}</td>
-                  <td>
-                    <select
-                      value={job.status}
-                      onChange={e => handleStatusChange(job, e.target.value as JobStatus)}
-                      className={cn('form-input w-auto !py-1 !px-2 text-xs font-medium border-0', STATUS_COLOR[job.status as JobStatus])}
-                    >
-                      {(['active', 'inactive', 'closed'] as JobStatus[]).map(s => (
-                        <option key={s} value={s}>{JOB_STATUS_LABEL[s]}</option>
-                      ))}
-                    </select>
-                  </td>
-                  <td>
-                    <div className="flex items-center gap-2 justify-end">
-                      <button onClick={() => startEdit(job)} className="p-1 text-gray-400 hover:text-blue-600 transition-colors">
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                      <button onClick={() => setConfirmDelete(job)} className="p-1 text-gray-400 hover:text-red-600 transition-colors">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
+              {groupKeys.map(code => (
+                <Fragment key={code}>
+                  <tr className="bg-gray-50">
+                    <td colSpan={5} className="!py-1.5 text-xs font-semibold text-gray-500">
+                      {code} <span className="text-gray-400 font-normal">({groups.get(code)!.length})</span>
+                    </td>
+                  </tr>
+                  {groups.get(code)!.map((job: any) => (
+                    <tr key={job.id}>
+                      <td className="font-mono text-sm font-medium text-gray-900">{job.job_code}</td>
+                      <td>
+                        <p className="text-sm text-gray-900">{job.name_th}</p>
+                        {job.name_en && <p className="text-xs text-gray-400">{job.name_en}</p>}
+                      </td>
+                      <td className="text-sm text-gray-600">{job.client_name ?? '—'}</td>
+                      <td>
+                        <select
+                          value={job.status}
+                          onChange={e => handleStatusChange(job, e.target.value as JobStatus)}
+                          className={cn('form-input w-auto !py-1 !px-2 text-xs font-medium border-0', STATUS_COLOR[job.status as JobStatus])}
+                        >
+                          {(['active', 'inactive', 'closed'] as JobStatus[]).map(s => (
+                            <option key={s} value={s}>{JOB_STATUS_LABEL[s]}</option>
+                          ))}
+                        </select>
+                      </td>
+                      <td>
+                        <div className="flex items-center gap-2 justify-end">
+                          <button onClick={() => startEdit(job)} className="p-1 text-gray-400 hover:text-blue-600 transition-colors">
+                            <Pencil className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => setConfirmDelete(job)} className="p-1 text-gray-400 hover:text-red-600 transition-colors">
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </Fragment>
+              ))}
+              {!filteredJobs.length && (
+                <tr>
+                  <td colSpan={5} className="text-center py-10 text-gray-400 text-sm">
+                    {jobs.length ? 'ไม่พบ Job ที่ค้นหา' : `ยังไม่มี Job ปี ${year}`}
                   </td>
                 </tr>
-              ))}
-              {!jobs.length && (
-                <tr><td colSpan={5} className="text-center py-10 text-gray-400 text-sm">ยังไม่มี Job ปี {year}</td></tr>
               )}
             </tbody>
           </table>
         </div>
       )}
-      <p className="text-xs text-gray-400">รวม {jobs.length} Jobs ปี {year}</p>
+      <p className="text-xs text-gray-400">
+        {q ? `พบ ${filteredJobs.length} จาก ${jobs.length} Jobs ปี ${year}` : `รวม ${jobs.length} Jobs ปี ${year}`}
+      </p>
 
       {/* Confirm modal — moving a Job to inactive/closed (2026-10-20, "ข้อ 6") */}
       {confirmChange && (
