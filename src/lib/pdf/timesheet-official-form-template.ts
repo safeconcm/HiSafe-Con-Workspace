@@ -28,12 +28,15 @@
 //   T  approved leave_type='other', other_subtype='training'
 //   I  approved leave_type='other', other_subtype='injury'
 //   M  approved leave_type='other', other_subtype='authorized' — also the
-//      fallback for 'personal' (ลากิจ) and 'maternity' (ลาคลอด), neither of
-//      which has a dedicated letter on this English-language form; M's own
-//      legend ("Other authorized leave") is the closest fit. Flagged to the
-//      user as an assumption, adjustable later if HR wants a different
-//      mapping.
-//   X  user.resign_date is set and this date falls on/after it
+//      fallback for 'personal' (ลากิจ), 'maternity' (ลาคลอด), and 'study'
+//      (ลาศึกษา), none of which has a dedicated letter on this
+//      English-language form. Confirmed with user 2026-10-20: legend text
+//      updated to "M - Other authorized leave such as Exam/Study" to make
+//      the study-leave mapping explicit (previously implicit via the same
+//      fallback, legend just said "such as Examination").
+//   X  user.resign_date is set and this date falls on/after it — user
+//      confirmed 2026-10-20 this stays as-is for now (no other leave type
+//      re-mapped into X yet; revisit if/when one needs to be).
 // A day is "shaded" (locked, Section B shows blank not "-") for H/Sunday/F/X
 // and full-day leave; a half-day leave still gets its letter but stays
 // unshaded, since the person did work part of that day.
@@ -137,7 +140,7 @@ export function generateTimesheetOfficialFormHTML(data: TimesheetOfficialFormDat
         else if (lv.leave_type === 'sick') code = 'S'
         else if (lv.leave_type === 'other' && lv.other_subtype === 'training') code = 'T'
         else if (lv.leave_type === 'other' && lv.other_subtype === 'injury') code = 'I'
-        else code = 'M' // other/authorized + personal + maternity fallback (see file header)
+        else code = 'M' // other/authorized + personal + maternity + study fallback (see file header)
         shaded = !lv.is_half_day
       } else if (resignDate && dateStr >= resignDate) {
         code = 'X'; shaded = true
@@ -349,7 +352,7 @@ export function generateTimesheetOfficialFormHTML(data: TimesheetOfficialFormDat
     </tr>
     <tr>
       <td></td>
-      <td>V - Vacation leave</td><td>F - Free Saturday</td><td>I - Work injury leave</td><td>M - Other authorized leave such as Examination</td>
+      <td>V - Vacation leave</td><td>F - Free Saturday</td><td>I - Work injury leave</td><td>M - Other authorized leave such as Exam/Study</td>
     </tr>
   </table>
   <div class="secA-wrap">
