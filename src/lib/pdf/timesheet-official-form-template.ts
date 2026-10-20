@@ -243,7 +243,13 @@ export function generateTimesheetOfficialFormHTML(data: TimesheetOfficialFormDat
      trims harder and leaves real slack (~20mm) instead of a razor-thin
      fit: page padding down to 5mm top/bottom, secB rows down to 3.5mm,
      signature/footer margins cut further. */
-  .page { width: 297mm; padding: 5mm 8mm; background: #fff; }
+  /* 2026-10-21: left/right padding trimmed from 8mm to 3mm — see the
+     Section A/B column-realignment comment further down for why the extra
+     ~10mm of reclaimed width was needed. 3mm (not 0) deliberately keeps a
+     small non-zero margin so the form doesn't print flush to the paper
+     edge — most office printers have an unprintable border even when a
+     PDF itself has none. */
+  .page { width: 297mm; padding: 5mm 3mm; background: #fff; }
   h1.title { font-size: 12px; font-weight: 700; margin-bottom: 3px; }
 
   table { border-collapse: collapse; table-layout: fixed; }
@@ -274,19 +280,54 @@ export function generateTimesheetOfficialFormHTML(data: TimesheetOfficialFormDat
 
   .section-title { font-size: 10px; font-weight: 700; font-style: italic; padding: 1.5px 4px; border: 1px solid #000; border-top: none; }
 
-  /* Legend (4 cols x 2 rows) */
-  .legend-table { width: 100%; }
+  /* Legend (4 cols x 2 rows)
+     2026-10-21, item 1 ("เส้นขาด"): this table used to have NO border at
+     all (border:none on every cell), unlike its Section B counterpart
+     (.actlegend-table below, which already has the full left/right/bottom
+     border). Section A's overall box is built from 3 stacked pieces
+     (.section-title, this legend, .secA-wrap) that each omit their own
+     border-top so the borders merge into one line instead of doubling up —
+     that only works if every piece still has its OWN left/right border.
+     This one didn't, so the box's left/right edges visibly broke for the
+     legend row's height. Matching .actlegend-table's pattern fixes it. */
+  .legend-table { width: 100%; border: 1px solid #000; border-top: none; }
   .legend-table td { padding: 0.5px 6px; border: none; font-size: 8.5px; white-space: nowrap; }
   .legend-table .legend-lbl { width: 14%; }
 
-  /* Section A grid */
+  /* Section A grid
+     2026-10-21, item 2 ("การจัดเรียงตาราง"): day column 1 here now lines up
+     with day column 1 in Section B below (and therefore 30/31 too, since
+     both grids use the same day-column width and day count), and the H/V/S
+     /F/T/I/M summary block's total width now matches Section B's Total-days
+     column, so both tables' right edges land on the same line too. Numbers
+     behind this (content width = 297mm - 2×3mm page padding = 291mm):
+       - Section B's 3 leading columns (Allocation Code 14 + Description 50
+         + Activity Code 12) sum to 76mm, so .secA-note grew from 44mm to
+         76mm to match — this is what actually aligns day column 1.
+       - Day columns shrank 6mm→5mm in BOTH grids (not just one — shrinking
+         only one would misalign every day *after* the 1st) to reclaim
+         width for the above; 31 days × 5mm = 155mm either way.
+       - That leaves 291 - 76 - 155 = 60mm for the trailing block in each
+         table. Kept 4mm of that as unused safety slack (287mm actual total,
+         not the full 291mm) rather than cutting it exactly to the wire —
+         picked 56mm so it divides evenly: Section A's 7 summary columns at
+         8mm each (56÷7), Section B's Total-days column at the full 56mm.
+         Un-reworked, naively splitting 56mm across 7 columns edge-to-edge
+         with Section B's old 16mm Total-days column wouldn't have aligned;
+         widening Total-days to the same 56mm is what makes the two
+         trailing blocks — and therefore the right-hand border — match.
+       - .secA-note's own border-right still separates it from the day grid,
+         same as before; nothing about how the note box attaches changed. */
   .secA-wrap { display: flex; border: 1px solid #000; border-top: none; }
-  .secA-note { width: 44mm; padding: 2px 4px; font-size: 8.5px; border-right: 1px solid #000; display: flex; align-items: center; }
+  .secA-note { width: 76mm; padding: 2px 4px; font-size: 8.5px; border-right: 1px solid #000; display: flex; align-items: center; }
   .secA-table { flex: 1; }
   .secA-table th, .secA-table td { text-align: center; font-size: 7px; }
-  .secA-table th.day, .secA-table td.day { width: 6mm; }
-  .secA-table th.sum, .secA-table td.sum { width: 6mm; font-weight: 700; }
-  .secA-table td.shaded { background: repeating-linear-gradient(45deg, #eee, #eee 2px, #fff 2px, #fff 4px); }
+  .secA-table th.day, .secA-table td.day { width: 5mm; }
+  .secA-table th.sum, .secA-table td.sum { width: 8mm; font-weight: 700; }
+  /* item 3 ("สี Hatch วันหยุดจางไป"): #eee was barely visible against the
+     white cell background at PDF/print resolution — darkened to #999 (the
+     4px repeat/2px-stripe pattern itself is unchanged, just the gray). */
+  .secA-table td.shaded { background: repeating-linear-gradient(45deg, #999, #999 2px, #fff 2px, #fff 4px); }
   .secA-table td { height: 3.8mm; font-weight: 700; }
 
   /* Section B legend (activity codes, 4 cols x 3 rows) */
@@ -297,24 +338,41 @@ export function generateTimesheetOfficialFormHTML(data: TimesheetOfficialFormDat
      height (28 rows + 1 total row, confirmed row cap). 2026-07-21b: 4.0mm
      still overflowed to page 2 in the actual rendered PDF (verified on the
      live redeploy), so cut further to 3.5mm — over 29 rows that alone
-     recovers ~14.5mm versus the previous pass. No data/columns removed. */
+     recovers ~14.5mm versus the previous pass. No data/columns removed.
+     2026-10-21: day column 6mm→5mm and Total-days 16mm→56mm — see the
+     matching comment on Section A's grid above for the full column-width
+     math (Allocation Code/Description/Activity Code widths unchanged, so
+     job names/descriptions aren't affected by this). */
   .secB-table { width: 100%; border: 1px solid #000; border-top: none; }
   .secB-table th, .secB-table td { text-align: center; font-size: 7px; }
   .secB-table th.alloc-code, .secB-table td.alloc-code { width: 14mm; font-weight: 700; }
   .secB-table th.alloc-desc, .secB-table td.alloc-desc { width: 50mm; text-align: left; padding-left: 3px; }
   .secB-table th.activity-code, .secB-table td.activity-code { width: 12mm; color: #1e3a8a; font-weight: 700; }
-  .secB-table th.day, .secB-table td.day { width: 6mm; }
-  .secB-table th.total-days, .secB-table td.total-days { width: 16mm; font-weight: 700; }
+  .secB-table th.day, .secB-table td.day { width: 5mm; }
+  .secB-table th.total-days, .secB-table td.total-days { width: 56mm; font-weight: 700; }
   .secB-table td { height: 3.5mm; }
-  .secB-table td.shaded { background: repeating-linear-gradient(45deg, #eee, #eee 2px, #fff 2px, #fff 4px); }
+  .secB-table td.shaded { background: repeating-linear-gradient(45deg, #999, #999 2px, #fff 2px, #fff 4px); }
   .secB-table thead th { padding: 2px 0; font-weight: 700; }
   .secB-table .total-row td { font-weight: 700; }
   .secB-table .total-row .total-days { color: #b91c1c; }
 
-  /* Signatures */
-  .sig-row { display: flex; justify-content: space-around; margin-top: 2.5mm; font-size: 9.5px; }
+  /* Signatures
+     item 5 ("ระยะห่างท้ายตารางกับ Staff's Signature เพิ่มอีก 50%"):
+     2.5mm -> 3.75mm (2.5 * 1.5). This file has a history of the form
+     overflowing to a 2nd page (see the Section B height-budget comment
+     above) — re-verified on the live render after this change, not just by
+     re-reading the CSS, since +1.25mm alone is small but stacks on top of
+     everything else changed in this same pass. */
+  .sig-row { display: flex; justify-content: space-around; margin-top: 3.75mm; font-size: 9.5px; }
   .sig-row .sig-img { display: block; height: 10mm; object-fit: contain; margin: 0 auto 2px; }
   .sig-row .sig-line { display: inline-block; border-bottom: 1px solid #000; width: 55mm; }
+  /* item 4 ("แถว Staff's Signature ควรมีขีดอยู่ด้านล่าง [ลายเซ็น] ดิจิทัล"):
+     previously .sig-line only ever rendered in the no-signature-yet
+     fallback branch below — once a real signature image existed, the line
+     disappeared entirely instead of sitting under the image like a real
+     signature line would. This draws the line under the image too, without
+     touching the no-signature fallback's own markup at all. */
+  .sig-row .sig-signed-line { display: block; border-bottom: 1px solid #000; width: 40mm; margin: 0 auto; }
 
   .footer { margin-top: 1mm; font-size: 7px; color: #999; display: flex; justify-content: space-between; }
 </style>
@@ -411,13 +469,13 @@ export function generateTimesheetOfficialFormHTML(data: TimesheetOfficialFormDat
     <div>
       Staff 's Signature:
       ${data.signatures.employee_url
-        ? `<img src="${data.signatures.employee_url}" class="sig-img" style="display:inline-block;height:8mm;vertical-align:middle" />`
+        ? `<img src="${data.signatures.employee_url}" class="sig-img" style="display:inline-block;height:8mm;vertical-align:middle" /><span class="sig-signed-line"></span>`
         : `<span class="sig-line"></span>`}
     </div>
     <div>
       Authorized by:
       ${data.signatures.approver_url
-        ? `<img src="${data.signatures.approver_url}" class="sig-img" style="display:inline-block;height:8mm;vertical-align:middle" />`
+        ? `<img src="${data.signatures.approver_url}" class="sig-img" style="display:inline-block;height:8mm;vertical-align:middle" /><span class="sig-signed-line"></span>`
         : `<span class="sig-line"></span>`}
     </div>
     <div>Date: ${approvedDate || '<span class="sig-line" style="width:35mm"></span>'}</div>
