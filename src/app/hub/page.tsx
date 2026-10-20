@@ -72,13 +72,13 @@ const APPS = [
     // directory), but that's what caused the overlap with CONNEX HR's own
     // "ข้อมูลพนักงานทั้งหมด" tab. HR's directory is now its own read-only
     // page at /hr/employees instead — see Sidebar.tsx and that route.
-    // 2026-10-20: HR let back in, but only as far as the one new Cost
-    // Centers tab (per request: "ใครควรเห็น Tab นี้ได้บ้าง — Admin + HR/
-    // บัญชี") — /access's own role-aware landing redirect sends HR straight
-    // to /access/cost-centers instead of /access/users (see
-    // src/app/access/page.tsx), and every other page in the module still
-    // blocks HR at the layout/middleware level.
-    roles: ['admin', 'hr'] as const,
+    // A Cost Centers tab briefly let HR back in here too (2026-10-20) but
+    // was moved out to src/app/(dashboard)/payroll/cost-centers the same
+    // day (follow-up: "ย้าย Cost Centers ให้ HR ดู Tab HR ... เพราะ
+    // Payroll job cost จะอยู่ด้วยกัน") — HR reaches it through CONNEX EM's
+    // own sidebar now (see Sidebar.tsx's HR dropdown), not through this
+    // card, so this is Admin-only again.
+    roles: ['admin'] as const,
   },
 ] as const
 

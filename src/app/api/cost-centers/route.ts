@@ -1,17 +1,27 @@
-// src/app/api/access/cost-centers/route.ts
-// GET /api/access/cost-centers?year=&month=&period= — hours/cost breakdown
-// per Activity Code ("Cost Center"), computed from approved Timesheets.
+// src/app/api/cost-centers/route.ts
+// GET /api/cost-centers?year=&month=&period= — hours/cost breakdown per
+// Activity Code ("Cost Center"), computed from approved Timesheets.
 // 2026-10-20, per request: "Time sheet ช่องให้เลือก Activity code ... ดึง
-// ข้อมูลไปสร้าง Tab เพิ่มใน CONNEX Access ว่า Cost Centers จัดแยกรวมกรองตาม
-// Cost Centers ทั้ง 11 รูป". Mirrors /api/payroll?group=job's shape closely
-// (same cyclePeriod/cross-company-grant handling) — see that route's own
-// comments for the pay-cycle reasoning — but keyed by activity_code via
+// ข้อมูลไปสร้าง Tab ... Cost Centers ... ทั้ง 11 รูป", moved here the same
+// day from src/app/api/access/cost-centers/route.ts after a follow-up
+// request ("ย้าย Cost Centers ให้ HR ดู Tab HR ... เพราะ Payroll job cost
+// จะอยู่ด้วยกัน") — the page that calls this now lives at
+// src/app/(dashboard)/payroll/cost-centers/page.tsx, next to Job Direct Cost
+// (src/app/(dashboard)/payroll/page.tsx, calling /api/payroll?group=job),
+// so this route moved out of /api/access to sit next to /api/payroll
+// instead, matching its new page's location.
+//
+// Mirrors /api/payroll?group=job's shape closely (same cyclePeriod/
+// cross-company-grant handling — see that route's own comments for the
+// pay-cycle reasoning), but keyed by activity_code via
 // computeCostCenterSummary() instead of job_id via computeJobCostSummary().
 //
 // Admin + HR only (per request: "ใครควรเห็น Tab นี้ได้บ้าง — Admin + HR/
-// บัญชี"). This is the one page under /access that HR can reach — see
-// src/app/access/layout.tsx and src/middleware.ts's ROLE_ROUTES for the
-// matching exception.
+// บัญชี") — same role list as before the move, just no longer paired with
+// an /access-specific middleware/layout exception, since the page itself
+// isn't under /access anymore (see src/app/(dashboard)/payroll/cost-centers/
+// page.tsx's own comment on why no middleware route guard is needed here,
+// same convention as /api/payroll).
 import { NextRequest, NextResponse } from 'next/server'
 import {
   getSessionFromHeaders, ok, badRequest, unauthorized, forbidden,

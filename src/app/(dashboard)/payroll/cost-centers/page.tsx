@@ -1,21 +1,30 @@
 'use client'
-// src/app/access/cost-centers/page.tsx
+// src/app/(dashboard)/payroll/cost-centers/page.tsx
 // Cost Centers — hours/cost grouped by the 11 Activity Codes (Section B of
 // the official Timesheet form), summed across every Job and every employee.
 // 2026-10-20, per request: "Time sheet ช่องให้เลือก Activity code ... ให้ดึง
-// ข้อมูลไปสร้าง Tab เพิ่มใน CONNEX Access ว่า Cost Centers จัดแยกรวมกรองตาม
-// Cost Centers ทั้ง 11 รูป ที่บันทึกเชื่อมโยงมาจาก Time sheet".
+// ข้อมูลไปสร้าง Tab ... Cost Centers จัดแยกรวมกรองตาม Cost Centers ทั้ง 11
+// รูป ที่บันทึกเชื่อมโยงมาจาก Time sheet", then moved here 2026-10-20 (same
+// day, follow-up: "แต่ถ้าย้าย Cost Centers ให้ HR ดู Tab HR ได้ไหม เพราะ
+// พวก Payroll job cost จะอยู่ด้วยกัน") — originally built as its own tab
+// under CONNEX Access (/access/cost-centers), moved here to sit next to its
+// closest relative, "ต้นทุนแรงงานตาม Job (Job Cost)" (src/app/(dashboard)/
+// payroll/page.tsx), inside the HR dropdown (see Sidebar.tsx) instead of
+// living in a separate module. CONNEX Access no longer has a Cost Centers
+// tab or an HR-reachable page at all — it's back to Admin-only.
 //
-// Deliberately mirrors src/app/(dashboard)/payroll/page.tsx's "ตาม Job"
-// view (same month/year cycle toggle, same CSV download pattern) — this is
-// the same report shape, just grouped by Activity Code instead of Job Code,
-// with each code's row expandable to show which Jobs its hours came from
+// Sibling, not a clone: mirrors payroll/page.tsx's "ตาม Job" view (same
+// month/year cycle toggle, same CSV download pattern) — this is the same
+// report shape, just grouped by Activity Code instead of Job Code, with
+// each code's row expandable to show which Jobs its hours came from
 // (reusing the Fragment-per-group pattern from src/app/access/jobs/page.tsx).
 //
-// The only page under /access reachable by HR as well as Admin — see
-// src/app/access/layout.tsx and src/middleware.ts's ROLE_ROUTES for the
-// role exception, and src/components/access/AccessSidebar.tsx for the one
-// nav item HR actually sees here.
+// No middleware route guard for this path, same as payroll/page.tsx itself
+// (see that file — /payroll isn't in src/middleware.ts's ROLE_ROUTES
+// either): access control lives entirely in /api/cost-centers's own role
+// check (['hr','admin']), the same convention already established by
+// /api/payroll. Anyone not hr/admin who navigates here directly sees the
+// API's error message rendered in the red error box below, not a redirect.
 import { Fragment, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Layers, Download, Loader2, ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react'
@@ -41,7 +50,7 @@ export default function CostCentersPage() {
   const [period, setPeriod] = useState<Period>('month')
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
-  const apiUrl = `/api/access/cost-centers?year=${year}${period === 'year' ? '&period=year' : `&month=${month}`}`
+  const apiUrl = `/api/cost-centers?year=${year}${period === 'year' ? '&period=year' : `&month=${month}`}`
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['cost-centers', period, year, month],

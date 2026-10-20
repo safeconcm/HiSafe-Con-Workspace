@@ -259,6 +259,14 @@ const NAV_ITEMS: NavItem[] = [
       // a supervisor no longer sees a sidebar link to it. Revisit if
       // supervisors are still expected to use this directly.
       { label: 'ต้นทุนแรงงานตาม Job (Job Cost)', href: '/payroll' },
+      // 2026-10-20, per request: "Time sheet ช่องให้เลือก Activity code ...
+      // ดึงข้อมูลไปสร้าง Tab ... Cost Centers" — originally its own tab
+      // under CONNEX Access, moved here the same day (follow-up: "ย้าย Cost
+      // Centers ให้ HR ดู Tab HR ... เพราะ Payroll job cost จะอยู่ด้วยกัน")
+      // to sit right next to its closest relative, Job Direct Cost above —
+      // same report shape, grouped by Activity Code instead of Job Code.
+      // See src/app/(dashboard)/payroll/cost-centers/page.tsx.
+      { label: 'Cost Centers (ตาม Activity Code)', href: '/payroll/cost-centers' },
       { label: 'จัดการอัปเดต',   href: '/hr/announcements'   },
       { label: 'ข้อมูลพนักงานทั้งหมด', href: '/hr/employees'  },
     ],
