@@ -50,10 +50,15 @@ export default async function AccessLayout({
   // Admin-only (2026-10-16, follow-up: "ต้องจำกัดให้ Admin เข้าใช้" — HR used
   // to be let in here too since this doubled as HR's employee directory;
   // that's now its own page at /hr/employees instead, so this module no
-  // longer needs to admit HR at all). Middleware also enforces this
-  // per-route (see ROLE_ROUTES['/access'] in src/middleware.ts) — this is a
-  // friendlier full-page bounce rather than relying solely on that redirect.
-  if (userRow.role !== 'admin') redirect('/hub')
+  // longer needs to admit HR at all) — EXCEPT 2026-10-20's one addition,
+  // Cost Centers (per request: "ใครควรเห็น Tab นี้ได้บ้าง — Admin + HR/
+  // บัญชี"), so this top-level guard now admits 'hr' too. Every other page
+  // under /access still blocks HR — that's enforced by middleware's
+  // per-route ROLE_ROUTES (see src/middleware.ts), which is more granular
+  // than this layout-level check and is what actually keeps HR out of
+  // /access/users, /access/jobs, etc. This check is the friendlier
+  // full-page bounce for someone who isn't admin OR hr at all.
+  if (!['admin', 'hr'].includes(userRow.role)) redirect('/hub')
 
   const companyIds = Array.from(new Set((userRows ?? []).map(r => r.company_id)))
   const { data: companyRows } = await admin

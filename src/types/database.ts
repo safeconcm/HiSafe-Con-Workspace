@@ -257,6 +257,13 @@ export interface TimesheetLine {
   line_type: TimesheetLineType
   leave_request_id: string | null
   remark: string | null
+  // One of the 11 standardized Activity Codes (Section B of the official
+  // Timesheet form) — see src/lib/activity-codes.ts. Added to this shared
+  // type 2026-10-20; the column itself existed live in the DB earlier than
+  // that (see migrations/022_timesheet_lines_activity_code.sql's comment)
+  // but was missing here, so TimesheetGrid.tsx/the two API routes that
+  // already read/write it each had their own ad-hoc local type instead.
+  activity_code: string | null
 }
 
 export interface Notification {

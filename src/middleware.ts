@@ -52,6 +52,11 @@ const ROLE_ROUTES: Record<string, string[]> = {
   '/access/jobs':         ['admin'],
   '/access/settings':     ['admin'],
   '/access/users':        ['admin'],
+  // 2026-10-20: the one page under /access HR can also open (per request:
+  // "Cost Centers ... Admin + HR/บัญชี") — longest-prefix-wins means this
+  // specific entry overrides the catch-all '/access': ['admin'] below for
+  // this one path, without loosening anything else in the module.
+  '/access/cost-centers': ['hr', 'admin'],
   '/access':              ['admin'],
   '/admin/users/new':     ['admin'],
   '/admin/users/import':  ['admin'],

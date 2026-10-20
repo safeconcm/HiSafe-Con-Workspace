@@ -14,7 +14,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   Users, Building2, Briefcase, Settings as SettingsIcon,
-  ArrowLeft, LogOut, ChevronDown, ShieldCheck,
+  ArrowLeft, LogOut, ChevronDown, ShieldCheck, Layers,
 } from 'lucide-react'
 import { cn, fullNameTH } from '@/utils'
 import type { SessionUser } from '@/types/database'
@@ -105,14 +105,20 @@ function AccessCompanySwitcher({
   )
 }
 
-// All admin-only now (2026-10-16) — CONNEX Access as a whole is gated to
-// Admin at the layout/middleware level, so every nav item here is reachable
-// by the same single role. Kept the `roles` field anyway rather than
-// dropping it, in case a narrower-than-admin item shows up later.
+// Almost all admin-only (2026-10-16) — CONNEX Access as a whole is gated to
+// Admin at the layout/middleware level, so most nav items here are reachable
+// by that one role. The one exception, added 2026-10-20 per request ("Cost
+// Centers ... ใครควรเห็น Tab นี้ได้บ้าง — Admin + HR/บัญชี"): Cost Centers is
+// also open to HR, so the layout/middleware gate for THIS route specifically
+// admits 'hr' too (see src/app/access/layout.tsx + src/middleware.ts's
+// ROLE_ROUTES['/access/cost-centers']) — every other item here still blocks
+// HR at that same layer, this `roles` filter here just keeps the sidebar
+// itself from showing HR a link to a page they can't open.
 const NAV_ITEMS = [
   { label: 'จัดการผู้ใช้',    href: '/access/users',        icon: Users,       roles: ['admin'] },
   { label: 'โครงสร้างองค์กร', href: '/access/organization', icon: Building2,   roles: ['admin'] },
   { label: 'Job Codes',        href: '/access/jobs',         icon: Briefcase,   roles: ['admin'] },
+  { label: 'Cost Centers',     href: '/access/cost-centers', icon: Layers,      roles: ['admin', 'hr'] },
   { label: 'ตั้งค่า',          href: '/access/settings',     icon: SettingsIcon, roles: ['admin'] },
 ]
 

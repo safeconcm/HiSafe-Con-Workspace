@@ -19,6 +19,7 @@
 
 import { createAdminSupabaseClient } from '@/lib/api-helpers'
 import { getWorkingDayMapForMonth, getWorkingDayMapForRange } from '@/lib/work-schedule'
+import { activityCodeLabel, UNCLASSIFIED_CODE } from '@/lib/activity-codes'
 
 export function daysInMonth(year: number, month: number): number {
   return new Date(year, month, 0).getDate()
@@ -531,4 +532,142 @@ export async function computeJobCostSummary(
   return Array.from(jobMap.values())
     .map(({ employees, ...rest }) => ({ ...rest, employee_count: employees.size }))
     .sort((a, b) => b.cost - a.cost)
+}
+
+// ── Cost Centers (Activity Code) summary ────────────────────────────────
+// 2026-10-20, per request: "Time sheet ช่องให้เลือก Activity code ... ดึง
+// ข้อมูลไปสร้าง Tab เพิ่มใน CONNEX Access ว่า Cost Centers จัดแยกรวมกรองตาม
+// Cost Centers ทั้ง 11 รูป ที่บันทึกเชื่อมโยงมาจาก Time sheet". Same shape
+// and cost math as computeJobCostSummary above (same cycles, same
+// getUserRateForPeriod per employee), but grouped by timesheet_lines.
+// activity_code instead of job_id — the 11 standardized Activity Codes from
+// Section B of the official Timesheet form (see src/lib/activity-codes.ts),
+// not the Job Code. A line with no activity_code (not yet classified, or
+// logged before the dropdown existed) falls into its own
+// UNCLASSIFIED_CODE bucket rather than being dropped or merged into a real
+// code, so gaps in classification stay visible rather than silently
+// disappearing from the total.
+//
+// Each code also carries a `jobs` breakdown (which Job Codes the hours under
+// that Activity Code came from) for drill-down, since one Activity Code is
+// typically spread across many Jobs (e.g. every Job's site-supervision hours
+// all land under '04').
+export interface CostCenterJobBreakdown {
+  job_id: string | null
+  job_code: string
+  job_name: string
+  hours: number
+  cost: number
+}
+
+export interface CostCenterSummaryLine {
+  activity_code: string   // one of '01'..'11', or UNCLASSIFIED_CODE
+  activity_label: string
+  hours: number
+  cost: number
+  employee_count: number
+  jobs: CostCenterJobBreakdown[]
+}
+
+export async function computeCostCenterSummary(
+  companyId: string, year: number, month?: number
+): Promise<CostCenterSummaryLine[]> {
+  const cycles = month ? [cyclePeriod(year, month)] : Array.from({ length: 12 }, (_, i) => cyclePeriod(year, i + 1))
+
+  const supabase = createAdminSupabaseClient()
+  type Bucket = {
+    activity_code: string; activity_label: string
+    hours: number; cost: number
+    employees: Set<string>
+    jobs: Map<string, CostCenterJobBreakdown>
+  }
+  const codeMap = new Map<string, Bucket>()
+
+  for (const { start, end } of cycles) {
+    const workingDayMap = await getWorkingDayMapForRange(supabase, companyId, start, end)
+
+    const startYM = { y: Number(start.slice(0, 4)), m: Number(start.slice(5, 7)) }
+    const endYM   = { y: Number(end.slice(0, 4)),   m: Number(end.slice(5, 7)) }
+    const monthPairs = (startYM.y === endYM.y && startYM.m === endYM.m) ? [startYM] : [startYM, endYM]
+
+    const { data: timesheetsInRange } = await supabase
+      .from('timesheets')
+      .select('id, user_id')
+      .eq('company_id', companyId)
+      .eq('status', 'approved')
+      .or(monthPairs.map(p => `and(year.eq.${p.y},month.eq.${p.m})`).join(','))
+
+    if (!timesheetsInRange || timesheetsInRange.length === 0) continue
+
+    const userByTimesheet = new Map(timesheetsInRange.map(t => [t.id, t.user_id]))
+
+    const { data: lines } = await supabase
+      .from('timesheet_lines')
+      .select('hours, work_date, timesheet_id, activity_code, job:jobs(id, job_code, name_th)')
+      .in('timesheet_id', timesheetsInRange.map(t => t.id))
+      .eq('line_type', 'work')
+      .gte('work_date', start)
+      .lte('work_date', end)
+
+    const byUser = new Map<string, {
+      activity_code: string
+      job_id: string | null; job_code: string; job_name: string; hours: number
+    }[]>()
+    for (const line of lines ?? []) {
+      const userId = userByTimesheet.get(line.timesheet_id)
+      if (!userId) continue
+      const job = (line as any).job
+      const arr = byUser.get(userId) ?? []
+      arr.push({
+        activity_code: (line as any).activity_code || UNCLASSIFIED_CODE,
+        job_id: job?.id ?? null,
+        job_code: job?.job_code ?? '—',
+        job_name: job?.name_th ?? 'ไม่ระบุ Job',
+        hours: Number(line.hours),
+      })
+      byUser.set(userId, arr)
+    }
+
+    for (const [userId, userLines] of byUser) {
+      const rate = await getUserRateForPeriod(supabase, userId, start, end, workingDayMap)
+      for (const l of userLines) {
+        const cost = Math.round(l.hours * rate.hourly_rate * 100) / 100
+        let bucket = codeMap.get(l.activity_code)
+        if (!bucket) {
+          bucket = {
+            activity_code: l.activity_code,
+            activity_label: activityCodeLabel(l.activity_code === UNCLASSIFIED_CODE ? null : l.activity_code),
+            hours: 0, cost: 0, employees: new Set(), jobs: new Map(),
+          }
+          codeMap.set(l.activity_code, bucket)
+        }
+        bucket.hours += l.hours
+        bucket.cost = Math.round((bucket.cost + cost) * 100) / 100
+        bucket.employees.add(userId)
+
+        const jobKey = l.job_id ?? `code:${l.job_code}`
+        const existingJob = bucket.jobs.get(jobKey)
+        if (existingJob) {
+          existingJob.hours += l.hours
+          existingJob.cost = Math.round((existingJob.cost + cost) * 100) / 100
+        } else {
+          bucket.jobs.set(jobKey, { job_id: l.job_id, job_code: l.job_code, job_name: l.job_name, hours: l.hours, cost })
+        }
+      }
+    }
+  }
+
+  return Array.from(codeMap.values())
+    .map(({ employees, jobs, ...rest }) => ({
+      ...rest,
+      employee_count: employees.size,
+      jobs: Array.from(jobs.values()).sort((a, b) => b.cost - a.cost),
+    }))
+    .sort((a, b) => {
+      // Unclassified always last regardless of cost — it's a "needs
+      // attention" bucket, not a real cost center to rank competitively.
+      if (a.activity_code === UNCLASSIFIED_CODE) return 1
+      if (b.activity_code === UNCLASSIFIED_CODE) return -1
+      return b.cost - a.cost
+    })
 }

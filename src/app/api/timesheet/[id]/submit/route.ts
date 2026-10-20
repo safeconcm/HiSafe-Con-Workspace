@@ -67,6 +67,40 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     return badRequest('ต้องกรอกชั่วโมงงานอย่างน้อย 1 วันก่อนส่ง')
   }
 
+  // Activity Code required before submit (2026-10-20, per request: "บังคับ
+  // กรอก Activity Code ก่อน submit timesheet" — raised while scoping the
+  // Cost Centers report, src/lib/payroll.ts's computeCostCenterSummary:
+  // every existing approved timesheet had activity_code = NULL on every
+  // line, since nothing enforced the dropdown in TimesheetGrid.tsx being
+  // touched). One activity_code value is entered per job-row per month (see
+  // TimesheetGrid.tsx's own comment) and stamped identically across every
+  // line for that job, so it's enough to check one row per job_id rather
+  // than every individual date. A job-row's lines always agree with each
+  // other on activity_code (same save path writes the same value to all of
+  // them), so picking any missing row per job surfaces every job that needs
+  // attention without over- or under-counting.
+  const { data: workLines } = await supabase
+    .from('timesheet_lines')
+    .select('job_id, activity_code, job:jobs(job_code, name_th)')
+    .eq('timesheet_id', params.id)
+    .eq('line_type', 'work')
+    .gt('hours', 0)
+
+  const missingJobLabels = new Map<string, string>()
+  for (const l of workLines ?? []) {
+    if (l.activity_code) continue
+    const job = (l as any).job
+    const key = l.job_id ?? 'none'
+    if (!missingJobLabels.has(key)) {
+      missingJobLabels.set(key, job ? `${job.job_code} ${job.name_th}` : 'ไม่ระบุ Job')
+    }
+  }
+  if (missingJobLabels.size > 0) {
+    return badRequest(
+      `กรุณาเลือก Activity Code ให้ครบทุก Job ก่อนส่ง Timesheet (ยังไม่ได้เลือก: ${Array.from(missingJobLabels.values()).join(', ')})`
+    )
+  }
+
   // Find approver (same org-tree logic as leave)
   const { data: approverId } = await supabase
     .rpc('find_approver', {
