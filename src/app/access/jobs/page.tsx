@@ -6,7 +6,7 @@ import { useState, Fragment } from 'react'
 import Link                from 'next/link'
 import { useJobs, useCreateJob, useUpdateJob, useDeleteJob } from '@/hooks/useAdmin'
 import { JOB_STATUS_LABEL, cn } from '@/utils'
-import { Plus, Pencil, Trash2, Loader2, Briefcase, Upload, AlertTriangle, Search } from 'lucide-react'
+import { Plus, Pencil, Trash2, Loader2, Briefcase, Upload, AlertTriangle, Search, ChevronDown, ChevronRight } from 'lucide-react'
 import type { JobStatus } from '@/types/database'
 
 // Group Jobs by their "J-code" year prefix (2026-10-20, "Jxx 2 ตัวหน้าซ้ำกัน
@@ -19,6 +19,18 @@ import type { JobStatus } from '@/types/database'
 function jobGroupCode(job: any): string | null {
   const m = /^J(\d{2})/i.exec(job.job_code ?? '') || /^J(\d{2})/i.exec(job.name_th ?? '')
   return m ? `J${m[1]}` : null
+}
+
+// Second grouping dimension (2026-10-20, "กลุ่มลูกค้าไหมดีไหม ลูกค้าเจ้านี้
+// งานอะไรบ้าง เป็นประวัติไว้") — lets an admin flip the same list around to
+// see every Job a given client has had (within the selected year — Jobs are
+// stored per-year and job_code can repeat across years, so this is a
+// per-year client view, not a full cross-year history; switching the Year
+// dropdown above re-scopes it). "-" shows up as a literal placeholder value
+// from some CSV imports, so it's treated the same as a blank client_name.
+function clientGroupLabel(job: any): string {
+  const c = (job.client_name ?? '').trim()
+  return c && c !== '-' ? c : 'ไม่ระบุลูกค้า'
 }
 
 const STATUS_COLOR: Record<JobStatus, string> = {
@@ -63,6 +75,14 @@ export default function AdminJobsPage() {
   // instant-as-you-type, since the full year's Job list is already loaded.
   const [search, setSearch] = useState('')
 
+  // Grouping dimension toggle + per-group collapse state (2026-10-20,
+  // "สลับมุมมองได้ ปี ↔ ลูกค้า" + "ย่อทั้งหมดได้ในคลิกเดียว + คลิกทีละ
+  // กลุ่ม" — both chosen via AskUserQuestion). collapsed holds composite IDs
+  // ("year:J24", "client:ABC จำกัด") so switching groupBy never confuses a
+  // stale collapsed id with a same-named group in the other mode.
+  const [groupBy,   setGroupBy]   = useState<'year' | 'client'>('year')
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set())
+
   const jobs = data?.jobs ?? []
   const years = Array.from({ length: 4 }, (_, i) => now.getFullYear() + 1 - i)
 
@@ -72,19 +92,36 @@ export default function AdminJobsPage() {
       .some((v: string | null) => (v ?? '').toLowerCase().includes(q))
   )
 
-  // Group the (already search-filtered) list by J-code prefix, newest year
-  // first; jobs with no recognizable J-code go in "อื่นๆ" at the end.
-  const groups = new Map<string, any[]>()
+  // Group the (already search-filtered) list by the chosen dimension.
+  const groupMap = new Map<string, any[]>()
   for (const job of filteredJobs) {
-    const code = jobGroupCode(job) ?? 'อื่นๆ'
-    if (!groups.has(code)) groups.set(code, [])
-    groups.get(code)!.push(job)
+    const key = groupBy === 'year' ? (jobGroupCode(job) ?? 'อื่นๆ') : clientGroupLabel(job)
+    if (!groupMap.has(key)) groupMap.set(key, [])
+    groupMap.get(key)!.push(job)
   }
-  const groupKeys = Array.from(groups.keys()).sort((a, b) => {
-    if (a === 'อื่นๆ') return 1
-    if (b === 'อื่นๆ') return -1
-    return b.localeCompare(a)
+  const fallbackLabel = groupBy === 'year' ? 'อื่นๆ' : 'ไม่ระบุลูกค้า'
+  const groupKeys = Array.from(groupMap.keys()).sort((a, b) => {
+    if (a === fallbackLabel) return 1
+    if (b === fallbackLabel) return -1
+    return groupBy === 'year' ? b.localeCompare(a) : a.localeCompare(b, 'th')
   })
+  const groupIds = groupKeys.map(k => `${groupBy}:${k}`)
+  const allCollapsed = groupIds.length > 0 && groupIds.every(id => collapsed.has(id))
+
+  const toggleGroup = (groupId: string) => {
+    setCollapsed(prev => {
+      const next = new Set(prev)
+      next.has(groupId) ? next.delete(groupId) : next.add(groupId)
+      return next
+    })
+  }
+  const toggleAllGroups = () => {
+    setCollapsed(prev => {
+      const next = new Set(prev)
+      groupIds.forEach(id => allCollapsed ? next.delete(id) : next.add(id))
+      return next
+    })
+  }
 
   const handleSave = async () => {
     if (!form.job_code.trim() || !form.name_th.trim()) return
@@ -149,16 +186,39 @@ export default function AdminJobsPage() {
         </div>
       </div>
 
-      {/* Search */}
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-        <input
-          type="text"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="ค้นหา Job Code, ชื่องาน, ลูกค้า"
-          className="form-input pl-9"
-        />
+      {/* Search + grouping */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative max-w-sm flex-1 min-w-[220px]">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="ค้นหา Job Code, ชื่องาน, ลูกค้า"
+            className="form-input pl-9"
+          />
+        </div>
+
+        <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1">
+          <button
+            onClick={() => setGroupBy('year')}
+            className={cn('px-3 py-1.5 rounded-md text-sm transition-colors', groupBy === 'year' ? 'bg-blue-700 text-white font-medium' : 'text-gray-600 hover:bg-gray-100')}
+          >
+            จัดกลุ่มตามปี
+          </button>
+          <button
+            onClick={() => setGroupBy('client')}
+            className={cn('px-3 py-1.5 rounded-md text-sm transition-colors', groupBy === 'client' ? 'bg-blue-700 text-white font-medium' : 'text-gray-600 hover:bg-gray-100')}
+          >
+            จัดกลุ่มตามลูกค้า
+          </button>
+        </div>
+
+        {groupKeys.length > 0 && (
+          <button onClick={toggleAllGroups} className="text-xs text-gray-500 hover:text-blue-700 underline underline-offset-2">
+            {allCollapsed ? 'ขยายทั้งหมด' : 'ย่อทั้งหมด'}
+          </button>
+        )}
       </div>
 
       {/* Form */}
@@ -222,14 +282,21 @@ export default function AdminJobsPage() {
               </tr>
             </thead>
             <tbody>
-              {groupKeys.map(code => (
-                <Fragment key={code}>
-                  <tr className="bg-gray-50">
+              {groupKeys.map(code => {
+                const groupId = `${groupBy}:${code}`
+                const groupJobs = groupMap.get(code)!
+                const isCollapsed = collapsed.has(groupId)
+                return (
+                <Fragment key={groupId}>
+                  <tr className="bg-gray-50 cursor-pointer hover:bg-gray-100 select-none" onClick={() => toggleGroup(groupId)}>
                     <td colSpan={5} className="!py-1.5 text-xs font-semibold text-gray-500">
-                      {code} <span className="text-gray-400 font-normal">({groups.get(code)!.length})</span>
+                      <span className="inline-flex items-center gap-1.5">
+                        {isCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                        {code} <span className="text-gray-400 font-normal">({groupJobs.length})</span>
+                      </span>
                     </td>
                   </tr>
-                  {groups.get(code)!.map((job: any) => (
+                  {!isCollapsed && groupJobs.map((job: any) => (
                     <tr key={job.id}>
                       <td className="font-mono text-sm font-medium text-gray-900">{job.job_code}</td>
                       <td>
@@ -261,7 +328,8 @@ export default function AdminJobsPage() {
                     </tr>
                   ))}
                 </Fragment>
-              ))}
+                )
+              })}
               {!filteredJobs.length && (
                 <tr>
                   <td colSpan={5} className="text-center py-10 text-gray-400 text-sm">
