@@ -19,6 +19,8 @@
 // spot (per user confirmation: Highcon uses the identical layout, just a
 // different logo).
 
+import { companyLogoDataUri, leaveFormBackgroundDataUri } from './company-logo'
+
 const TH_MONTHS = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน',
   'กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม']
 
@@ -214,10 +216,11 @@ function sigImg(pos: { left: number; top: number; width: number; height: number 
 }
 
 export function generateLeaveOfficialFormHTML(data: LeaveOfficialFormData, appUrl: string): string {
-  const logoSrc = data.company.code === 'HIGHCON'
-    ? `${appUrl}/logos/highcon.png`
-    : `${appUrl}/logos/safecon.png`
-  const bgSrc = `${appUrl}/forms/leave-form-bg.png`
+  // appUrl kept in the signature for API-route compatibility, but no longer
+  // used to build http(s) URLs for these two static assets — see
+  // src/lib/pdf/company-logo.ts.
+  const logoSrc = companyLogoDataUri(data.company.code)
+  const bgSrc = leaveFormBackgroundDataUri()
 
   const written = dateParts(data.leave.created_at)
   const from    = dateParts(data.leave.start_date)

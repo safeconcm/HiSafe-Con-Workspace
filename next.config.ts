@@ -31,8 +31,13 @@ const nextConfig: NextConfig = {
   // postinstall-chromium.mjs for why: a self-fetch over HTTP ran into
   // Vercel Deployment Protection redirect/cookie issues that the
   // @sparticuz/chromium-min download path couldn't work around.
+  // 2026-10-20: also ship the logo/scanned-form PNGs that
+  // src/lib/pdf/company-logo.ts reads from disk at runtime (see that file
+  // for why — replaces each template's old ${appUrl}/logos/... self-fetch).
+  // public/ isn't traced into function bundles by default, same reasoning
+  // as chromium-bin/ above.
   outputFileTracingIncludes: {
-    '/api/pdf/**': ['./chromium-bin/**'],
+    '/api/pdf/**': ['./chromium-bin/**', './public/logos/**', './public/forms/**'],
   },
 
   // Vercel: serverless functions timeout (default 10s, max 60s on Pro)

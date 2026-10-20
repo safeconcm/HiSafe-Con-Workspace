@@ -2,6 +2,8 @@
 // HTML template for Leave Request PDF
 // Rendered by Puppeteer in the worker service
 
+import { companyLogoDataUri } from './company-logo'
+
 export interface LeaveTemplateData {
   company: {
     code:     string
@@ -106,9 +108,9 @@ function formatThaiDateTime(dateStr: string): string {
 }
 
 export function generateLeaveHTML(data: LeaveTemplateData, appUrl: string): string {
-  const logoSrc = data.company.code === 'HIGHCON'
-    ? `${appUrl}/logos/highcon.png`
-    : `${appUrl}/logos/safecon.png`
+  // appUrl kept in the signature for API-route compatibility, but no longer
+  // used to build an http(s) logo URL — see src/lib/pdf/company-logo.ts.
+  const logoSrc = companyLogoDataUri(data.company.code)
 
   const isApproved = data.leave.status === 'approved'
   const leaveTypeTh = LEAVE_TYPE_TH[data.leave.leave_type] ?? data.leave.leave_type

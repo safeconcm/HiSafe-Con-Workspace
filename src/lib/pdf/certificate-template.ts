@@ -4,6 +4,8 @@
 // (same header/footer chrome) but the body reads as a formal letter, which
 // is how Thai employment certificates are conventionally laid out.
 
+import { companyLogoDataUri } from './company-logo'
+
 export interface CertificateTemplateData {
   company: {
     code:    string
@@ -58,9 +60,9 @@ function formatThaiDate(dateStr: string | null): string {
 }
 
 export function generateCertificateHTML(data: CertificateTemplateData, appUrl: string): string {
-  const logoSrc = data.company.code === 'HIGHCON'
-    ? `${appUrl}/logos/highcon.png`
-    : `${appUrl}/logos/safecon.png`
+  // appUrl kept in the signature for API-route compatibility, but no longer
+  // used to build an http(s) logo URL — see src/lib/pdf/company-logo.ts.
+  const logoSrc = companyLogoDataUri(data.company.code)
 
   const c = data.certificate
   const fullName = `${data.employee.first_name_th} ${data.employee.last_name_th}`

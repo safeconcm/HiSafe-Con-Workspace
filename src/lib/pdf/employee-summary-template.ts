@@ -10,6 +10,8 @@
 // HR, so it stays out unlike the opt-in salary line on employment
 // certificates).
 
+import { companyLogoDataUri } from './company-logo'
+
 export interface EmployeeSummaryTemplateData {
   company: {
     code:    string
@@ -88,9 +90,9 @@ function formatThaiDate(dateStr: string | null): string {
 }
 
 export function generateEmployeeSummaryHTML(data: EmployeeSummaryTemplateData, appUrl: string): string {
-  const logoSrc = data.company.code === 'HIGHCON'
-    ? `${appUrl}/logos/highcon.png`
-    : `${appUrl}/logos/safecon.png`
+  // appUrl kept in the signature for API-route compatibility, but no longer
+  // used to build an http(s) logo URL — see src/lib/pdf/company-logo.ts.
+  const logoSrc = companyLogoDataUri(data.company.code)
 
   const e = data.employee
   const fullNameTh = `${e.first_name_th} ${e.last_name_th}`

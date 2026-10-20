@@ -7,6 +7,8 @@
 // certificate templates this one does NOT force a fixed 297mm height with
 // overflow:hidden; it lets Puppeteer paginate naturally across page breaks.
 
+import { companyLogoDataUri } from './company-logo'
+
 export interface ContractTemplateData {
   company: {
     code:    string
@@ -84,9 +86,9 @@ function formatMoney(n: number): string {
 }
 
 export function generateContractHTML(data: ContractTemplateData, appUrl: string): string {
-  const logoSrc = data.company.code === 'HIGHCON'
-    ? `${appUrl}/logos/highcon.png`
-    : `${appUrl}/logos/safecon.png`
+  // appUrl kept in the signature for API-route compatibility, but no longer
+  // used to build an http(s) logo URL — see src/lib/pdf/company-logo.ts.
+  const logoSrc = companyLogoDataUri(data.company.code)
 
   const c = data.contract
   const fullName     = `${data.employee.first_name_th} ${data.employee.last_name_th}`

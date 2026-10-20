@@ -8,6 +8,7 @@
 // ran to multiple pages for a full month.
 
 import { letterheadName, letterheadMetaHTML } from './company-letterhead'
+import { companyLogoDataUri } from './company-logo'
 
 const TH_MONTHS = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน',
   'กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม']
@@ -54,9 +55,9 @@ export interface TimesheetTemplateData {
 }
 
 export function generateTimesheetHTML(data: TimesheetTemplateData, appUrl: string): string {
-  const logoSrc = data.company.code === 'HIGHCON'
-    ? `${appUrl}/logos/highcon.png`
-    : `${appUrl}/logos/safecon.png`
+  // appUrl kept in the signature for API-route compatibility, but no longer
+  // used to build an http(s) logo URL — see src/lib/pdf/company-logo.ts.
+  const logoSrc = companyLogoDataUri(data.company.code)
 
   const monthName = TH_MONTHS[data.timesheet.month - 1]
   const thaiYear  = data.timesheet.year + 543
