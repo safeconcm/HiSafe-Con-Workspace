@@ -1,6 +1,14 @@
 // src/app/api/admin/jobs/[id]/route.ts
 // PATCH  /api/admin/jobs/:id — edit job / toggle status
-// DELETE /api/admin/jobs/:id — soft delete (set status=closed)
+// DELETE /api/admin/jobs/:id — real delete, but ONLY when the Job has zero
+// references anywhere (timesheet_lines, ot_requests, comp_work_requests —
+// see those 3 tables' job_id FKs). This is for the "กรอก Job ผิด ไม่มีปุ่ม
+// ลบ" complaint (2026-10-20): a typo'd Job created by mistake, never used
+// for anything, should actually disappear — not just sit around closed
+// forever occupying that job_code for the year. A Job that HAS been used
+// for real work must never be hard-deleted (would silently blow a hole in
+// historical Timesheet/Job Cost/OT/comp-work records) — those get the
+// existing "ปิด" (closed) status path instead, via the status dropdown.
 
 import { NextRequest } from 'next/server'
 import {
@@ -51,21 +59,40 @@ export async function DELETE(req: NextRequest, ctx: Ctx) {
 
   const supabase = createAdminSupabaseClient()
 
-  // Check not used in any timesheet line
-  const { count } = await supabase
-    .from('timesheet_lines').select('id', { count: 'exact', head: true })
-    .eq('job_id', params.id)
-  if (count && count > 0) {
-    return badRequest('ไม่สามารถลบได้ Job นี้มีข้อมูล Timesheet อยู่แล้ว กรุณาปิด (inactive) แทน')
+  const { data: existing } = await supabase
+    .from('jobs').select('*')
+    .eq('id', params.id).eq('company_id', session.company_id).maybeSingle()
+  if (!existing) return notFound('Job')
+
+  // Checked up front (clearer message than waiting for the FK error below),
+  // but the FK constraints on all 3 tables are the real backstop — this is
+  // just so a used Job gets a specific, friendly reason instead of a raw
+  // Postgres error.
+  const [{ count: tsCount }, { count: otCount }, { count: cwCount }] = await Promise.all([
+    supabase.from('timesheet_lines').select('id', { count: 'exact', head: true }).eq('job_id', params.id),
+    supabase.from('ot_requests').select('id', { count: 'exact', head: true }).eq('job_id', params.id),
+    supabase.from('comp_work_requests').select('id', { count: 'exact', head: true }).eq('job_id', params.id),
+  ])
+  if ((tsCount ?? 0) > 0 || (otCount ?? 0) > 0 || (cwCount ?? 0) > 0) {
+    return badRequest('ไม่สามารถลบได้ Job นี้มีข้อมูล Timesheet/OT/งานชดเชยผูกอยู่แล้ว กรุณาเปลี่ยนสถานะเป็น "ปิด" แทน เพื่อรักษาประวัติไว้')
   }
 
-  await supabase.from('jobs')
-    .update({ status: 'closed', updated_at: new Date().toISOString() })
+  const { error } = await supabase
+    .from('jobs').delete()
     .eq('id', params.id).eq('company_id', session.company_id)
 
+  if (error) {
+    // Belt-and-suspenders: a FK violation slipping past the counts above
+    // (race condition) still gets a friendly message instead of a raw 500.
+    if (error.code === '23503') {
+      return badRequest('ไม่สามารถลบได้ Job นี้มีข้อมูลผูกอยู่แล้ว กรุณาเปลี่ยนสถานะเป็น "ปิด" แทน เพื่อรักษาประวัติไว้')
+    }
+    return serverError(error)
+  }
+
   await writeAuditLog({
-    session, action: 'job.closed', entity_type: 'job', entity_id: params.id, req,
+    session, action: 'job.deleted', entity_type: 'job', entity_id: params.id, old_data: existing, req,
   })
 
-  return ok({ id: params.id, status: 'closed' })
+  return ok({ id: params.id, deleted: true })
 }

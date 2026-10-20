@@ -1,6 +1,16 @@
 // src/app/api/admin/users/[id]/route.ts
-// GET   — user detail + org node + balances
-// PATCH — update profile / role / status
+// GET    — user detail + org node + balances
+// PATCH  — update profile / role / status
+// DELETE — real delete, but ONLY when the user has zero work history
+// anywhere (2026-10-20, "จัดการผู้ใช้ก็เช่นเดียวกัน" — same "no delete
+// button" complaint as Job Codes). This is strictly for undoing a mistaken
+// account creation (wrong employee_code/email typed in, caught right away)
+// — once a real employee has logged any leave, timesheet, OT, salary, a
+// contract, an org-tree position, etc., Postgres's own FK constraints will
+// refuse the delete (most of those are RESTRICT/NO ACTION against
+// users.id), and the right move is "ระงับ" (status=inactive) or "ลาออก"
+// (status=resigned) instead, to keep that history intact. See the FK audit
+// done live via Supabase MCP on 2026-10-20 for the exact table list.
 
 import { NextRequest } from 'next/server'
 import {
@@ -162,4 +172,48 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   })
 
   return ok(updated)
+}
+
+export async function DELETE(req: NextRequest, ctx: Ctx) {
+  const params = await ctx.params
+  const session = getSessionFromHeaders(req)
+  if (!session)                return unauthorized()
+  if (session.role !== 'admin') return forbidden()
+  if (session.id === params.id) return badRequest('ไม่สามารถลบบัญชีของตัวเองได้')
+
+  const supabase = createAdminSupabaseClient()
+  const { data: existing } = await supabase
+    .from('users').select('*')
+    .eq('id', params.id).eq('company_id', session.company_id).maybeSingle()
+  if (!existing) return notFound('User')
+
+  const { error } = await supabase
+    .from('users').delete()
+    .eq('id', params.id).eq('company_id', session.company_id)
+
+  if (error) {
+    // 23503 = foreign_key_violation — this user has real history somewhere
+    // (leave/timesheet/OT/salary/contract/org position/etc.). That's the
+    // expected, safe outcome for any real employee: tell the admin to
+    // suspend/resign the account instead of trying to force a delete.
+    if (error.code === '23503') {
+      return badRequest('ไม่สามารถลบได้ ผู้ใช้นี้มีประวัติการทำงานอยู่แล้ว (ลงเวลา/ลา/เงินเดือน/สัญญา ฯลฯ) กรุณาใช้ "ระงับการใช้งาน" หรือ "ลาออก" แทน เพื่อรักษาประวัติไว้')
+    }
+    return serverError(error)
+  }
+
+  // Best-effort: also remove the linked Supabase Auth account so the email
+  // can be reused immediately for a corrected re-entry. The public.users
+  // row is already gone at this point regardless of whether this succeeds.
+  if (existing.auth_user_id) {
+    const { error: authErr } = await supabase.auth.admin.deleteUser(existing.auth_user_id)
+    if (authErr) console.error('[admin/users/:id DELETE] auth cleanup failed', { id: params.id, authErr })
+  }
+
+  await writeAuditLog({
+    session, action: 'user.deleted', entity_type: 'user',
+    entity_id: params.id, old_data: existing, req,
+  })
+
+  return ok({ id: params.id, deleted: true })
 }

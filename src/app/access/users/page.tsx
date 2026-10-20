@@ -5,10 +5,10 @@
 // ("CONNEX Access") instead of living inside CONNEX EM's dashboard shell.
 import { useState }     from 'react'
 import Link             from 'next/link'
-import { useUsers }     from '@/hooks/useAdmin'
+import { useUsers, useDeleteUser } from '@/hooks/useAdmin'
 import { ROLE_LABEL, cn, fullNameTH } from '@/utils'
 import {
-  Plus, Upload, Search, Loader2,
+  Plus, Upload, Search, Loader2, Trash2, AlertTriangle,
   ChevronRight, UserCheck, UserX,
 } from 'lucide-react'
 import type { UserRole, UserStatus } from '@/types/database'
@@ -62,6 +62,12 @@ export default function AdminUsersPage() {
   const { data, isLoading } = useUsers({ q: q || undefined, role: role || undefined, status, page, limit: 30 })
   const users = data?.users ?? []
   const total = data?.total ?? 0
+
+  // Delete (2026-10-20, "จัดการผู้ใช้ก็เช่นเดียวกัน" — no delete button
+  // complaint, same fix as Job Codes). Button always shows; the actual
+  // "has this user got real history" check happens server-side.
+  const deleteUser = useDeleteUser()
+  const [confirmDelete, setConfirmDelete] = useState<any | null>(null)
 
   return (
     <div className="page-container space-y-5">
@@ -191,9 +197,20 @@ export default function AdminUsersPage() {
                     </td>
                     <td className="text-sm text-gray-600 whitespace-nowrap">{u.hire_date}</td>
                     <td>
-                      <Link href={`/access/users/${u.id}`} className="text-gray-400 hover:text-gray-700">
-                        <ChevronRight className="w-4 h-4" />
-                      </Link>
+                      <div className="flex items-center gap-2 justify-end">
+                        {isAdmin && (
+                          <button
+                            onClick={() => setConfirmDelete(u)}
+                            className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                            title="ลบผู้ใช้"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
+                        <Link href={`/access/users/${u.id}`} className="text-gray-400 hover:text-gray-700">
+                          <ChevronRight className="w-4 h-4" />
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -230,6 +247,54 @@ export default function AdminUsersPage() {
           <span className="px-4 py-2 text-sm text-gray-600">หน้า {page} / {Math.ceil(total / 30)}</span>
           <button disabled={page >= Math.ceil(total / 30)} onClick={() => setPage(p => p + 1)}
             className="rounded-lg border border-gray-300 px-4 py-2 text-sm disabled:opacity-40 hover:bg-gray-50">ถัดไป</button>
+        </div>
+      )}
+
+      {/* Confirm modal — delete user (2026-10-20, "ไม่มีปุ่มลบ") */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="card card-body max-w-md w-full space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-lg bg-red-50 shrink-0">
+                <Trash2 className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900">
+                  ลบ &quot;{fullNameTH(confirmDelete)}&quot; ({confirmDelete.employee_code}) ถาวร?
+                </h3>
+                <p className="text-sm text-gray-600 mt-1.5">
+                  ใช้สำหรับบัญชีที่กรอกผิดและยังไม่เคยมีประวัติการทำงาน (ไม่เคยลงเวลา/ลา/มีสัญญา-เงินเดือน) —
+                  ถ้าผู้ใช้นี้มีประวัติแล้ว ระบบจะไม่ยอมให้ลบและจะแจ้งเหตุผล
+                  กรุณาใช้ &quot;ระงับการใช้งาน&quot; หรือ &quot;ลาออก&quot; แทนในกรณีนั้น เพื่อรักษาประวัติไว้
+                </p>
+                <div className="flex items-start gap-1.5 mt-2 text-xs text-amber-700 bg-amber-50 rounded-lg px-2.5 py-2">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  การลบนี้ถาวร กู้คืนไม่ได้
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmDelete(null)}
+                className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                ยกเลิก
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    await deleteUser.mutateAsync(confirmDelete.id)
+                    setConfirmDelete(null)
+                  } catch {
+                    // onError toast already shown; keep modal open so the
+                    // admin can re-read the reason.
+                  }
+                }}
+                disabled={deleteUser.isPending}
+                className="flex-1 rounded-lg bg-red-600 text-white px-4 py-2 text-sm font-medium hover:bg-red-700 disabled:opacity-60"
+              >
+                {deleteUser.isPending ? 'กำลังลบ...' : 'ลบถาวร'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

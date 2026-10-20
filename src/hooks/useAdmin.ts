@@ -82,6 +82,23 @@ export function useUpdateUser(id: string) {
   })
 }
 
+export function useDeleteUser() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res  = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error)
+      return json.data
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-users'] })
+      toast.success('ลบผู้ใช้แล้ว')
+    },
+    onError: (e: Error) => toast.error('ลบไม่สำเร็จ', e.message),
+  })
+}
+
 export function useImportUsers() {
   const qc = useQueryClient()
   return useMutation({
@@ -180,6 +197,23 @@ export function useUpdateJob() {
       toast.success('อัปเดต Job แล้ว')
     },
     onError: (e: Error) => toast.error('อัปเดตไม่สำเร็จ', e.message),
+  })
+}
+
+export function useDeleteJob() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const res  = await fetch(`/api/admin/jobs/${id}`, { method: 'DELETE' })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error)
+      return json.data
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['jobs'] })
+      toast.success('ลบ Job แล้ว')
+    },
+    onError: (e: Error) => toast.error('ลบไม่สำเร็จ', e.message),
   })
 }
 

@@ -4,9 +4,9 @@
 // src/app/access/layout.tsx for context.
 import { useState }        from 'react'
 import Link                from 'next/link'
-import { useJobs, useCreateJob, useUpdateJob } from '@/hooks/useAdmin'
+import { useJobs, useCreateJob, useUpdateJob, useDeleteJob } from '@/hooks/useAdmin'
 import { JOB_STATUS_LABEL, cn } from '@/utils'
-import { Plus, Pencil, Loader2, Briefcase, Upload, AlertTriangle } from 'lucide-react'
+import { Plus, Pencil, Trash2, Loader2, Briefcase, Upload, AlertTriangle } from 'lucide-react'
 import type { JobStatus } from '@/types/database'
 
 const STATUS_COLOR: Record<JobStatus, string> = {
@@ -39,6 +39,13 @@ export default function AdminJobsPage() {
   const { data, isLoading } = useJobs(year, 'all')
   const createJob = useCreateJob()
   const updateJob = useUpdateJob()
+  const deleteJob = useDeleteJob()
+  // Job pending delete confirmation (2026-10-20, "ไม่มีปุ่มลบ") — the button
+  // is always visible per row; this just holds which one the confirm modal
+  // is for. The actual "can this really be deleted" check happens server-
+  // side (DELETE /api/admin/jobs/:id) — if it's in use, the mutation's
+  // onError toast shows the reason instead of silently doing nothing.
+  const [confirmDelete, setConfirmDelete] = useState<any | null>(null)
 
   const jobs = data?.jobs ?? []
   const years = Array.from({ length: 4 }, (_, i) => now.getFullYear() + 1 - i)
@@ -191,6 +198,9 @@ export default function AdminJobsPage() {
                       <button onClick={() => startEdit(job)} className="p-1 text-gray-400 hover:text-blue-600 transition-colors">
                         <Pencil className="w-4 h-4" />
                       </button>
+                      <button onClick={() => setConfirmDelete(job)} className="p-1 text-gray-400 hover:text-red-600 transition-colors">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -230,6 +240,50 @@ export default function AdminJobsPage() {
                 className="flex-1 rounded-lg bg-amber-600 text-white px-4 py-2 text-sm font-medium hover:bg-amber-700 disabled:opacity-60"
               >
                 {updateJob.isPending ? 'กำลังบันทึก...' : 'ยืนยัน'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirm modal — delete Job (2026-10-20, "ไม่มีปุ่มลบ") */}
+      {confirmDelete && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="card card-body max-w-md w-full space-y-4">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-lg bg-red-50 shrink-0">
+                <Trash2 className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-gray-900">
+                  ลบ &quot;{confirmDelete.job_code}&quot; ถาวร?
+                </h3>
+                <p className="text-sm text-gray-600 mt-1.5">
+                  ใช้สำหรับ Job ที่กรอกผิดและยังไม่เคยถูกใช้งาน — ถ้า Job นี้มีข้อมูล Timesheet/OT/งานชดเชยผูกอยู่แล้ว
+                  ระบบจะไม่ยอมให้ลบและจะแจ้งเหตุผล กรุณาเปลี่ยนสถานะเป็น &quot;ปิด&quot; แทนในกรณีนั้น
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setConfirmDelete(null)}
+                className="flex-1 rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                ยกเลิก
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    await deleteJob.mutateAsync(confirmDelete.id)
+                    setConfirmDelete(null)
+                  } catch {
+                    // onError toast already shown by the mutation itself;
+                    // keep the modal open so the admin can re-read the
+                    // reason and pick "ปิด" from the status dropdown instead.
+                  }
+                }}
+                disabled={deleteJob.isPending}
+                className="flex-1 rounded-lg bg-red-600 text-white px-4 py-2 text-sm font-medium hover:bg-red-700 disabled:opacity-60"
+              >
+                {deleteJob.isPending ? 'กำลังลบ...' : 'ลบถาวร'}
               </button>
             </div>
           </div>
