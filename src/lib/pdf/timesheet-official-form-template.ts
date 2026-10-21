@@ -234,7 +234,7 @@ export function generateTimesheetOfficialFormHTML(data: TimesheetOfficialFormDat
      Checked Supabase storage (documents/timesheet-official/*.pdf, the path
      this route uploads to on success): zero rows ever, for any timesheet —
      this route has never once finished inside its time budget, which lines
-     up with that @import being the hang. Removing it lets the `sans-serif`
+     up with that @import being the hang. Removing it lets the sans-serif
      fallback already in the font stack below do the work instead (the
      headless Chromium image bundles a system sans-serif with Thai glyph
      coverage) — no visual change expected for the English labels this form
