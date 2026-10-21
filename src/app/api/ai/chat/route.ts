@@ -1,12 +1,17 @@
 // src/app/api/ai/chat/route.ts
-// CONNEX AI — v1 "basic starter" chat endpoint.
+// CONNEX AI — chat endpoint.
 //
-// Scope, on purpose: general-purpose Q&A only. This does NOT read company
-// data (no HR records, leave balances, payroll, policies, etc.) — it is a
-// plain pass-through to an LLM API so the module can go live quickly. A
-// follow-up version can ground answers in company data (policies,
-// employee-facing docs) the same way /api/inquiries threads human HR
-// questions, but that's a separate, bigger scoping task.
+// v1 scope (superseded 2026-10-21c, see below): general-purpose Q&A only,
+// no company data grounding — a plain pass-through to an LLM API so the
+// module could go live quickly.
+//
+// 2026-10-21c: now grounded in company policy + system-usage reference text
+// (see SYSTEM_PROMPT below) so it can answer regulation/how-to-use-the-app
+// questions directly instead of deflecting to HR for everything. Still NOT
+// grounded in per-user live data (leave balances, salary, personal records)
+// — that would need an authenticated DB read per request, a separate,
+// bigger scoping task, same as /api/inquiries for genuinely personal
+// questions.
 //
 // Auth: same pattern as every other API route — session comes from headers
 // middleware.ts injects (see getSessionFromHeaders), so this is already
@@ -33,16 +38,42 @@
 // CI/sandbox).
 import { NextRequest } from 'next/server'
 import { getSessionFromHeaders, ok, badRequest, unauthorized, serverError } from '@/lib/api-helpers'
+import { renderPolicyAsText } from '@/lib/company-policy-data'
+import { renderSystemGuideAsText } from '@/lib/ai/system-guide-data'
 
 const GEMINI_MODEL = 'gemini-3.5-flash-lite'
 const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`
 const MAX_TURNS = 20 // cap conversation history sent per request
 
+// 2026-10-21c: "เทรน AI ให้เก่งเกี่ยวกับข้อกำหนดบริษัท และการใช้งานระบบ คนถามจะ
+// ได้รู้มากกว่าถาม HR" — v1 (see comment block above the old SYSTEM_PROMPT
+// string, now folded into this) was an intentionally bare pass-through with
+// zero company grounding. This grounds it in two reference blocks built from
+// real app content instead of the model's general knowledge:
+//   - renderPolicyAsText(): the exact same section data that renders on
+//     /company-policy (src/lib/company-policy-data.ts) — so answers about
+//     work hours, leave entitlements, OT rates, severance, etc. match what's
+//     posted in the app and stay in sync if that page is ever edited.
+//   - renderSystemGuideAsText(): a menu-by-menu description of what the app
+//     can do and where, built from Sidebar.tsx's real nav structure — so
+//     "how do I request leave" gets a correct, specific answer instead of a
+//     generic one.
+// Still explicitly NOT grounded: any per-user live data (this employee's own
+// leave balance, salary, approval status) — there's still no DB read here,
+// so the prompt keeps the original instruction to be upfront about that and
+// point to the real menu or HR for anything personal/private.
 const SYSTEM_PROMPT =
   'คุณคือ CONNEX AI ผู้ช่วย AI ของระบบ CONNEX (แพลตฟอร์มภายในองค์กรของ SAFECON/HIGHCON) ' +
-  'ตอบเป็นภาษาไทยอย่างกระชับ สุภาพ และเป็นมิตร หากคำถามเกี่ยวข้องกับข้อมูลเฉพาะของพนักงาน ' +
-  'เงินเดือน วันลาคงเหลือ หรือข้อมูลบริษัทที่คุณไม่มีสิทธิ์เข้าถึง ให้แจ้งผู้ใช้อย่างตรงไปตรงมาว่า ' +
-  'ยังไม่สามารถดึงข้อมูลเหล่านั้นได้ในเวอร์ชันนี้ และแนะนำให้ไปที่เมนู HR/Time/Leave หรือสอบถาม HR โดยตรง'
+  'ตอบเป็นภาษาไทยอย่างกระชับ สุภาพ และเป็นมิตร\n\n' +
+  'คุณมีความรู้เกี่ยวกับกฎระเบียบบริษัทและวิธีใช้งานระบบตามข้อมูลอ้างอิงด้านล่างนี้ ' +
+  'ใช้ข้อมูลเหล่านี้ตอบคำถามพนักงานเกี่ยวกับสิทธิวันลา เวลาทำงาน ค่าล่วงเวลา วินัย การร้องทุกข์ ' +
+  'ค่าชดเชย และวิธีใช้งานเมนูต่างๆ ในระบบได้โดยตรงและมั่นใจ โดยไม่ต้องบอกให้ไปถาม HR สำหรับคำถามประเภทนี้ ' +
+  '(ยกเว้นกรณีที่ซับซ้อนจนข้อมูลด้านล่างไม่ครอบคลุม จึงแนะนำให้สอบถาม HR เพิ่มเติม)\n\n' +
+  'ข้อจำกัดที่ยังมีอยู่: คุณยังไม่มีสิทธิ์เข้าถึงข้อมูลเฉพาะตัวของผู้ใช้แต่ละคน เช่น ยอดวันลาคงเหลือจริง ' +
+  'เงินเดือน สถานะอนุมัติล่าสุด หรือข้อมูลส่วนตัวอื่นๆ — หากถูกถามเรื่องเหล่านี้ ให้แจ้งตรงไปตรงมาว่ายังดึง ' +
+  'ข้อมูลเฉพาะตัวไม่ได้ในเวอร์ชันนี้ และแนะนำเมนูที่เกี่ยวข้องในระบบ หรือให้ติดต่อ HR โดยตรงแทน\n\n' +
+  '=== ข้อมูลอ้างอิง: กฎระเบียบบริษัท ===\n' + renderPolicyAsText() + '\n\n' +
+  '=== ข้อมูลอ้างอิง: วิธีใช้งานระบบ ===\n' + renderSystemGuideAsText()
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string }
 
