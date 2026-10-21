@@ -73,7 +73,7 @@ function normalizeEmploymentStatus(raw?: string): string {
 // account until an admin fills in a real email later via the user's edit
 // page (see PATCH /api/admin/users/[id] for the matching "create login now"
 // logic).
-function normalizeEmail(raw?: string): string | null {
+function normalizeEmail(raw?: string | null): string | null {
   const s = (raw ?? '').trim()
   return s && s !== '-' ? s.toLowerCase() : null
 }
