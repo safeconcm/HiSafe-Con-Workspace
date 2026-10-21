@@ -4,9 +4,14 @@
 // src/app/access/layout.tsx for context.
 import { useState, Fragment } from 'react'
 import Link                from 'next/link'
+import * as XLSX            from 'xlsx'
 import { useJobs, useCreateJob, useUpdateJob, useDeleteJob, useJobsRevenueSummary } from '@/hooks/useAdmin'
 import { JOB_STATUS_LABEL, cn } from '@/utils'
-import { Plus, Pencil, Trash2, Loader2, Briefcase, Upload, AlertTriangle, Search, ChevronDown, ChevronRight, Coins } from 'lucide-react'
+import { groupJobs } from '@/lib/jobs-grouping'
+import {
+  Plus, Pencil, Trash2, Loader2, Briefcase, Upload, AlertTriangle, Search,
+  ChevronDown, ChevronRight, Coins, FileDown, FileSpreadsheet, FileText,
+} from 'lucide-react'
 import type { JobStatus } from '@/types/database'
 
 // มูลค่างาน formatting (2026-10-21) — plain Thai-locale grouping, no currency
@@ -27,30 +32,6 @@ function formatThaiDate(iso: string | null | undefined): string {
   if (!m) return iso
   const [, y, mo, d] = m
   return `${d}/${mo}/${Number(y) + 543}`
-}
-
-// Group Jobs by their "J-code" year prefix (2026-10-20, "Jxx 2 ตัวหน้าซ้ำกัน
-// จะได้ดูง่าย") — e.g. J24034/J24035/J24036 all cluster under one "J24"
-// sub-header. The J-code can live in either job_code (SAFECON tenant, e.g.
-// "J260001") or name_th (HIGHCON tenant, which uses a plain running number
-// as job_code and keeps the real J-code in name_th, e.g. job_code "15" /
-// name_th "J24034" — confirmed live via SQL on 2026-10-20). Jobs with no
-// recognizable J-code fall into a catch-all "อื่นๆ" group shown last.
-function jobGroupCode(job: any): string | null {
-  const m = /^J(\d{2})/i.exec(job.job_code ?? '') || /^J(\d{2})/i.exec(job.name_th ?? '')
-  return m ? `J${m[1]}` : null
-}
-
-// Second grouping dimension (2026-10-20, "กลุ่มลูกค้าไหมดีไหม ลูกค้าเจ้านี้
-// งานอะไรบ้าง เป็นประวัติไว้") — lets an admin flip the same list around to
-// see every Job a given client has had (within the selected year — Jobs are
-// stored per-year and job_code can repeat across years, so this is a
-// per-year client view, not a full cross-year history; switching the Year
-// dropdown above re-scopes it). "-" shows up as a literal placeholder value
-// from some CSV imports, so it's treated the same as a blank client_name.
-function clientGroupLabel(job: any): string {
-  const c = (job.client_name ?? '').trim()
-  return c && c !== '-' ? c : 'ไม่ระบุลูกค้า'
 }
 
 const STATUS_COLOR: Record<JobStatus, string> = {
@@ -113,34 +94,13 @@ export default function AdminJobsPage() {
       .some((v: string | null) => (v ?? '').toLowerCase().includes(q))
   )
 
-  // Group the (already search-filtered) list by the chosen dimension.
-  const groupMap = new Map<string, any[]>()
-  for (const job of filteredJobs) {
-    const key = groupBy === 'year' ? (jobGroupCode(job) ?? 'อื่นๆ') : clientGroupLabel(job)
-    if (!groupMap.has(key)) groupMap.set(key, [])
-    groupMap.get(key)!.push(job)
-  }
-  // ลำดับ Job (2026-10-21, "เพิ่ม...ลำดับ Job ด้วย") — within each group, a
-  // Job with a sequence_no sorts ahead of one without by that number
-  // (ascending); Jobs sharing the same number, or with none at all, fall
-  // back to the existing job_code sort so this is purely additive — groups
-  // nobody has assigned a ลำดับ to look exactly as before.
-  for (const arr of groupMap.values()) {
-    arr.sort((a, b) => {
-      const sa = a.sequence_no, sb = b.sequence_no
-      if (sa != null && sb != null && sa !== sb) return sa - sb
-      if (sa != null && sb == null) return -1
-      if (sa == null && sb != null) return 1
-      return String(a.job_code ?? '').localeCompare(String(b.job_code ?? ''))
-    })
-  }
-  const fallbackLabel = groupBy === 'year' ? 'อื่นๆ' : 'ไม่ระบุลูกค้า'
-  const groupKeys = Array.from(groupMap.keys()).sort((a, b) => {
-    if (a === fallbackLabel) return 1
-    if (b === fallbackLabel) return -1
-    return groupBy === 'year' ? b.localeCompare(a) : a.localeCompare(b, 'th')
-  })
-  const groupIds = groupKeys.map(k => `${groupBy}:${k}`)
+  // Group the (already search-filtered) list by the chosen dimension — logic
+  // shared with the PDF export route (src/app/api/pdf/jobs/route.ts) via
+  // src/lib/jobs-grouping.ts, so the printed PDF always matches this screen.
+  const jobGroups = groupJobs(filteredJobs, groupBy)
+  const groupMap  = new Map(jobGroups.map(g => [g.key, g.jobs]))
+  const groupKeys = jobGroups.map(g => g.key)
+  const groupIds  = groupKeys.map(k => `${groupBy}:${k}`)
   const allCollapsed = groupIds.length > 0 && groupIds.every(id => collapsed.has(id))
 
   const toggleGroup = (groupId: string) => {
@@ -156,6 +116,66 @@ export default function AdminJobsPage() {
       groupIds.forEach(id => allCollapsed ? next.delete(id) : next.add(id))
       return next
     })
+  }
+
+  // Export (2026-10-21) — CSV/Excel share one flat row-builder: the exact
+  // Jobs currently on screen, in the exact order they're grouped/sorted
+  // into (jobGroups, computed above), with the group's own label repeated
+  // on every row as a plain "กลุ่ม" column — flat formats have no good way
+  // to show a nested sub-header, so this is the equivalent info per-row
+  // instead of losing it.
+  const EXPORT_COLS = ['ลำดับ', 'Job Code', 'ชื่องาน (ไทย)', 'ชื่องาน (อังกฤษ)', 'ลูกค้า', 'กลุ่ม', 'สถานะ', 'วันที่เริ่ม', 'วันที่สิ้นสุด', 'มูลค่างาน', 'รายละเอียด']
+  const buildExportRows = (): (string | number)[][] => {
+    const rows: (string | number)[][] = [EXPORT_COLS]
+    for (const group of jobGroups) {
+      for (const job of group.jobs) {
+        rows.push([
+          job.sequence_no ?? '',
+          job.job_code,
+          job.name_th,
+          job.name_en ?? '',
+          job.client_name ?? '',
+          group.key,
+          JOB_STATUS_LABEL[job.status as JobStatus] ?? job.status,
+          job.start_date ?? '',
+          job.end_date ?? '',
+          job.contract_value ?? '',
+          job.description ?? '',
+        ])
+      }
+    }
+    return rows
+  }
+
+  const exportCSV = () => {
+    const BOM = '﻿'
+    const esc = (v: string | number) => {
+      const s = String(v)
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+    }
+    const csv = BOM + buildExportRows().map(row => row.map(esc).join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const url  = URL.createObjectURL(blob)
+    const a    = document.createElement('a')
+    a.href = url; a.download = `job_codes_${year}.csv`; a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const exportExcel = () => {
+    const ws = XLSX.utils.aoa_to_sheet(buildExportRows())
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, `Job Codes ${year}`)
+    XLSX.writeFile(wb, `job_codes_${year}.xlsx`)
+  }
+
+  // PDF is rendered server-side (src/app/api/pdf/jobs/route.ts) so it gets a
+  // proper company letterhead — it re-derives the exact same grouping via
+  // src/lib/jobs-grouping.ts from the same year/status/search/groupBy
+  // params, rather than re-fetching whatever's already in this page's React
+  // state, so it's always current as of the moment it's opened.
+  const exportPDF = () => {
+    const qs = new URLSearchParams({ year: String(year), status: 'all', groupBy, q: search.trim() })
+    window.open(`/api/pdf/jobs?${qs}`, '_blank')
   }
 
   const handleSave = async () => {
@@ -217,6 +237,28 @@ export default function AdminJobsPage() {
             <Upload className="w-4 h-4" />
             นำเข้า CSV
           </Link>
+
+          {/* Export (2026-10-21, "ควรจะ export ออกมาเป็น PDF excel csv") —
+              CSV/Excel are built client-side from the exact rows/order
+              already on screen (search + grouping applied); PDF is rendered
+              server-side (src/app/api/pdf/jobs/route.ts) from the SAME
+              src/lib/jobs-grouping.ts logic so all 3 formats, and the
+              screen, always agree on what "the list" means right now. */}
+          <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-lg p-1">
+            <button onClick={exportCSV} title="Export CSV"
+              className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-gray-600 hover:bg-gray-100">
+              <FileText className="w-3.5 h-3.5" /> CSV
+            </button>
+            <button onClick={exportExcel} title="Export Excel"
+              className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-gray-600 hover:bg-gray-100">
+              <FileSpreadsheet className="w-3.5 h-3.5" /> Excel
+            </button>
+            <button onClick={exportPDF} title="Export PDF"
+              className="flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-xs text-gray-600 hover:bg-gray-100">
+              <FileDown className="w-3.5 h-3.5" /> PDF
+            </button>
+          </div>
+
           <button
             onClick={() => { setEditing(null); setForm({ job_code:'',name_th:'',name_en:'',client_name:'',description:'',contract_value:'',start_date:'',end_date:'',sequence_no:'' }); setShowForm(true) }}
             className="flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800"
@@ -303,6 +345,15 @@ export default function AdminJobsPage() {
               <input value={form.job_code} onChange={e => setForm(f => ({ ...f, job_code: e.target.value }))}
                 className="form-input font-mono" placeholder="JOB001" disabled={!!editing} />
             </div>
+            {/* ลำดับ Job อยู่ถัดจาก Job Code ทันที (2026-10-21, "ลำดับ Job
+                ควรจะอยู่ด้านหน้าสุด") — ย้ายขึ้นมาให้ตรงกับคอลัมน์ "ลำดับ"
+                ซึ่งตอนนี้เป็นคอลัมน์แรกในตารางด้านล่าง */}
+            <div>
+              <label className="form-label">ลำดับ Job</label>
+              <input type="number" step="1" value={form.sequence_no}
+                onChange={e => setForm(f => ({ ...f, sequence_no: e.target.value }))}
+                className="form-input" placeholder="เช่น 1 (ใช้จัดลำดับการแสดงผล)" />
+            </div>
             <div>
               <label className="form-label">ชื่องาน (ไทย) *</label>
               <input value={form.name_th} onChange={e => setForm(f => ({ ...f, name_th: e.target.value }))}
@@ -323,12 +374,6 @@ export default function AdminJobsPage() {
               <input type="number" min="0" step="0.01" value={form.contract_value}
                 onChange={e => setForm(f => ({ ...f, contract_value: e.target.value }))}
                 className="form-input" placeholder="เช่น 500000" />
-            </div>
-            <div>
-              <label className="form-label">ลำดับ Job</label>
-              <input type="number" step="1" value={form.sequence_no}
-                onChange={e => setForm(f => ({ ...f, sequence_no: e.target.value }))}
-                className="form-input" placeholder="เช่น 1 (ใช้จัดลำดับการแสดงผล)" />
             </div>
             <div>
               <label className="form-label">วันที่เริ่ม</label>
@@ -370,8 +415,8 @@ export default function AdminJobsPage() {
           <table className="data-table">
             <thead>
               <tr>
-                <th>Job Code</th>
                 <th className="w-14 text-right">ลำดับ</th>
+                <th>Job Code</th>
                 <th>ชื่องาน</th>
                 <th>ลูกค้า</th>
                 <th>สถานะ</th>
@@ -397,8 +442,8 @@ export default function AdminJobsPage() {
                   </tr>
                   {!isCollapsed && groupJobs.map((job: any) => (
                     <tr key={job.id}>
-                      <td className="font-mono text-sm font-medium text-gray-900">{job.job_code}</td>
                       <td className="text-sm text-gray-500 text-right">{job.sequence_no ?? '—'}</td>
+                      <td className="font-mono text-sm font-medium text-gray-900">{job.job_code}</td>
                       <td>
                         <p className="text-sm text-gray-900">{job.name_th}</p>
                         {job.name_en && <p className="text-xs text-gray-400">{job.name_en}</p>}
