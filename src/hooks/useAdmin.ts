@@ -217,6 +217,24 @@ export function useDeleteJob() {
   })
 }
 
+// มูลค่างาน — ยอดรายได้แต่ละปี + ยอดรวมทั้งหมด (2026-10-21). Query key starts
+// with 'jobs' on purpose: every job mutation above already does
+// qc.invalidateQueries({ queryKey: ['jobs'] }), which React Query matches as
+// a prefix, so creating/editing/deleting a Job (including its
+// contract_value) automatically refreshes this summary too — no extra
+// invalidation wiring needed.
+export function useJobsRevenueSummary() {
+  return useQuery({
+    queryKey: ['jobs', 'revenue-summary'],
+    queryFn: async () => {
+      const res  = await fetch('/api/admin/jobs/revenue-summary')
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error)
+      return json.data as { byYear: { year: number; value: number }[]; total: number; countWithValue: number; countTotal: number }
+    },
+  })
+}
+
 // ── Org Tree ─────────────────────────────────────────────────
 
 export function useOrgTree() {

@@ -40,6 +40,18 @@ export async function POST(req: NextRequest) {
       errors.push({ row: rowNum, error: `Job Code "${code}" ซ้ำกันในไฟล์เดียวกัน` })
       return
     }
+    // มูลค่างาน (2026-10-21): optional column — blank means "not entered",
+    // same rule as the single-create/edit APIs. A non-blank value that isn't
+    // a non-negative number fails this row up front, same "all or nothing"
+    // validation pass as everything else here.
+    const rawValue = r.contract_value?.trim()
+    if (rawValue) {
+      const n = Number(rawValue.replace(/,/g, ''))
+      if (!Number.isFinite(n) || n < 0) {
+        errors.push({ row: rowNum, error: `มูลค่างาน "${rawValue}" ต้องเป็นตัวเลขที่ไม่ติดลบ` })
+        return
+      }
+    }
     seenCodes.add(code)
   })
 
@@ -73,18 +85,22 @@ export async function POST(req: NextRequest) {
       continue
     }
 
+    const rawValue = r.contract_value?.trim()
+    const contractValue = rawValue ? Number(rawValue.replace(/,/g, '')) : null
+
     const { data, error } = await supabase
       .from('jobs')
       .insert({
-        company_id:  session.company_id,
-        job_code:    code,
-        name_th:     r.name_th.trim(),
-        name_en:     r.name_en?.trim()     || null,
+        company_id:     session.company_id,
+        job_code:       code,
+        name_th:        r.name_th.trim(),
+        name_en:        r.name_en?.trim()     || null,
         year,
-        status:      'active',
-        description: r.description?.trim() || null,
-        client_name: r.client_name?.trim() || null,
-        created_by:  session.id,
+        status:         'active',
+        description:    r.description?.trim() || null,
+        client_name:    r.client_name?.trim() || null,
+        contract_value: contractValue,
+        created_by:     session.id,
       })
       .select('id')
       .single()

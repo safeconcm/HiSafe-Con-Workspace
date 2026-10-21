@@ -13,7 +13,7 @@ import {
 import Link from 'next/link'
 
 const REQUIRED_COLS = ['job_code', 'name_th']
-const ALL_COLS = ['job_code', 'name_th', 'name_en', 'client_name', 'description']
+const ALL_COLS = ['job_code', 'name_th', 'name_en', 'client_name', 'description', 'contract_value']
 
 function parseCSV(text: string): { headers: string[]; rows: Record<string, string>[] } {
   const lines = text.trim().split('\n').map(l => l.trim()).filter(Boolean)
@@ -116,8 +116,8 @@ export default function ImportJobsPage() {
   const downloadTemplate = () => {
     const BOM = '﻿'
     const csv = BOM + [ALL_COLS.join(','),
-      'JOB101,โครงการก่อสร้าง A,Construction Project A,บริษัท ABC จำกัด,งานสร้างอาคารสำนักงาน',
-      'JOB102,โครงการปรับปรุงอาคาร B,Building Renovation B,บริษัท XYZ จำกัด,',
+      'JOB101,โครงการก่อสร้าง A,Construction Project A,บริษัท ABC จำกัด,งานสร้างอาคารสำนักงาน,500000',
+      'JOB102,โครงการปรับปรุงอาคาร B,Building Renovation B,บริษัท XYZ จำกัด,,',
     ].join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
     const url  = URL.createObjectURL(blob)
@@ -152,6 +152,7 @@ export default function ImportJobsPage() {
               <li>คอลัมน์บังคับ: <code className="text-xs bg-gray-100 px-1 rounded">{REQUIRED_COLS.join(', ')}</code></li>
               <li>Job Code ที่นำเข้าจะผูกกับปี {year} (ปีที่เลือกไว้ในหน้า Job Codes) และต้องไม่ซ้ำกับ Job Code ที่มีอยู่แล้วในปีเดียวกัน</li>
               <li>สถานะเริ่มต้นของทุก Job ที่นำเข้าคือ &quot;กำลังดำเนินการ&quot; — ไปปรับเป็นพัก/ปิดได้ทีหลังที่หน้า Job Codes</li>
+              <li>คอลัมน์ <code className="text-xs bg-gray-100 px-1 rounded">contract_value</code> (มูลค่างาน) เป็นตัวเลือก — เว้นว่างได้ ถ้ากรอกต้องเป็นตัวเลขไม่ติดลบ</li>
               <li>นำเข้าได้สูงสุด 500 รายการต่อครั้ง</li>
             </ol>
           </div>

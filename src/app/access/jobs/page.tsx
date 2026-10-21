@@ -4,10 +4,18 @@
 // src/app/access/layout.tsx for context.
 import { useState, Fragment } from 'react'
 import Link                from 'next/link'
-import { useJobs, useCreateJob, useUpdateJob, useDeleteJob } from '@/hooks/useAdmin'
+import { useJobs, useCreateJob, useUpdateJob, useDeleteJob, useJobsRevenueSummary } from '@/hooks/useAdmin'
 import { JOB_STATUS_LABEL, cn } from '@/utils'
-import { Plus, Pencil, Trash2, Loader2, Briefcase, Upload, AlertTriangle, Search, ChevronDown, ChevronRight } from 'lucide-react'
+import { Plus, Pencil, Trash2, Loader2, Briefcase, Upload, AlertTriangle, Search, ChevronDown, ChevronRight, Coins } from 'lucide-react'
 import type { JobStatus } from '@/types/database'
+
+// มูลค่างาน formatting (2026-10-21) — plain Thai-locale grouping, no currency
+// symbol clutter since every number on this page is already implicitly THB;
+// "—" for null (not entered) so it reads differently from an actual ฿0.
+function formatTHB(n: number | null | undefined): string {
+  if (n === null || n === undefined) return '—'
+  return n.toLocaleString('th-TH', { maximumFractionDigits: 2 }) + ' บาท'
+}
 
 // Group Jobs by their "J-code" year prefix (2026-10-20, "Jxx 2 ตัวหน้าซ้ำกัน
 // จะได้ดูง่าย") — e.g. J24034/J24035/J24036 all cluster under one "J24"
@@ -55,12 +63,13 @@ export default function AdminJobsPage() {
   const [year,     setYear]     = useState(now.getFullYear())
   const [showForm, setShowForm] = useState(false)
   const [editing,  setEditing]  = useState<any | null>(null)
-  const [form,     setForm]     = useState({ job_code: '', name_th: '', name_en: '', client_name: '', description: '' })
+  const [form,     setForm]     = useState({ job_code: '', name_th: '', name_en: '', client_name: '', description: '', contract_value: '' })
   // Pending status change awaiting confirmation (2026-10-20, "ข้อ 6") — null
   // when no confirmation modal is open.
   const [confirmChange, setConfirmChange] = useState<{ job: any; nextStatus: JobStatus } | null>(null)
 
   const { data, isLoading } = useJobs(year, 'all')
+  const { data: revenue } = useJobsRevenueSummary()
   const createJob = useCreateJob()
   const updateJob = useUpdateJob()
   const deleteJob = useDeleteJob()
@@ -132,7 +141,7 @@ export default function AdminJobsPage() {
       await createJob.mutateAsync({ ...form, year })
       setShowForm(false)
     }
-    setForm({ job_code: '', name_th: '', name_en: '', client_name: '', description: '' })
+    setForm({ job_code: '', name_th: '', name_en: '', client_name: '', description: '', contract_value: '' })
   }
 
   // Dropdown onChange — if moving AWAY from active, hold for confirmation
@@ -153,7 +162,11 @@ export default function AdminJobsPage() {
 
   const startEdit = (job: any) => {
     setEditing(job)
-    setForm({ job_code: job.job_code, name_th: job.name_th, name_en: job.name_en ?? '', client_name: job.client_name ?? '', description: job.description ?? '' })
+    setForm({
+      job_code: job.job_code, name_th: job.name_th, name_en: job.name_en ?? '',
+      client_name: job.client_name ?? '', description: job.description ?? '',
+      contract_value: job.contract_value != null ? String(job.contract_value) : '',
+    })
     setShowForm(true)
   }
 
@@ -177,7 +190,7 @@ export default function AdminJobsPage() {
             นำเข้า CSV
           </Link>
           <button
-            onClick={() => { setEditing(null); setForm({ job_code:'',name_th:'',name_en:'',client_name:'',description:'' }); setShowForm(true) }}
+            onClick={() => { setEditing(null); setForm({ job_code:'',name_th:'',name_en:'',client_name:'',description:'',contract_value:'' }); setShowForm(true) }}
             className="flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800"
           >
             <Plus className="w-4 h-4" />
@@ -185,6 +198,37 @@ export default function AdminJobsPage() {
           </button>
         </div>
       </div>
+
+      {/* มูลค่างาน summary — ยอดรายได้แต่ละปี + ยอดรวมทั้งหมด (2026-10-21,
+          "Job Codes ต้องมีให้เพิ่มมูลค่างานด้วยจะดีมาก จะได้ยอดรายได้แต่ละปี
+          และยอดรวมทั้งหมด"). Covers every year a Job was ever entered, not
+          just the 4 years in the dropdown above — see
+          src/app/api/admin/jobs/revenue-summary/route.ts. */}
+      {revenue && revenue.countWithValue > 0 && (
+        <div className="card card-body space-y-3">
+          <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+            <Coins className="w-4 h-4 text-amber-500" />
+            มูลค่างานรวม
+          </div>
+          <div className="flex flex-wrap items-end gap-6">
+            <div>
+              <p className="text-xs text-gray-400">ยอดรวมทั้งหมด (ทุกปี)</p>
+              <p className="text-2xl font-semibold text-gray-900">{formatTHB(revenue.total)}</p>
+            </div>
+            <div className="flex flex-wrap gap-4">
+              {revenue.byYear.map(({ year: y, value }) => (
+                <div key={y} className="rounded-lg bg-gray-50 px-3 py-2">
+                  <p className="text-xs text-gray-400">ปี {y}</p>
+                  <p className="text-sm font-medium text-gray-800">{formatTHB(value)}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <p className="text-xs text-gray-400">
+            มีการระบุมูลค่างานแล้ว {revenue.countWithValue} จาก {revenue.countTotal} Job (ทุกปี)
+          </p>
+        </div>
+      )}
 
       {/* Search + grouping */}
       <div className="flex flex-wrap items-center gap-3">
@@ -246,6 +290,12 @@ export default function AdminJobsPage() {
               <input value={form.client_name} onChange={e => setForm(f => ({ ...f, client_name: e.target.value }))}
                 className="form-input" placeholder="บริษัท ABC จำกัด" />
             </div>
+            <div>
+              <label className="form-label">มูลค่างาน (บาท)</label>
+              <input type="number" min="0" step="0.01" value={form.contract_value}
+                onChange={e => setForm(f => ({ ...f, contract_value: e.target.value }))}
+                className="form-input" placeholder="เช่น 500000" />
+            </div>
             <div className="sm:col-span-2">
               <label className="form-label">รายละเอียด</label>
               <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
@@ -278,6 +328,7 @@ export default function AdminJobsPage() {
                 <th>ชื่องาน</th>
                 <th>ลูกค้า</th>
                 <th>สถานะ</th>
+                <th className="text-right">มูลค่างาน</th>
                 <th className="w-24 text-right">จัดการ</th>
               </tr>
             </thead>
@@ -289,7 +340,7 @@ export default function AdminJobsPage() {
                 return (
                 <Fragment key={groupId}>
                   <tr className="bg-gray-50 cursor-pointer hover:bg-gray-100 select-none" onClick={() => toggleGroup(groupId)}>
-                    <td colSpan={5} className="!py-1.5 text-xs font-semibold text-gray-500">
+                    <td colSpan={6} className="!py-1.5 text-xs font-semibold text-gray-500">
                       <span className="inline-flex items-center gap-1.5">
                         {isCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                         {code} <span className="text-gray-400 font-normal">({groupJobs.length})</span>
@@ -315,6 +366,7 @@ export default function AdminJobsPage() {
                           ))}
                         </select>
                       </td>
+                      <td className="text-sm text-gray-600 text-right whitespace-nowrap">{formatTHB(job.contract_value)}</td>
                       <td>
                         <div className="flex items-center gap-2 justify-end">
                           <button onClick={() => startEdit(job)} className="p-1 text-gray-400 hover:text-blue-600 transition-colors">
@@ -332,7 +384,7 @@ export default function AdminJobsPage() {
               })}
               {!filteredJobs.length && (
                 <tr>
-                  <td colSpan={5} className="text-center py-10 text-gray-400 text-sm">
+                  <td colSpan={6} className="text-center py-10 text-gray-400 text-sm">
                     {jobs.length ? 'ไม่พบ Job ที่ค้นหา' : `ยังไม่มี Job ปี ${year}`}
                   </td>
                 </tr>

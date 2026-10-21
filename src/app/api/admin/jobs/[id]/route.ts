@@ -32,11 +32,25 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   if (!existing) return notFound('Job')
 
   const body = await req.json().catch(() => ({}))
-  const allowed = ['job_code', 'name_th', 'name_en', 'status', 'description', 'client_name']
+  const allowed = ['job_code', 'name_th', 'name_en', 'status', 'description', 'client_name', 'contract_value']
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
 
   for (const key of allowed) {
     if (key in body) updates[key] = body[key]
+  }
+
+  // มูลค่างาน: same validation as POST (src/app/api/admin/jobs/route.ts) —
+  // empty string clears it back to NULL, a negative/non-numeric value is
+  // rejected rather than silently stored.
+  if ('contract_value' in updates) {
+    const raw = updates.contract_value
+    if (raw === '' || raw === null || raw === undefined) {
+      updates.contract_value = null
+    } else {
+      const n = Number(raw)
+      if (!Number.isFinite(n) || n < 0) return badRequest('มูลค่างานต้องเป็นตัวเลขที่ไม่ติดลบ')
+      updates.contract_value = n
+    }
   }
 
   const { data: updated, error } = await supabase

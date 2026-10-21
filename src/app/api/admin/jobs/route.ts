@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
 
   let query = supabase
     .from('jobs')
-    .select('id, job_code, name_th, name_en, year, status, client_name, description, created_at', { count: 'exact' })
+    .select('id, job_code, name_th, name_en, year, status, client_name, description, contract_value, created_at', { count: 'exact' })
     .eq('company_id', session.company_id)
     .eq('year', year)
     .order('job_code')
@@ -47,21 +47,33 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null)
   if (!body?.job_code || !body?.name_th) return badRequest('job_code and name_th required')
 
+  // มูลค่างาน (2026-10-21, "Job Codes ต้องมีให้เพิ่มมูลค่างานด้วย"): optional,
+  // nullable — empty string/undefined means "not entered", not zero. Rejects
+  // a negative or non-numeric value outright rather than silently storing
+  // garbage, since this number feeds the revenue summary totals.
+  let contractValue: number | null = null
+  if (body.contract_value !== undefined && body.contract_value !== null && body.contract_value !== '') {
+    const n = Number(body.contract_value)
+    if (!Number.isFinite(n) || n < 0) return badRequest('มูลค่างานต้องเป็นตัวเลขที่ไม่ติดลบ')
+    contractValue = n
+  }
+
   const supabase = createAdminSupabaseClient()
   const year = body.year ?? new Date().getFullYear()
 
   const { data, error } = await supabase
     .from('jobs')
     .insert({
-      company_id:  session.company_id,
-      job_code:    body.job_code.trim().toUpperCase(),
-      name_th:     body.name_th.trim(),
-      name_en:     body.name_en?.trim()     ?? null,
+      company_id:     session.company_id,
+      job_code:       body.job_code.trim().toUpperCase(),
+      name_th:        body.name_th.trim(),
+      name_en:        body.name_en?.trim()     ?? null,
       year,
-      status:      body.status              ?? 'active',
-      description: body.description?.trim() ?? null,
-      client_name: body.client_name?.trim() ?? null,
-      created_by:  session.id,
+      status:         body.status              ?? 'active',
+      description:    body.description?.trim() ?? null,
+      client_name:    body.client_name?.trim() ?? null,
+      contract_value: contractValue,
+      created_by:     session.id,
     })
     .select()
     .single()
