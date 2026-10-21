@@ -47,7 +47,9 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
         first_name_en, last_name_en, first_name_th, last_name_th,
         position_en, position_th, nickname, based, resign_date, signature_url
       ),
-      approved_by:users!timesheets_approved_by_id_fkey(signature_url),
+      approved_by:users!timesheets_approved_by_id_fkey(
+        signature_url, first_name_en, last_name_en, first_name_th, last_name_th
+      ),
       lines:timesheet_lines(
         work_date, hours, line_type, activity_code,
         job:jobs(job_code, name_th, name_en)
@@ -120,7 +122,20 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     holidays: (holidays ?? []) as any[],
     leaves:   (leaves ?? []) as any[],
     workingDayMap,
-    signatures: { employee_url: employeeSigUri, approver_url: approverSigUri },
+    signatures: {
+      employee_url: employeeSigUri,
+      approver_url: approverSigUri,
+      // 2026-10-21b, item 4: approver's name printed under their digital
+      // signature on "Authorized by:". Same EN-with-TH-fallback pattern as
+      // employeeName below.
+      approver_name: (() => {
+        const ap = ts.approved_by as any
+        if (!ap) return null
+        return (ap.first_name_en && ap.last_name_en)
+          ? `${ap.first_name_en} ${ap.last_name_en}`
+          : (ap.first_name_th || ap.last_name_th) ? `${ap.first_name_th ?? ''} ${ap.last_name_th ?? ''}`.trim() : null
+      })(),
+    },
   }
 
   const html = generateTimesheetOfficialFormHTML(templateData, appUrl)

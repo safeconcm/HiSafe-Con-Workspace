@@ -86,7 +86,11 @@ export interface TimesheetOfficialFormData {
     is_half_day: boolean
   }[]
   workingDayMap: Map<number, boolean>
-  signatures: { employee_url: string | null; approver_url: string | null }
+  // approver_name added 2026-10-21b, per request to print the approver's
+  // name under their digital signature on "Authorized by:" (Staff's
+  // Signature keeps just the image + line — the employee's own name is
+  // already shown up in the Name: field, so it isn't repeated here).
+  signatures: { employee_url: string | null; approver_url: string | null; approver_name?: string | null }
 }
 
 function fmt(n: number): string {
@@ -332,12 +336,27 @@ export function generateTimesheetOfficialFormHTML(data: TimesheetOfficialFormDat
          trailing blocks — and therefore the right-hand border — match.
        - .secA-note's own border-right still separates it from the day grid,
          same as before; nothing about how the note box attaches changed. */
+  /* 2026-10-21b, item 1 ("ช่อง Total No.of Working Days และ H V S F T I M
+     กว้างเยอะไป ลด 50%"): both trailing blocks (.sum here, .total-days in
+     Section B below) shrank 8mm/56mm -> 4mm/28mm — half their previous
+     width, per request. That frees 28mm per table that can't just be left
+     blank: both tables are block-level (full content width, 291mm) and
+     everything with an explicit width in a table.layout:fixed row must
+     still sum to that width, or Chromium re-stretches columns to fill the
+     gap — which would silently undo the shrink and also reopen the
+     day-column misalignment the previous pass (item 2 above) fixed. So the
+     freed 28mm went to the leading block instead (.secA-note / Section B's
+     .alloc-desc, both +28mm) rather than the day columns — widening the
+     Allocation Description text column is the lower-risk place to absorb
+     it, and both sides still grow by the same amount so day column 1
+     still lines up. New budget: 104 (leading) + 155 (31 day cols,
+     unchanged) + 28 (trailing) = 287mm, same 4mm slack as before. */
   .secA-wrap { display: flex; border: 1px solid #000; border-top: none; }
-  .secA-note { width: 76mm; padding: 2px 4px; font-size: 8.5px; border-right: 1px solid #000; display: flex; align-items: center; }
+  .secA-note { width: 104mm; padding: 2px 4px; font-size: 8.5px; border-right: 1px solid #000; display: flex; align-items: center; }
   .secA-table { flex: 1; }
   .secA-table th, .secA-table td { text-align: center; font-size: 7px; }
   .secA-table th.day, .secA-table td.day { width: 5mm; }
-  .secA-table th.sum, .secA-table td.sum { width: 8mm; font-weight: 700; }
+  .secA-table th.sum, .secA-table td.sum { width: 4mm; font-weight: 700; }
   /* item 3 ("สี Hatch วันหยุดจางไป"): #eee was barely visible against the
      white cell background at PDF/print resolution — darkened to #999 (the
      4px repeat/2px-stripe pattern itself is unchanged, just the gray). */
@@ -360,10 +379,12 @@ export function generateTimesheetOfficialFormHTML(data: TimesheetOfficialFormDat
   .secB-table { width: 100%; border: 1px solid #000; border-top: none; }
   .secB-table th, .secB-table td { text-align: center; font-size: 7px; }
   .secB-table th.alloc-code, .secB-table td.alloc-code { width: 14mm; font-weight: 700; }
-  .secB-table th.alloc-desc, .secB-table td.alloc-desc { width: 50mm; text-align: left; padding-left: 3px; }
+  /* +28mm (50 -> 78mm), paired with .secA-note's +28mm above — see that
+     comment for why. */
+  .secB-table th.alloc-desc, .secB-table td.alloc-desc { width: 78mm; text-align: left; padding-left: 3px; }
   .secB-table th.activity-code, .secB-table td.activity-code { width: 12mm; color: #1e3a8a; font-weight: 700; }
   .secB-table th.day, .secB-table td.day { width: 5mm; }
-  .secB-table th.total-days, .secB-table td.total-days { width: 56mm; font-weight: 700; }
+  .secB-table th.total-days, .secB-table td.total-days { width: 28mm; font-weight: 700; }
   .secB-table td { height: 3.5mm; }
   .secB-table td.shaded { background: repeating-linear-gradient(45deg, #999, #999 2px, #fff 2px, #fff 4px); }
   .secB-table thead th { padding: 2px 0; font-weight: 700; }
@@ -371,22 +392,33 @@ export function generateTimesheetOfficialFormHTML(data: TimesheetOfficialFormDat
   .secB-table .total-row .total-days { color: #b91c1c; }
 
   /* Signatures
-     item 5 ("ระยะห่างท้ายตารางกับ Staff's Signature เพิ่มอีก 50%"):
-     2.5mm -> 3.75mm (2.5 * 1.5). This file has a history of the form
-     overflowing to a 2nd page (see the Section B height-budget comment
-     above) — re-verified on the live render after this change, not just by
-     re-reading the CSS, since +1.25mm alone is small but stacks on top of
-     everything else changed in this same pass. */
-  .sig-row { display: flex; justify-content: space-around; margin-top: 3.75mm; font-size: 9.5px; }
+     item 3, round 2 ("ระยะห่างท้ายตารางกับ Staff's Signature ลดลงอีก 25%"):
+     3.75mm -> 2.8mm (3.75 * 0.75 = 2.8125, rounded). Second cut on top of
+     the earlier +50% pass (2.5 -> 3.75mm) — re-verified on the live render
+     after this change too, same reason as before: this file has a history
+     of silently overflowing to a 2nd page, so a margin cut this late in
+     the page still gets checked against the real rendered output, not
+     just read off the CSS. */
+  .sig-row { display: flex; justify-content: space-around; margin-top: 2.8mm; font-size: 9.5px; }
   .sig-row .sig-img { display: block; height: 10mm; object-fit: contain; margin: 0 auto 2px; }
   .sig-row .sig-line { display: inline-block; border-bottom: 1px solid #000; width: 55mm; }
-  /* item 4 ("แถว Staff's Signature ควรมีขีดอยู่ด้านล่าง [ลายเซ็น] ดิจิทัล"):
-     previously .sig-line only ever rendered in the no-signature-yet
-     fallback branch below — once a real signature image existed, the line
-     disappeared entirely instead of sitting under the image like a real
-     signature line would. This draws the line under the image too, without
-     touching the no-signature fallback's own markup at all. */
-  .sig-row .sig-signed-line { display: block; border-bottom: 1px solid #000; width: 40mm; margin: 0 auto; }
+  /* item 2 ("ขีดเส้นใต้สีดำควรเริ่มที่ลายเซ็น ทั้ง 2 จุด"): .sig-signed-line
+     used to be margin:0 auto directly inside the same <div> as the
+     "Staff 's Signature:" / "Authorized by:" label text — centering it
+     against the *whole* div (label text + image combined), not against the
+     signature image itself. Since the two labels are different lengths,
+     the line landed in a different spot relative to each image instead of
+     starting right under it. Fix: wrap the image + line (+ the item-4
+     approver name) in their own .sig-group, a flex column that's as narrow
+     as its own content (not the label) — centering now happens only
+     between the image/line/name, independent of the label next to it. */
+  .sig-row .sig-group { display: inline-flex; flex-direction: column; align-items: center; vertical-align: middle; }
+  .sig-row .sig-signed-line { display: block; border-bottom: 1px solid #000; width: 40mm; }
+  /* item 4 ("Authorized by: เอาชื่อคนอนุมัติใส่ใต้ลายเซ็นดิจิทัล"): name sits
+     under the line, "Authorized by:" only — the employee's own name is
+     already shown in the Name: field up top, so Staff's Signature doesn't
+     repeat it. */
+  .sig-row .sig-approver-name { font-size: 8px; margin-top: 1px; }
 
   .footer { margin-top: 1mm; font-size: 7px; color: #999; display: flex; justify-content: space-between; }
 </style>
@@ -483,13 +515,13 @@ export function generateTimesheetOfficialFormHTML(data: TimesheetOfficialFormDat
     <div>
       Staff 's Signature:
       ${data.signatures.employee_url
-        ? `<img src="${data.signatures.employee_url}" class="sig-img" style="display:inline-block;height:8mm;vertical-align:middle" /><span class="sig-signed-line"></span>`
+        ? `<span class="sig-group"><img src="${data.signatures.employee_url}" class="sig-img" style="height:8mm" /><span class="sig-signed-line"></span></span>`
         : `<span class="sig-line"></span>`}
     </div>
     <div>
       Authorized by:
       ${data.signatures.approver_url
-        ? `<img src="${data.signatures.approver_url}" class="sig-img" style="display:inline-block;height:8mm;vertical-align:middle" /><span class="sig-signed-line"></span>`
+        ? `<span class="sig-group"><img src="${data.signatures.approver_url}" class="sig-img" style="height:8mm" /><span class="sig-signed-line"></span>${data.signatures.approver_name ? `<span class="sig-approver-name">${data.signatures.approver_name}</span>` : ''}</span>`
         : `<span class="sig-line"></span>`}
     </div>
     <div>Date: ${approvedDate || '<span class="sig-line" style="width:35mm"></span>'}</div>
