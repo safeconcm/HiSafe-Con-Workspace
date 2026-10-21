@@ -45,6 +45,24 @@ import { letterheadName } from './company-letterhead'
 
 const EN_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December']
 
+// 2026-10-21b, item 5 ("ไฟล์ 123mb ลดให้ไม่เกิน 1mb"): the diagonal "shaded"
+// hatch on holiday/leave day cells used to be a CSS
+// repeating-linear-gradient() background, applied per-cell (up to ~290
+// shaded <td>s across Section A + every job row in Section B for a typical
+// month). Headless Chromium's PDF export rasterizes each element's
+// gradient background separately rather than sharing one resource — fine
+// on screen, but printBackground:true bakes every one of those into its
+// own embedded bitmap in the exported PDF, and at this cell count that
+// multiplies into a 100+MB file (confirmed: the generated PDF took
+// minutes to transfer in testing, consistent with a huge payload, versus
+// ~200KB for this app's other PDF templates that don't use a
+// repeating-gradient background at this scale).
+// Fix: pre-render the exact same pattern (#999/#fff, 45deg, 4px period) as
+// one tiny 8x8 PNG tile (110 bytes) and reference it as a shared
+// background-image instead — Chromium embeds that single bitmap once and
+// every cell just tiles it, instead of rasterizing N separate gradients.
+const HATCH_TILE_PNG = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAANUlEQVR42mOcOXMmAwNDWloaAwPDrFmz4GwmrKKzZs1i/P//P6YoVAemaFpaGrOUlBSt7QAAkdsyIqvy7Y4AAAAASUVORK5CYII='
+
 // Verbatim from the source form's own legend (Section B), incl. its typos.
 const ACTIVITY_CODE_LABELS: Record<string, string> = {
   '01': 'Pre-tendering/Tendering',
@@ -359,8 +377,12 @@ export function generateTimesheetOfficialFormHTML(data: TimesheetOfficialFormDat
   .secA-table th.sum, .secA-table td.sum { width: 4mm; font-weight: 700; }
   /* item 3 ("สี Hatch วันหยุดจางไป"): #eee was barely visible against the
      white cell background at PDF/print resolution — darkened to #999 (the
-     4px repeat/2px-stripe pattern itself is unchanged, just the gray). */
-  .secA-table td.shaded { background: repeating-linear-gradient(45deg, #999, #999 2px, #fff 2px, #fff 4px); }
+     4px repeat/2px-stripe pattern itself is unchanged, just the gray).
+     2026-10-21b, item 5: switched from a CSS gradient to the shared
+     HATCH_TILE_PNG image — see that constant's comment for why (100+MB
+     PDF). Same visual pattern, same colors, just a shared bitmap instead
+     of N separately-rasterized gradients. */
+  .secA-table td.shaded { background-image: url(${HATCH_TILE_PNG}); background-repeat: repeat; background-size: 4px 4px; }
   .secA-table td { height: 3.8mm; font-weight: 700; }
 
   /* Section B legend (activity codes, 4 cols x 3 rows) */
@@ -386,7 +408,8 @@ export function generateTimesheetOfficialFormHTML(data: TimesheetOfficialFormDat
   .secB-table th.day, .secB-table td.day { width: 5mm; }
   .secB-table th.total-days, .secB-table td.total-days { width: 28mm; font-weight: 700; }
   .secB-table td { height: 3.5mm; }
-  .secB-table td.shaded { background: repeating-linear-gradient(45deg, #999, #999 2px, #fff 2px, #fff 4px); }
+  /* same HATCH_TILE_PNG swap as Section A above, same reason (item 5). */
+  .secB-table td.shaded { background-image: url(${HATCH_TILE_PNG}); background-repeat: repeat; background-size: 4px 4px; }
   .secB-table thead th { padding: 2px 0; font-weight: 700; }
   .secB-table .total-row td { font-weight: 700; }
   .secB-table .total-row .total-days { color: #b91c1c; }
