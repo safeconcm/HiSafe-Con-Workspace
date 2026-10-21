@@ -443,7 +443,11 @@ export function generateTimesheetOfficialFormHTML(data: TimesheetOfficialFormDat
      repeat it. */
   .sig-row .sig-approver-name { font-size: 8px; margin-top: 1px; }
 
-  .footer { margin-top: 1mm; font-size: 7px; color: #999; display: flex; justify-content: space-between; }
+  /* 2026-10-21c ("ลายน้ำด้านล่างตาราง ย้ายไปไว้จุดเดียวด้านซ้าย"): used to be
+     two spans spread left/right via justify-content:space-between — one
+     at each end of the full page width. Combined into a single line,
+     anchored to the left only, per request. */
+  .footer { margin-top: 1mm; font-size: 7px; color: #999; display: flex; justify-content: flex-start; gap: 6px; }
 </style>
 </head>
 <body>
