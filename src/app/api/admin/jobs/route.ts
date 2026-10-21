@@ -13,13 +13,43 @@ import {
 // stores 'YYYY-MM-DD' or null; an empty string from the form means "not
 // entered", same convention as contract_value below. Shared by POST here and
 // PATCH in [id]/route.ts (small enough not to warrant a shared lib export).
+//
+// 2026-10-22 bugfix ("Excel ใส่แบบนี้ 2025-02-07 ... ระบบแจ้ง รูปแบบวันที่ไม่
+// ถูกต้อง 2025-2-7"): the <input type="date"> form always sends a strict,
+// zero-padded 'YYYY-MM-DD', but a CSV/Excel cell typed as plain text (not a
+// real date cell) comes through as whatever the user typed, e.g. the
+// single-digit "2025-2-7" the old regex rejected outright even though it's
+// an unambiguous, valid date. Now accepts year-first Y-M-D/Y/M/D with 1-2
+// digit month/day (any padding), AND day-first D-M-Y/D/M/Y — per the user,
+// a plain D/M/Y (not month-first, US-style) is the normal convention for a
+// non-ISO date in these files — always referencing the Gregorian (ค.ศ.) year,
+// never Buddhist era. Both forms normalize to zero-padded 'YYYY-MM-DD' and
+// are validated as a real calendar date (rejects e.g. month 13 or Feb 30).
 export function parseOptionalDate(raw: unknown): { ok: true; value: string | null } | { ok: false; error: string } {
   if (raw === undefined || raw === null || raw === '') return { ok: true, value: null }
   const s = String(raw).trim()
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || Number.isNaN(Date.parse(s))) {
-    return { ok: false, error: `รูปแบบวันที่ไม่ถูกต้อง: "${s}" (ต้องเป็น YYYY-MM-DD)` }
+
+  let y: number, mo: number, d: number
+  let m = /^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})$/.exec(s)       // Y-M-D / Y/M/D
+  if (m) {
+    y = Number(m[1]); mo = Number(m[2]); d = Number(m[3])
+  } else {
+    m = /^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/.exec(s)         // D-M-Y / D/M/Y
+    if (!m) return { ok: false, error: `รูปแบบวันที่ไม่ถูกต้อง: "${s}" (ต้องเป็น YYYY-MM-DD หรือ D/M/YYYY อ้างอิง ค.ศ.)` }
+    d = Number(m[1]); mo = Number(m[2]); y = Number(m[3])
   }
-  return { ok: true, value: s }
+
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) {
+    return { ok: false, error: `วันที่ไม่ถูกต้อง: "${s}"` }
+  }
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const iso = `${y}-${pad(mo)}-${pad(d)}`
+  const parsed = new Date(iso + 'T00:00:00Z')
+  // Reject dates that don't round-trip (e.g. 2026-02-30 -> rolls to March).
+  if (Number.isNaN(parsed.getTime()) || parsed.getUTCFullYear() !== y || parsed.getUTCMonth() + 1 !== mo || parsed.getUTCDate() !== d) {
+    return { ok: false, error: `วันที่ไม่ถูกต้อง: "${s}"` }
+  }
+  return { ok: true, value: iso }
 }
 
 export function parseOptionalInt(raw: unknown): { ok: true; value: number | null } | { ok: false; error: string } {

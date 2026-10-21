@@ -8,6 +8,14 @@
 // row for the company regardless of year/status and aggregates in JS rather
 // than relying on Supabase-JS's lack of a GROUP BY — the jobs table is small
 // (tens to low hundreds of rows per company), so this is cheap.
+//
+// 2026-10-22 ("เมื่อรู้มูลค่างานก็รวมสรุปทั้งหมด แยกปี แยกผู้ว่าจ้างด้วย
+// เปรียบเทียบปี เพิ่มขึ้น หรือลดลง ทำกราฟด้วย"): extended to also break down
+// by client (ผู้ว่าจ้าง), and each year now carries a year-over-year delta
+// against the immediately preceding calendar year (only when that year is
+// itself present in the data — a gap year means "no comparison", not "0").
+// The chart itself is built client-side (src/app/access/jobs/revenue/page.tsx)
+// from this same byYear/byClient data, so the numbers never disagree.
 import { NextRequest } from 'next/server'
 import { getSessionFromHeaders, createAdminSupabaseClient, ok, unauthorized, serverError } from '@/lib/api-helpers'
 
@@ -18,12 +26,15 @@ export async function GET(req: NextRequest) {
   const supabase = createAdminSupabaseClient()
   const { data, error } = await supabase
     .from('jobs')
-    .select('year, contract_value')
+    .select('year, contract_value, client_name')
     .eq('company_id', session.company_id)
 
   if (error) return serverError(error)
 
-  const byYearMap = new Map<number, number>()
+  const byYearMap   = new Map<number, number>()
+  const byYearCount = new Map<number, number>()
+  const byClientMap   = new Map<string, number>()
+  const byClientCount = new Map<string, number>()
   let total = 0
   let countWithValue = 0
 
@@ -35,11 +46,25 @@ export async function GET(req: NextRequest) {
     countWithValue++
     total += n
     byYearMap.set(row.year, (byYearMap.get(row.year) ?? 0) + n)
+    byYearCount.set(row.year, (byYearCount.get(row.year) ?? 0) + 1)
+
+    const client = row.client_name?.trim() || 'ไม่ระบุลูกค้า'
+    byClientMap.set(client, (byClientMap.get(client) ?? 0) + n)
+    byClientCount.set(client, (byClientCount.get(client) ?? 0) + 1)
   }
 
   const byYear = Array.from(byYearMap.entries())
-    .map(([year, value]) => ({ year, value }))
+    .map(([year, value]) => {
+      const prev = byYearMap.has(year - 1) ? byYearMap.get(year - 1)! : null
+      const delta    = prev !== null ? value - prev : null
+      const deltaPct = prev !== null && prev !== 0 ? (delta! / prev) * 100 : null
+      return { year, value, count: byYearCount.get(year) ?? 0, delta, deltaPct }
+    })
     .sort((a, b) => b.year - a.year)
 
-  return ok({ byYear, total, countWithValue, countTotal: (data ?? []).length })
+  const byClient = Array.from(byClientMap.entries())
+    .map(([client, value]) => ({ client, value, count: byClientCount.get(client) ?? 0 }))
+    .sort((a, b) => b.value - a.value)
+
+  return ok({ byYear, byClient, total, countWithValue, countTotal: (data ?? []).length })
 }

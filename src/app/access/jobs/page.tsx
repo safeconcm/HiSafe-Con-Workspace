@@ -278,9 +278,16 @@ export default function AdminJobsPage() {
           src/app/api/admin/jobs/revenue-summary/route.ts. */}
       {revenue && revenue.countWithValue > 0 && (
         <div className="card card-body space-y-3">
-          <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
-            <Coins className="w-4 h-4 text-amber-500" />
-            มูลค่างานรวม
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 text-sm font-medium text-gray-700">
+              <Coins className="w-4 h-4 text-amber-500" />
+              มูลค่างานรวม
+            </div>
+            {/* 2026-10-22, "เมื่อรู้มูลค่างานก็รวมสรุปทั้งหมด แยกปี แยก
+                ผู้ว่าจ้างด้วย เปรียบเทียบปี เพิ่มขึ้น หรือลดลง ทำกราฟด้วย" */}
+            <Link href="/access/jobs/revenue" className="text-xs text-blue-600 hover:underline">
+              ดูสรุป แยกปี/ลูกค้า + กราฟ →
+            </Link>
           </div>
           <div className="flex flex-wrap items-end gap-6">
             <div>

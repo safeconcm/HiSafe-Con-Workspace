@@ -240,7 +240,11 @@ export function useJobsRevenueSummary() {
       const res  = await fetch('/api/admin/jobs/revenue-summary')
       const json = await res.json()
       if (!res.ok) throw new Error(json.error)
-      return json.data as { byYear: { year: number; value: number }[]; total: number; countWithValue: number; countTotal: number }
+      return json.data as {
+        byYear: { year: number; value: number; count: number; delta: number | null; deltaPct: number | null }[]
+        byClient: { client: string; value: number; count: number }[]
+        total: number; countWithValue: number; countTotal: number
+      }
     },
   })
 }
