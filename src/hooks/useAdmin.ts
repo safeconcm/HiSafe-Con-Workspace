@@ -172,8 +172,18 @@ export function useImportJobs() {
     },
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['jobs'] })
-      if (data.created > 0) {
-        toast.success(`นำเข้า ${data.created} Job สำเร็จ`, data.failed > 0 ? `ล้มเหลว ${data.failed} รายการ` : undefined)
+      // 2026-10-21: a re-import that only backfills existing Jobs (created
+      // === 0 but updated > 0) is now a normal, expected outcome — not a
+      // no-op — so it needs its own success toast too, not just the
+      // "created > 0" case from before duplicate-backfill existed.
+      if (data.created > 0 || data.updated > 0) {
+        const parts = [
+          data.created > 0 ? `สร้างใหม่ ${data.created}` : null,
+          data.updated > 0 ? `เติมข้อมูลที่ขาด ${data.updated}` : null,
+        ].filter(Boolean).join(' / ')
+        toast.success(`นำเข้าสำเร็จ — ${parts} Job`, data.failed > 0 ? `ล้มเหลว ${data.failed} รายการ` : undefined)
+      } else if (data.failed > 0) {
+        toast.error('นำเข้าไม่สำเร็จ', `ล้มเหลว ${data.failed} รายการ`)
       }
     },
     onError: (e: Error) => toast.error('นำเข้าไม่สำเร็จ', e.message),

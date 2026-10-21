@@ -16,6 +16,7 @@ import {
   ok, badRequest, unauthorized, forbidden,
   notFound, serverError, writeAuditLog,
 } from '@/lib/api-helpers'
+import { parseOptionalDate, parseOptionalInt } from '../route'
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -32,7 +33,10 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   if (!existing) return notFound('Job')
 
   const body = await req.json().catch(() => ({}))
-  const allowed = ['job_code', 'name_th', 'name_en', 'status', 'description', 'client_name', 'contract_value']
+  const allowed = [
+    'job_code', 'name_th', 'name_en', 'status', 'description', 'client_name',
+    'contract_value', 'start_date', 'end_date', 'sequence_no',
+  ]
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
 
   for (const key of allowed) {
@@ -51,6 +55,30 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       if (!Number.isFinite(n) || n < 0) return badRequest('มูลค่างานต้องเป็นตัวเลขที่ไม่ติดลบ')
       updates.contract_value = n
     }
+  }
+
+  // วันที่เริ่ม/สิ้นสุด + ลำดับ Job (2026-10-21) — same optional, blank-clears
+  // rule as contract_value above; shared parsers live in the sibling
+  // route.ts (POST uses them too).
+  if ('start_date' in updates) {
+    const parsed = parseOptionalDate(updates.start_date)
+    if (!parsed.ok) return badRequest(parsed.error)
+    updates.start_date = parsed.value
+  }
+  if ('end_date' in updates) {
+    const parsed = parseOptionalDate(updates.end_date)
+    if (!parsed.ok) return badRequest(parsed.error)
+    updates.end_date = parsed.value
+  }
+  const effectiveStart = ('start_date' in updates ? updates.start_date : existing.start_date) as string | null
+  const effectiveEnd   = ('end_date'   in updates ? updates.end_date   : existing.end_date)   as string | null
+  if (effectiveStart && effectiveEnd && effectiveStart > effectiveEnd) {
+    return badRequest('วันที่เริ่มต้องไม่อยู่หลังวันที่สิ้นสุด')
+  }
+  if ('sequence_no' in updates) {
+    const parsed = parseOptionalInt(updates.sequence_no)
+    if (!parsed.ok) return badRequest(parsed.error)
+    updates.sequence_no = parsed.value
   }
 
   const { data: updated, error } = await supabase

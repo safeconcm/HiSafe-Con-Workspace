@@ -17,6 +17,18 @@ function formatTHB(n: number | null | undefined): string {
   return n.toLocaleString('th-TH', { maximumFractionDigits: 2 }) + ' บาท'
 }
 
+// วันที่เริ่ม/สิ้นสุด (2026-10-21) — DB stores 'YYYY-MM-DD'; render as Thai
+// Buddhist-era date (DD/MM/BBBB) to match the rest of the app's date style.
+// Built from the raw string (not `new Date(iso)`) to dodge any UTC/local
+// timezone shift on a date-only value.
+function formatThaiDate(iso: string | null | undefined): string {
+  if (!iso) return '—'
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso)
+  if (!m) return iso
+  const [, y, mo, d] = m
+  return `${d}/${mo}/${Number(y) + 543}`
+}
+
 // Group Jobs by their "J-code" year prefix (2026-10-20, "Jxx 2 ตัวหน้าซ้ำกัน
 // จะได้ดูง่าย") — e.g. J24034/J24035/J24036 all cluster under one "J24"
 // sub-header. The J-code can live in either job_code (SAFECON tenant, e.g.
@@ -63,7 +75,7 @@ export default function AdminJobsPage() {
   const [year,     setYear]     = useState(now.getFullYear())
   const [showForm, setShowForm] = useState(false)
   const [editing,  setEditing]  = useState<any | null>(null)
-  const [form,     setForm]     = useState({ job_code: '', name_th: '', name_en: '', client_name: '', description: '', contract_value: '' })
+  const [form,     setForm]     = useState({ job_code: '', name_th: '', name_en: '', client_name: '', description: '', contract_value: '', start_date: '', end_date: '', sequence_no: '' })
   // Pending status change awaiting confirmation (2026-10-20, "ข้อ 6") — null
   // when no confirmation modal is open.
   const [confirmChange, setConfirmChange] = useState<{ job: any; nextStatus: JobStatus } | null>(null)
@@ -108,6 +120,20 @@ export default function AdminJobsPage() {
     if (!groupMap.has(key)) groupMap.set(key, [])
     groupMap.get(key)!.push(job)
   }
+  // ลำดับ Job (2026-10-21, "เพิ่ม...ลำดับ Job ด้วย") — within each group, a
+  // Job with a sequence_no sorts ahead of one without by that number
+  // (ascending); Jobs sharing the same number, or with none at all, fall
+  // back to the existing job_code sort so this is purely additive — groups
+  // nobody has assigned a ลำดับ to look exactly as before.
+  for (const arr of groupMap.values()) {
+    arr.sort((a, b) => {
+      const sa = a.sequence_no, sb = b.sequence_no
+      if (sa != null && sb != null && sa !== sb) return sa - sb
+      if (sa != null && sb == null) return -1
+      if (sa == null && sb != null) return 1
+      return String(a.job_code ?? '').localeCompare(String(b.job_code ?? ''))
+    })
+  }
   const fallbackLabel = groupBy === 'year' ? 'อื่นๆ' : 'ไม่ระบุลูกค้า'
   const groupKeys = Array.from(groupMap.keys()).sort((a, b) => {
     if (a === fallbackLabel) return 1
@@ -141,7 +167,7 @@ export default function AdminJobsPage() {
       await createJob.mutateAsync({ ...form, year })
       setShowForm(false)
     }
-    setForm({ job_code: '', name_th: '', name_en: '', client_name: '', description: '', contract_value: '' })
+    setForm({ job_code: '', name_th: '', name_en: '', client_name: '', description: '', contract_value: '', start_date: '', end_date: '', sequence_no: '' })
   }
 
   // Dropdown onChange — if moving AWAY from active, hold for confirmation
@@ -166,6 +192,8 @@ export default function AdminJobsPage() {
       job_code: job.job_code, name_th: job.name_th, name_en: job.name_en ?? '',
       client_name: job.client_name ?? '', description: job.description ?? '',
       contract_value: job.contract_value != null ? String(job.contract_value) : '',
+      start_date: job.start_date ?? '', end_date: job.end_date ?? '',
+      sequence_no: job.sequence_no != null ? String(job.sequence_no) : '',
     })
     setShowForm(true)
   }
@@ -190,7 +218,7 @@ export default function AdminJobsPage() {
             นำเข้า CSV
           </Link>
           <button
-            onClick={() => { setEditing(null); setForm({ job_code:'',name_th:'',name_en:'',client_name:'',description:'',contract_value:'' }); setShowForm(true) }}
+            onClick={() => { setEditing(null); setForm({ job_code:'',name_th:'',name_en:'',client_name:'',description:'',contract_value:'',start_date:'',end_date:'',sequence_no:'' }); setShowForm(true) }}
             className="flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800"
           >
             <Plus className="w-4 h-4" />
@@ -296,6 +324,24 @@ export default function AdminJobsPage() {
                 onChange={e => setForm(f => ({ ...f, contract_value: e.target.value }))}
                 className="form-input" placeholder="เช่น 500000" />
             </div>
+            <div>
+              <label className="form-label">ลำดับ Job</label>
+              <input type="number" step="1" value={form.sequence_no}
+                onChange={e => setForm(f => ({ ...f, sequence_no: e.target.value }))}
+                className="form-input" placeholder="เช่น 1 (ใช้จัดลำดับการแสดงผล)" />
+            </div>
+            <div>
+              <label className="form-label">วันที่เริ่ม</label>
+              <input type="date" value={form.start_date}
+                onChange={e => setForm(f => ({ ...f, start_date: e.target.value }))}
+                className="form-input" />
+            </div>
+            <div>
+              <label className="form-label">วันที่สิ้นสุด</label>
+              <input type="date" value={form.end_date}
+                onChange={e => setForm(f => ({ ...f, end_date: e.target.value }))}
+                className="form-input" />
+            </div>
             <div className="sm:col-span-2">
               <label className="form-label">รายละเอียด</label>
               <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
@@ -325,9 +371,11 @@ export default function AdminJobsPage() {
             <thead>
               <tr>
                 <th>Job Code</th>
+                <th className="w-14 text-right">ลำดับ</th>
                 <th>ชื่องาน</th>
                 <th>ลูกค้า</th>
                 <th>สถานะ</th>
+                <th>ระยะเวลา</th>
                 <th className="text-right">มูลค่างาน</th>
                 <th className="w-24 text-right">จัดการ</th>
               </tr>
@@ -340,7 +388,7 @@ export default function AdminJobsPage() {
                 return (
                 <Fragment key={groupId}>
                   <tr className="bg-gray-50 cursor-pointer hover:bg-gray-100 select-none" onClick={() => toggleGroup(groupId)}>
-                    <td colSpan={6} className="!py-1.5 text-xs font-semibold text-gray-500">
+                    <td colSpan={8} className="!py-1.5 text-xs font-semibold text-gray-500">
                       <span className="inline-flex items-center gap-1.5">
                         {isCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                         {code} <span className="text-gray-400 font-normal">({groupJobs.length})</span>
@@ -350,6 +398,7 @@ export default function AdminJobsPage() {
                   {!isCollapsed && groupJobs.map((job: any) => (
                     <tr key={job.id}>
                       <td className="font-mono text-sm font-medium text-gray-900">{job.job_code}</td>
+                      <td className="text-sm text-gray-500 text-right">{job.sequence_no ?? '—'}</td>
                       <td>
                         <p className="text-sm text-gray-900">{job.name_th}</p>
                         {job.name_en && <p className="text-xs text-gray-400">{job.name_en}</p>}
@@ -365,6 +414,11 @@ export default function AdminJobsPage() {
                             <option key={s} value={s}>{JOB_STATUS_LABEL[s]}</option>
                           ))}
                         </select>
+                      </td>
+                      <td className="text-xs text-gray-500 whitespace-nowrap">
+                        {job.start_date || job.end_date
+                          ? <>{formatThaiDate(job.start_date)} – {formatThaiDate(job.end_date)}</>
+                          : '—'}
                       </td>
                       <td className="text-sm text-gray-600 text-right whitespace-nowrap">{formatTHB(job.contract_value)}</td>
                       <td>
@@ -384,7 +438,7 @@ export default function AdminJobsPage() {
               })}
               {!filteredJobs.length && (
                 <tr>
-                  <td colSpan={6} className="text-center py-10 text-gray-400 text-sm">
+                  <td colSpan={8} className="text-center py-10 text-gray-400 text-sm">
                     {jobs.length ? 'ไม่พบ Job ที่ค้นหา' : `ยังไม่มี Job ปี ${year}`}
                   </td>
                 </tr>

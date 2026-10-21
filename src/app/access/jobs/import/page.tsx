@@ -13,7 +13,18 @@ import {
 import Link from 'next/link'
 
 const REQUIRED_COLS = ['job_code', 'name_th']
-const ALL_COLS = ['job_code', 'name_th', 'name_en', 'client_name', 'description', 'contract_value']
+const ALL_COLS = ['job_code', 'name_th', 'name_en', 'client_name', 'description', 'contract_value', 'start_date', 'end_date', 'sequence_no']
+
+// Excel serial date -> 'YYYY-MM-DD' (2026-10-21, date columns added). Excel
+// stores dates as a day count from 1899-12-30; this is the standard
+// conversion (handles the classic Excel 1900-leap-year quirk the same way
+// the SheetJS docs do — good enough for any realistic project date).
+function excelSerialToISODate(serial: number): string {
+  const ms = Math.round((serial - 25569) * 86400 * 1000)
+  const d = new Date(ms)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`
+}
 
 function parseCSV(text: string): { headers: string[]; rows: Record<string, string>[] } {
   const lines = text.trim().split('\n').map(l => l.trim()).filter(Boolean)
@@ -38,8 +49,27 @@ function parseCSV(text: string): { headers: string[]; rows: Record<string, strin
   return { headers, rows }
 }
 
+// Date columns (2026-10-21, "เพิ่ม start date, end date") need special
+// handling: an Excel cell formatted as a date comes back from SheetJS
+// (with cellDates:true, set below) as a real JS Date object, not text —
+// String(cell) on that would print something like
+// "Thu Jan 15 2026 00:00:00 GMT+0700 (...)" , not 'YYYY-MM-DD'. A cell typed
+// as plain text (someone typed "2026-01-15" directly) stays a string and
+// passes through unchanged. Using the cell's UTC getters (not local) avoids
+// a timezone-driven day shift on a value that has no time-of-day meaning.
+function formatCell(header: string, cell: unknown): string {
+  if (cell instanceof Date) {
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${cell.getUTCFullYear()}-${pad(cell.getUTCMonth() + 1)}-${pad(cell.getUTCDate())}`
+  }
+  if ((header === 'start_date' || header === 'end_date') && typeof cell === 'number') {
+    return excelSerialToISODate(cell)
+  }
+  return String(cell ?? '').trim()
+}
+
 function parseExcel(buffer: ArrayBuffer): { headers: string[]; rows: Record<string, string>[] } {
-  const wb    = XLSX.read(buffer, { type: 'array' })
+  const wb    = XLSX.read(buffer, { type: 'array', cellDates: true })
   const sheet = wb.Sheets[wb.SheetNames[0]]
   if (!sheet) return { headers: [], rows: [] }
 
@@ -52,7 +82,7 @@ function parseExcel(buffer: ArrayBuffer): { headers: string[]; rows: Record<stri
     .filter(r => Array.isArray(r) && r.some(cell => String(cell ?? '').trim() !== ''))
     .map(r => {
       const obj: Record<string, string> = {}
-      headers.forEach((h, i) => { obj[h] = String(r[i] ?? '').trim() })
+      headers.forEach((h, i) => { obj[h] = formatCell(h, r[i]) })
       return obj
     })
 
@@ -62,10 +92,12 @@ function parseExcel(buffer: ArrayBuffer): { headers: string[]; rows: Record<stri
 type ImportResult = {
   success: boolean
   created: number
+  updated: number
+  skipped: number
   failed: number
   total: number
   errors?: { row: number; error: string }[]
-  results?: { row: number; job_code: string; success: boolean; error?: string }[]
+  results?: { row: number; job_code: string; success: boolean; action?: 'created' | 'updated' | 'skipped'; error?: string }[]
 }
 
 export default function ImportJobsPage() {
@@ -116,8 +148,8 @@ export default function ImportJobsPage() {
   const downloadTemplate = () => {
     const BOM = '﻿'
     const csv = BOM + [ALL_COLS.join(','),
-      'JOB101,โครงการก่อสร้าง A,Construction Project A,บริษัท ABC จำกัด,งานสร้างอาคารสำนักงาน,500000',
-      'JOB102,โครงการปรับปรุงอาคาร B,Building Renovation B,บริษัท XYZ จำกัด,,',
+      'JOB101,โครงการก่อสร้าง A,Construction Project A,บริษัท ABC จำกัด,งานสร้างอาคารสำนักงาน,500000,2026-01-15,2026-12-31,1',
+      'JOB102,โครงการปรับปรุงอาคาร B,Building Renovation B,บริษัท XYZ จำกัด,,,,,',
     ].join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
     const url  = URL.createObjectURL(blob)
@@ -150,9 +182,10 @@ export default function ImportJobsPage() {
             <ol className="text-sm text-gray-600 space-y-1 list-decimal pl-4">
               <li>ดาวน์โหลด Template แล้วกรอกข้อมูล Job Code (แก้ไขเป็นไฟล์ Excel แล้วอัปโหลด .xlsx ได้เลย ไม่ต้องแปลงกลับเป็น CSV)</li>
               <li>คอลัมน์บังคับ: <code className="text-xs bg-gray-100 px-1 rounded">{REQUIRED_COLS.join(', ')}</code></li>
-              <li>Job Code ที่นำเข้าจะผูกกับปี {year} (ปีที่เลือกไว้ในหน้า Job Codes) และต้องไม่ซ้ำกับ Job Code ที่มีอยู่แล้วในปีเดียวกัน</li>
-              <li>สถานะเริ่มต้นของทุก Job ที่นำเข้าคือ &quot;กำลังดำเนินการ&quot; — ไปปรับเป็นพัก/ปิดได้ทีหลังที่หน้า Job Codes</li>
-              <li>คอลัมน์ <code className="text-xs bg-gray-100 px-1 rounded">contract_value</code> (มูลค่างาน) เป็นตัวเลือก — เว้นว่างได้ ถ้ากรอกต้องเป็นตัวเลขไม่ติดลบ</li>
+              <li>Job Code ที่นำเข้าจะผูกกับปี {year} (ปีที่เลือกไว้ในหน้า Job Codes)</li>
+              <li>ถ้า Job Code ซ้ำกับที่มีอยู่แล้วในปีเดียวกัน จะไม่ถูกปฏิเสธ — ระบบจะ<strong>เติมเฉพาะข้อมูลที่ยังว่างอยู่</strong>ให้ (เช่น มูลค่างาน, วันที่, ลำดับ) ส่วนข้อมูลที่กรอกไว้แล้วจะไม่ถูกเขียนทับ ดังนั้นนำเข้าไฟล์เดิมซ้ำได้อย่างปลอดภัย</li>
+              <li>สถานะเริ่มต้นของ Job ที่สร้างใหม่คือ &quot;กำลังดำเนินการ&quot; — ไปปรับเป็นพัก/ปิดได้ทีหลังที่หน้า Job Codes (การนำเข้าจะไม่เปลี่ยนสถานะของ Job ที่มีอยู่แล้ว)</li>
+              <li>คอลัมน์ <code className="text-xs bg-gray-100 px-1 rounded">contract_value</code> (มูลค่างาน), <code className="text-xs bg-gray-100 px-1 rounded">start_date</code>/<code className="text-xs bg-gray-100 px-1 rounded">end_date</code> (วันที่เริ่ม/สิ้นสุด แบบ YYYY-MM-DD หรือคอลัมน์วันที่ใน Excel), และ <code className="text-xs bg-gray-100 px-1 rounded">sequence_no</code> (ลำดับ Job) เป็นตัวเลือกทั้งหมด — เว้นว่างได้</li>
               <li>นำเข้าได้สูงสุด 500 รายการต่อครั้ง</li>
             </ol>
           </div>
@@ -245,17 +278,26 @@ export default function ImportJobsPage() {
         <div className="space-y-4">
           <div className={cn(
             'card card-body',
-            result.created > 0 && result.created === result.total ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'
+            (result.failed ?? 0) === 0 && !result.errors?.length ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'
           )}>
             <div className="flex items-center gap-3 mb-3">
-              {result.created > 0 && result.created === result.total
+              {(result.failed ?? 0) === 0 && !result.errors?.length
                 ? <CheckCircle2 className="w-6 h-6 text-green-600" />
                 : <AlertCircle className="w-6 h-6 text-amber-600" />
               }
               <h3 className="text-sm font-semibold text-gray-900">
-                นำเข้าเสร็จสิ้น — สำเร็จ {result.created} / {result.total ?? rows.length} รายการ
+                นำเข้าเสร็จสิ้น — {result.total ?? rows.length} รายการ
               </h3>
             </div>
+
+            {!result.errors?.length && (
+              <div className="flex flex-wrap gap-4 text-xs text-gray-600 mb-1">
+                <span>สร้างใหม่ <strong className="text-gray-900">{result.created}</strong></span>
+                <span>เติมข้อมูลที่ขาด <strong className="text-gray-900">{result.updated}</strong></span>
+                <span>ข้อมูลครบอยู่แล้ว (ไม่เปลี่ยนแปลง) <strong className="text-gray-900">{result.skipped}</strong></span>
+                {(result.failed ?? 0) > 0 && <span className="text-red-600">ล้มเหลว <strong>{result.failed}</strong></span>}
+              </div>
+            )}
 
             {!!result.errors?.length && (
               <div className="mt-1 space-y-1">

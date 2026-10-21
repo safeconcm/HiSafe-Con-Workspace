@@ -9,6 +9,26 @@ import {
   serverError, writeAuditLog, escapeForOrFilter,
 } from '@/lib/api-helpers'
 
+// วันที่เริ่ม/สิ้นสุด + ลำดับ Job (2026-10-21) — all optional. A date column
+// stores 'YYYY-MM-DD' or null; an empty string from the form means "not
+// entered", same convention as contract_value below. Shared by POST here and
+// PATCH in [id]/route.ts (small enough not to warrant a shared lib export).
+export function parseOptionalDate(raw: unknown): { ok: true; value: string | null } | { ok: false; error: string } {
+  if (raw === undefined || raw === null || raw === '') return { ok: true, value: null }
+  const s = String(raw).trim()
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s) || Number.isNaN(Date.parse(s))) {
+    return { ok: false, error: `รูปแบบวันที่ไม่ถูกต้อง: "${s}" (ต้องเป็น YYYY-MM-DD)` }
+  }
+  return { ok: true, value: s }
+}
+
+export function parseOptionalInt(raw: unknown): { ok: true; value: number | null } | { ok: false; error: string } {
+  if (raw === undefined || raw === null || raw === '') return { ok: true, value: null }
+  const n = Number(raw)
+  if (!Number.isInteger(n)) return { ok: false, error: `ลำดับ Job "${raw}" ต้องเป็นเลขจำนวนเต็ม` }
+  return { ok: true, value: n }
+}
+
 export async function GET(req: NextRequest) {
   const session = getSessionFromHeaders(req)
   if (!session) return unauthorized()
@@ -22,7 +42,7 @@ export async function GET(req: NextRequest) {
 
   let query = supabase
     .from('jobs')
-    .select('id, job_code, name_th, name_en, year, status, client_name, description, contract_value, created_at', { count: 'exact' })
+    .select('id, job_code, name_th, name_en, year, status, client_name, description, contract_value, start_date, end_date, sequence_no, created_at', { count: 'exact' })
     .eq('company_id', session.company_id)
     .eq('year', year)
     .order('job_code')
@@ -58,6 +78,18 @@ export async function POST(req: NextRequest) {
     contractValue = n
   }
 
+  // วันที่เริ่ม/สิ้นสุด + ลำดับ Job (2026-10-21, "เพิ่ม start date, end date
+  // และ ลำดับ Job ด้วย") — all optional, same "blank = not entered" rule.
+  const startDate = parseOptionalDate(body.start_date)
+  if (!startDate.ok) return badRequest(startDate.error)
+  const endDate = parseOptionalDate(body.end_date)
+  if (!endDate.ok) return badRequest(endDate.error)
+  if (startDate.value && endDate.value && startDate.value > endDate.value) {
+    return badRequest('วันที่เริ่มต้องไม่อยู่หลังวันที่สิ้นสุด')
+  }
+  const sequenceNo = parseOptionalInt(body.sequence_no)
+  if (!sequenceNo.ok) return badRequest(sequenceNo.error)
+
   const supabase = createAdminSupabaseClient()
   const year = body.year ?? new Date().getFullYear()
 
@@ -73,6 +105,9 @@ export async function POST(req: NextRequest) {
       description:    body.description?.trim() ?? null,
       client_name:    body.client_name?.trim() ?? null,
       contract_value: contractValue,
+      start_date:     startDate.value,
+      end_date:       endDate.value,
+      sequence_no:    sequenceNo.value,
       created_by:     session.id,
     })
     .select()

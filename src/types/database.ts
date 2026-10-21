@@ -220,6 +220,14 @@ export interface Job {
   status: JobStatus
   description: string | null
   client_name: string | null
+  // มูลค่างาน/วันที่เริ่ม-สิ้นสุด/ลำดับ (2026-10-21) — all optional, filled in
+  // after the Job already exists; contract_value feeds the revenue summary
+  // (src/app/api/admin/jobs/revenue-summary/route.ts), sequence_no is a
+  // free-form display-order number (NOT a unique key — see migration comment).
+  contract_value: number | null
+  start_date: string | null
+  end_date: string | null
+  sequence_no: number | null
   created_by: string | null
   created_at: string
   updated_at: string
