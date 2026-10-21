@@ -244,6 +244,7 @@ export function useJobsRevenueSummary() {
         byYear: { year: number; value: number; count: number; delta: number | null; deltaPct: number | null }[]
         byClient: { client: string; value: number; count: number }[]
         total: number; countWithValue: number; countTotal: number
+        unassignedValue: number; unassignedCount: number
       }
     },
   })

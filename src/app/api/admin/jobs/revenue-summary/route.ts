@@ -16,8 +16,23 @@
 // itself present in the data — a gap year means "no comparison", not "0").
 // The chart itself is built client-side (src/app/access/jobs/revenue/page.tsx)
 // from this same byYear/byClient data, so the numbers never disagree.
+//
+// 2026-10-22 bugfix ("มูลค่างานแยกตามปี มีแต่ปี 2026 ทั้งที่ ปี 2024 2025 ก็มี
+// ยอด ไม่แยก"): this first cut grouped by the jobs.year DB column — but that
+// column is just whatever year the Jobs page's dropdown happened to be on
+// when the row was created (src/app/access/jobs/page.tsx's handleSave posts
+// `{...form, year}` using the page's current `year` state), so practically
+// every Job in the system ends up stamped with the same recent year even
+// when it's a record of a much older project. The Jobs list's own "ปี"
+// grouping (src/lib/jobs-grouping.ts groupJobs) never uses that column for
+// this reason — it derives the real project year from the "Jxx" prefix on
+// job_code or name_th (e.g. job_code "J24034" or name_th "J25002"). Reusing
+// that exact same jobGroupCode() here is what makes this page's "ปี" match
+// what the Jobs list already shows as J24/J25/J26 groups, instead of
+// re-deriving a second, inevitably-divergent notion of "year".
 import { NextRequest } from 'next/server'
 import { getSessionFromHeaders, createAdminSupabaseClient, ok, unauthorized, serverError } from '@/lib/api-helpers'
+import { jobGroupCode, clientGroupLabel } from '@/lib/jobs-grouping'
 
 export async function GET(req: NextRequest) {
   const session = getSessionFromHeaders(req)
@@ -26,17 +41,24 @@ export async function GET(req: NextRequest) {
   const supabase = createAdminSupabaseClient()
   const { data, error } = await supabase
     .from('jobs')
-    .select('year, contract_value, client_name')
+    .select('job_code, name_th, contract_value, client_name')
     .eq('company_id', session.company_id)
 
   if (error) return serverError(error)
 
+  // Keyed by the real project year (parsed from the Jxx code), not the raw
+  // DB `year` column. `null` means no recognizable Jxx prefix — those still
+  // count toward the grand total, but can't be placed on a year axis, so
+  // they're reported separately as `unassignedValue`/`unassignedCount`
+  // rather than silently bucketed into some arbitrary year.
   const byYearMap   = new Map<number, number>()
   const byYearCount = new Map<number, number>()
   const byClientMap   = new Map<string, number>()
   const byClientCount = new Map<string, number>()
   let total = 0
   let countWithValue = 0
+  let unassignedValue = 0
+  let unassignedCount = 0
 
   for (const row of data ?? []) {
     const v = row.contract_value
@@ -45,10 +67,18 @@ export async function GET(req: NextRequest) {
     if (!Number.isFinite(n)) continue
     countWithValue++
     total += n
-    byYearMap.set(row.year, (byYearMap.get(row.year) ?? 0) + n)
-    byYearCount.set(row.year, (byYearCount.get(row.year) ?? 0) + 1)
 
-    const client = row.client_name?.trim() || 'ไม่ระบุลูกค้า'
+    const code = jobGroupCode(row) // e.g. "J24" -> project year 2024
+    const year = code ? 2000 + Number(code.slice(1)) : null
+    if (year !== null) {
+      byYearMap.set(year, (byYearMap.get(year) ?? 0) + n)
+      byYearCount.set(year, (byYearCount.get(year) ?? 0) + 1)
+    } else {
+      unassignedValue += n
+      unassignedCount++
+    }
+
+    const client = clientGroupLabel(row)
     byClientMap.set(client, (byClientMap.get(client) ?? 0) + n)
     byClientCount.set(client, (byClientCount.get(client) ?? 0) + 1)
   }
@@ -66,5 +96,8 @@ export async function GET(req: NextRequest) {
     .map(([client, value]) => ({ client, value, count: byClientCount.get(client) ?? 0 }))
     .sort((a, b) => b.value - a.value)
 
-  return ok({ byYear, byClient, total, countWithValue, countTotal: (data ?? []).length })
+  return ok({
+    byYear, byClient, total, countWithValue, countTotal: (data ?? []).length,
+    unassignedValue, unassignedCount,
+  })
 }

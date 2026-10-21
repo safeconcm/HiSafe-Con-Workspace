@@ -9,6 +9,11 @@
 // extended server-side (src/app/api/admin/jobs/revenue-summary/route.ts) to
 // also return a by-client breakdown and a year-over-year delta per year —
 // so this page and that card can never disagree on the numbers.
+//
+// 2026-10-22 bugfix: "ปี" here is the real project year parsed from the
+// Job's "Jxx" code (same as the Jobs list's own J24/J25/J26 groups, see
+// src/lib/jobs-grouping.ts), not the jobs.year DB column — see the API
+// route's comment for why those two are NOT the same thing.
 import Link from 'next/link'
 import { useJobsRevenueSummary } from '@/hooks/useAdmin'
 import { YearBarChart, ClientBarChart } from '@/components/charts/RevenueCharts'
@@ -97,6 +102,18 @@ export default function JobsRevenuePage() {
                       </td>
                     </tr>
                   ))}
+                  {/* Jobs with a value but no recognizable "Jxx" year prefix
+                      (2026-10-22 bugfix) — can't be placed on the year axis,
+                      so they're broken out here instead of being silently
+                      dropped or miscounted into some other year. */}
+                  {!!data?.unassignedCount && (
+                    <tr>
+                      <td className="text-gray-500">ไม่ระบุปี (ไม่มีรหัส Jxx)</td>
+                      <td className="text-right text-gray-500">{data.unassignedCount}</td>
+                      <td className="text-right text-gray-500">{formatTHB(data.unassignedValue)}</td>
+                      <td className="text-right text-gray-300">—</td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
