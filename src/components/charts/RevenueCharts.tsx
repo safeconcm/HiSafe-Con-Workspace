@@ -17,13 +17,19 @@
 // that wrap badly as a column label under a vertical bar, so a horizontal
 // bar (label on the left, bar + value on the right) reads far better.
 
-function formatTHBCompact(n: number): string {
-  // Short form for in-chart labels (฿1.2M instead of ฿1,234,567) — the exact
-  // value is always shown in the table below each chart, so the chart label
-  // only needs to be readable at a glance.
+// Exported (2026-10-22, "ตัวเลขมันเยอะ ให้แสดงแบบ K M") so the summary page
+// itself (src/app/access/jobs/revenue/page.tsx) can reuse this for its big
+// total and table figures, not just these in-chart labels — one compact-
+// format function, so a figure never reads differently in the chart vs. the
+// table next to it. Bumped to 2 decimal places at the M scale (was 1) for
+// that reuse: a table/total figure rounded to 1 decimal ("40.0M") can hide a
+// meaningfully different exact value in a way that's fine for a chart label
+// but misleading for the headline number, so callers that need the exact
+// value should also show it via a `title` tooltip.
+export function formatTHBCompact(n: number): string {
   const abs = Math.abs(n)
-  if (abs >= 1_000_000) return (n / 1_000_000).toLocaleString('th-TH', { maximumFractionDigits: 1 }) + 'M'
-  if (abs >= 1_000)     return (n / 1_000).toLocaleString('th-TH', { maximumFractionDigits: 0 }) + 'K'
+  if (abs >= 1_000_000) return (n / 1_000_000).toLocaleString('th-TH', { maximumFractionDigits: 2 }) + 'M'
+  if (abs >= 1_000)     return (n / 1_000).toLocaleString('th-TH', { maximumFractionDigits: 1 }) + 'K'
   return n.toLocaleString('th-TH', { maximumFractionDigits: 0 })
 }
 
