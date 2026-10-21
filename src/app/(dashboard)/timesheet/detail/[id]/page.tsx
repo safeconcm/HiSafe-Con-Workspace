@@ -104,6 +104,19 @@ export default function TimesheetDetailPage() {
             <Download className="w-4 h-4" />
             PDF
           </button>
+          {/* 2026-10-21: the "official form" PDF button existed only on the
+              employee's own month page — an admin/approver/HR viewer landing
+              here (from /approvals/timesheet or /hr/timesheet) had no way to
+              print the official company form for someone else's timesheet.
+              Same route, same API, just also wired up here. */}
+          <button
+            type="button"
+            onClick={() => window.open(`/api/pdf/timesheet/${ts.id}/official`, '_blank')}
+            className="flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-sm text-gray-600 hover:bg-gray-50"
+          >
+            <Download className="w-4 h-4" />
+            แบบฟอร์มทางการ
+          </button>
           <button
             type="button"
             onClick={() => window.open(`/api/timesheet/${ts.id}/export?format=xlsx`, '_blank')}
