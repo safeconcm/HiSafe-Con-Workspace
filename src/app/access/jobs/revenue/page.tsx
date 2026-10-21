@@ -38,7 +38,7 @@ export default function JobsRevenuePage() {
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <Coins className="w-5 h-5 text-amber-500" />
-        <h1>สรุปมูลค่างาน</h1>
+        <h1>สรุปมูลค่างาน รายปี/ลูกค้า</h1>
       </div>
 
       {isLoading ? (

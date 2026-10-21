@@ -31,16 +31,19 @@ export function groupFallbackLabel(groupBy: JobGroupBy): string {
   return groupBy === 'year' ? 'อื่นๆ' : 'ไม่ระบุลูกค้า'
 }
 
-// ลำดับ Job (2026-10-21, "เพิ่ม...ลำดับ Job ด้วย") — within a group, a Job
-// with a sequence_no sorts ahead of one without, ascending; ties (or both
-// null) fall back to job_code so this is purely additive — a group nobody
-// has assigned a ลำดับ to looks exactly like the old job_code-only sort.
+// ลำดับ Job (2026-10-21, "เพิ่ม...ลำดับ Job ด้วย"; 2026-10-22, "ลำดับ Job
+// code ควรจะเรียงอันดับมาก หรือล่าสุดขึ้นบนก่อน" — flipped to descending) —
+// within a group, a Job with a HIGHER sequence_no sorts first (the newest/
+// most-recently-numbered Job shows at the top); a Job with a sequence_no
+// still sorts ahead of one without, regardless of direction. Ties (or both
+// null) fall back to job_code, also descending, so the unassigned tail of a
+// group still reads newest-looking-code-first.
 function compareJobs(a: any, b: any): number {
   const sa = a.sequence_no, sb = b.sequence_no
-  if (sa != null && sb != null && sa !== sb) return sa - sb
+  if (sa != null && sb != null && sa !== sb) return sb - sa
   if (sa != null && sb == null) return -1
   if (sa == null && sb != null) return 1
-  return String(a.job_code ?? '').localeCompare(String(b.job_code ?? ''))
+  return String(b.job_code ?? '').localeCompare(String(a.job_code ?? ''))
 }
 
 export interface JobGroup { key: string; jobs: any[] }

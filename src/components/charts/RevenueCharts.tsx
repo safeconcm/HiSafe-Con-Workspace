@@ -33,36 +33,87 @@ export interface YearBarDatum {
   deltaPct: number | null
 }
 
+// Fixed pixel height for the bar area itself (separate from the badge/value
+// labels above and the year label below it) — 2026-10-22, "นอกจากกราฟแท่งที่
+// ทำดีแล้ว ให้เพิ่มกราฟที่ยอดกราฟแท่งด้วย": a trend line connecting each
+// bar's top needs a coordinate space it can measure itself against, which a
+// pure flex/percentage layout doesn't give you. This area is that space —
+// the bars (height: X% of BAR_AREA_PX) and the SVG overlay (viewBox 0 0 100
+// 100, stretched over the same box) both read "bar top" as the same number,
+// so the line always meets the bar exactly, however tall the chart ends up.
+const BAR_AREA_PX = 140
+
 export function YearBarChart({ data }: { data: YearBarDatum[] }) {
   if (!data.length) return null
   const max = Math.max(...data.map(d => d.value), 1)
   // Chronological left-to-right for a trend read, even though the table next
   // to it lists newest-first (matching the rest of the Jobs page's convention).
   const chrono = [...data].sort((a, b) => a.year - b.year)
+  const n = chrono.length
+  const barHeightPct = (v: number) => Math.max((v / max) * 100, 2)
 
   return (
-    <div className="flex items-end gap-3 h-48 px-2">
-      {chrono.map(d => {
-        const h = Math.max((d.value / max) * 100, 2)
-        const up   = d.deltaPct !== null && d.deltaPct > 0
-        const down  = d.deltaPct !== null && d.deltaPct < 0
-        return (
-          <div key={d.year} className="flex-1 flex flex-col items-center justify-end h-full min-w-0">
-            {d.deltaPct !== null && (
-              <span className={`text-[10px] font-medium mb-1 whitespace-nowrap ${up ? 'text-green-600' : down ? 'text-red-600' : 'text-gray-400'}`}>
-                {up ? '▲' : down ? '▼' : '–'} {Math.abs(d.deltaPct).toFixed(1)}%
-              </span>
-            )}
-            <span className="text-[10px] text-gray-500 mb-1 whitespace-nowrap">{formatTHBCompact(d.value)}</span>
+    <div className="px-2">
+      {/* badge + value labels, one column per bar */}
+      <div className="flex gap-3">
+        {chrono.map(d => {
+          const up   = d.deltaPct !== null && d.deltaPct > 0
+          const down = d.deltaPct !== null && d.deltaPct < 0
+          return (
+            <div key={d.year} className="flex-1 flex flex-col items-center min-w-0">
+              {d.deltaPct !== null ? (
+                <span className={`text-[10px] font-medium whitespace-nowrap ${up ? 'text-green-600' : down ? 'text-red-600' : 'text-gray-400'}`}>
+                  {up ? '▲' : down ? '▼' : '–'} {Math.abs(d.deltaPct).toFixed(1)}%
+                </span>
+              ) : (
+                <span className="text-[10px] text-transparent select-none">—</span>
+              )}
+              <span className="text-[10px] text-gray-500 whitespace-nowrap">{formatTHBCompact(d.value)}</span>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* bars + trend-line overlay, sharing one coordinate space */}
+      <div className="relative flex items-end gap-3 mt-1" style={{ height: BAR_AREA_PX }}>
+        {chrono.map(d => (
+          <div key={d.year} className="flex-1 flex items-end justify-center h-full min-w-0">
             <div
               className="w-full max-w-12 rounded-t-md bg-blue-600"
-              style={{ height: `${h}%` }}
+              style={{ height: `${barHeightPct(d.value)}%` }}
               title={`ปี ${d.year}: ${d.value.toLocaleString('th-TH')} บาท`}
             />
-            <span className="text-xs text-gray-600 mt-1.5 font-medium">{d.year}</span>
           </div>
-        )
-      })}
+        ))}
+        <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible" viewBox="0 0 100 100" preserveAspectRatio="none">
+          <polyline
+            points={chrono.map((d, i) => `${((i + 0.5) / n) * 100},${100 - barHeightPct(d.value)}`).join(' ')}
+            fill="none"
+            stroke="#f59e0b"
+            strokeWidth="2"
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
+        {chrono.map((d, i) => (
+          <div
+            key={d.year}
+            className="absolute w-2.5 h-2.5 rounded-full bg-amber-500 border-2 border-white shadow-sm"
+            style={{
+              left: `${((i + 0.5) / n) * 100}%`,
+              top: `${100 - barHeightPct(d.value)}%`,
+              transform: 'translate(-50%, -50%)',
+            }}
+            title={`ปี ${d.year}: ${d.value.toLocaleString('th-TH')} บาท`}
+          />
+        ))}
+      </div>
+
+      {/* year labels */}
+      <div className="flex gap-3 mt-1.5">
+        {chrono.map(d => (
+          <div key={d.year} className="flex-1 text-center text-xs text-gray-600 font-medium min-w-0">{d.year}</div>
+        ))}
+      </div>
     </div>
   )
 }

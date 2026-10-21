@@ -10,7 +10,7 @@ import { JOB_STATUS_LABEL, cn } from '@/utils'
 import { groupJobs } from '@/lib/jobs-grouping'
 import {
   Plus, Pencil, Trash2, Loader2, Briefcase, Upload, AlertTriangle, Search,
-  ChevronDown, ChevronRight, Coins, FileDown, FileSpreadsheet, FileText,
+  ChevronDown, ChevronRight, Coins, FileDown, FileSpreadsheet, FileText, BarChart3,
 } from 'lucide-react'
 import type { JobStatus } from '@/types/database'
 
@@ -284,9 +284,15 @@ export default function AdminJobsPage() {
               มูลค่างานรวม
             </div>
             {/* 2026-10-22, "เมื่อรู้มูลค่างานก็รวมสรุปทั้งหมด แยกปี แยก
-                ผู้ว่าจ้างด้วย เปรียบเทียบปี เพิ่มขึ้น หรือลดลง ทำกราฟด้วย" */}
-            <Link href="/access/jobs/revenue" className="text-xs text-blue-600 hover:underline">
-              ดูสรุป แยกปี/ลูกค้า + กราฟ →
+                ผู้ว่าจ้างด้วย เปรียบเทียบปี เพิ่มขึ้น หรือลดลง ทำกราฟด้วย";
+                re-labeled + made a more prominent icon button per "ไม่ชอบ
+                ชื่อนี้เลย ... ใช่เป็นกรอบไอคอนเด่นๆหน่อย" (2026-10-22). */}
+            <Link
+              href="/access/jobs/revenue"
+              className="flex items-center gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-100 transition-colors"
+            >
+              <BarChart3 className="w-4 h-4" />
+              สรุปมูลค่างาน รายปี/ลูกค้า
             </Link>
           </div>
           <div className="flex flex-wrap items-end gap-6">
