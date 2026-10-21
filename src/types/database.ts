@@ -84,7 +84,7 @@ export interface User {
   company_id: string
   employee_code: string
   auth_user_id: string | null
-  email: string
+  email: string | null
   first_name_th: string
   last_name_th: string
   first_name_en: string | null

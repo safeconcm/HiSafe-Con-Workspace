@@ -100,7 +100,12 @@ export default function AdminUsersPage() {
           </div>
           <div>
             <p className="text-sm font-medium text-gray-900">{fullNameTH(u)}</p>
-            <p className="text-xs text-gray-400">{u.email}</p>
+            {/* 2026-10-22: email is now optional — a user with none yet
+                can't log in, so flag that plainly rather than showing a
+                blank line (which read like a loading glitch). */}
+            {u.email
+              ? <p className="text-xs text-gray-400">{u.email}</p>
+              : <p className="text-xs text-amber-600 italic">ยังไม่มีอีเมล — ยังไม่สามารถ login</p>}
           </div>
         </div>
       </td>

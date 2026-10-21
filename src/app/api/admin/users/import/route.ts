@@ -12,7 +12,7 @@ import {
 interface ImportRow {
   company_code?:          string
   employee_code:          string
-  email:                  string
+  email:                  string | null | undefined
   first_name_th:          string
   last_name_th:           string
   first_name_en?:         string
@@ -64,6 +64,19 @@ function normalizeEmploymentStatus(raw?: string): string {
 }
 
 // findAuthUserByEmail moved to @/lib/api-helpers (shared with admin/users/route.ts).
+
+// Email is optional (2026-10-22, "พนักงานบางคนไม่มีอีเมล หรือ ยังไม่ทราบอีเมล
+// ... ก็ควรให้ลงระบบได้ แล้วค่อยเปลี่ยนใส่ที่หลัง") — a blank cell or the
+// literal "-" placeholder (same convention as clientGroupLabel in
+// jobs-grouping.ts) both mean "no email yet", not a validation error. Rows
+// with no email still get imported; they just don't get a Supabase Auth
+// account until an admin fills in a real email later via the user's edit
+// page (see PATCH /api/admin/users/[id] for the matching "create login now"
+// logic).
+function normalizeEmail(raw?: string): string | null {
+  const s = (raw ?? '').trim()
+  return s && s !== '-' ? s.toLowerCase() : null
+}
 
 /**
  * Accepts ISO (YYYY-MM-DD), YYYY/MM/DD, and the day-first D/M/YYYY format
@@ -134,7 +147,6 @@ export async function POST(req: NextRequest) {
     const idx = i + 2 // row number (1=header, 2=first data row)
 
     if (!r.employee_code?.trim()) validationErrors.push({ row: idx, error: 'employee_code ว่าง' })
-    if (!r.email?.trim())         validationErrors.push({ row: idx, error: 'email ว่าง' })
     if (!r.first_name_th?.trim()) validationErrors.push({ row: idx, error: 'first_name_th ว่าง' })
     if (!r.last_name_th?.trim())  validationErrors.push({ row: idx, error: 'last_name_th ว่าง' })
     if (!r.hire_date?.trim())     validationErrors.push({ row: idx, error: 'hire_date ว่าง' })
@@ -146,9 +158,15 @@ export async function POST(req: NextRequest) {
       validationErrors.push({ row: idx, error: `company_code "${r.company_code}" ไม่ถูกต้อง (ต้องเป็น ${[...companyByCode.keys()].join(' หรือ ')})` })
     }
 
-    if (r.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r.email)) {
+    const normEmail = normalizeEmail(r.email)
+    if (normEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normEmail)) {
       validationErrors.push({ row: idx, error: `email "${r.email}" ไม่ถูกต้อง` })
     }
+    // Write the normalized value back so every later step (dup checks, bulk
+    // create) sees the same "blank/'-' → null" value instead of re-deriving
+    // it — a blank/'-' row.email becomes null here, a real email becomes
+    // its trimmed lowercase form.
+    ;(r as any).email = normEmail
 
     // Normalize hire_date in place (accepts YYYY-MM-DD, YYYY/MM/DD, D/M/YYYY)
     // so the rest of the pipeline only ever sees ISO dates.
@@ -187,8 +205,10 @@ export async function POST(req: NextRequest) {
       validationErrors.push({ row: idx, error: `base_salary "${r.base_salary}" ต้องเป็นตัวเลข` })
     }
 
-    // Duplicate check within file (employee_code is unique per company)
-    const emailKey = r.email?.toLowerCase()
+    // Duplicate check within file (employee_code is unique per company).
+    // Rows with no email (null, 2026-10-22) are exempt from this check —
+    // any number of rows can have "no email yet".
+    const emailKey = r.email ?? undefined
     const codeKey  = `${companyCode}:${r.employee_code?.toUpperCase()}`
     if (emailKey && emailSet.has(emailKey)) validationErrors.push({ row: idx, error: `email "${r.email}" ซ้ำในไฟล์` })
     if (codeKey  && codeSet.has(codeKey))  validationErrors.push({ row: idx, error: `employee_code "${r.employee_code}" ซ้ำในไฟล์ (บริษัทเดียวกัน)` })
@@ -196,14 +216,16 @@ export async function POST(req: NextRequest) {
     if (codeKey)  codeSet.add(codeKey)
   }
 
-  // Check against DB for existing emails
-  const emails = rows.map(r => r.email?.toLowerCase()).filter(Boolean)
-  const { data: existingUsers } = await supabase
-    .from('users').select('email').in('email', emails)
+  // Check against DB for existing emails (rows with no email are naturally
+  // excluded by .filter(Boolean) below)
+  const emails = rows.map(r => r.email).filter(Boolean) as string[]
+  const { data: existingUsers } = emails.length
+    ? await supabase.from('users').select('email').in('email', emails)
+    : { data: [] as { email: string }[] }
   const existingEmails = new Set((existingUsers ?? []).map((u: any) => u.email.toLowerCase()))
 
   for (let i = 0; i < rows.length; i++) {
-    if (existingEmails.has(rows[i].email?.toLowerCase())) {
+    if (rows[i].email && existingEmails.has(rows[i].email as string)) {
       validationErrors.push({ row: i + 2, error: `email "${rows[i].email}" มีในระบบแล้ว` })
     }
   }
@@ -245,32 +267,37 @@ export async function POST(req: NextRequest) {
 
     let reusedExistingAuthUser = false
     try {
-      // Create auth user
-      const defaultPassword = `Connex${r.employee_code}2024!`
-      const { data: authData, error: authErr } = await supabase.auth.admin.createUser({
-        email:         r.email.trim().toLowerCase(),
-        password:      defaultPassword,
-        email_confirm: true,
-      })
-
-      let authUserId: string
-      if (authErr) {
-        console.error('[import] auth.admin.createUser error', {
-          email: r.email, message: authErr.message, status: (authErr as any).status, code: (authErr as any).code,
+      // Create auth user — only if this row has an email. A row with no
+      // email (2026-10-22, "ยังไม่ทราบอีเมล ... ก็ควรให้ลงระบบได้") still
+      // gets a profile row below, just with no login until an admin adds a
+      // real email later via the edit page.
+      let authUserId: string | null = null
+      if (r.email) {
+        const defaultPassword = `Connex${r.employee_code}2024!`
+        const { data: authData, error: authErr } = await supabase.auth.admin.createUser({
+          email:         r.email,
+          password:      defaultPassword,
+          email_confirm: true,
         })
-        // Already-registered auth account with no profile row (e.g. a prior
-        // Google OAuth attempt) — reuse it instead of failing the row.
-        if (/already.*(registered|exists)/i.test(authErr.message)) {
-          const existing = await findAuthUserByEmail(supabase, r.email)
-          console.error('[import] findAuthUserByEmail result', { email: r.email, existing })
-          if (!existing) throw new Error(authErr.message)
-          authUserId = existing.id
-          reusedExistingAuthUser = true
+
+        if (authErr) {
+          console.error('[import] auth.admin.createUser error', {
+            email: r.email, message: authErr.message, status: (authErr as any).status, code: (authErr as any).code,
+          })
+          // Already-registered auth account with no profile row (e.g. a prior
+          // Google OAuth attempt) — reuse it instead of failing the row.
+          if (/already.*(registered|exists)/i.test(authErr.message)) {
+            const existing = await findAuthUserByEmail(supabase, r.email)
+            console.error('[import] findAuthUserByEmail result', { email: r.email, existing })
+            if (!existing) throw new Error(authErr.message)
+            authUserId = existing.id
+            reusedExistingAuthUser = true
+          } else {
+            throw new Error(authErr.message)
+          }
         } else {
-          throw new Error(authErr.message)
+          authUserId = authData.user.id
         }
-      } else {
-        authUserId = authData.user.id
       }
 
       // Create profile
@@ -280,7 +307,7 @@ export async function POST(req: NextRequest) {
           company_id:    companyId,
           employee_code: r.employee_code.trim().toUpperCase(),
           auth_user_id:  authUserId,
-          email:         r.email.trim().toLowerCase(),
+          email:         r.email,
           first_name_th: r.first_name_th.trim(),
           last_name_th:  r.last_name_th.trim(),
           first_name_en: r.first_name_en?.trim() ?? null,
@@ -292,7 +319,7 @@ export async function POST(req: NextRequest) {
           phone:         r.phone?.trim()          ?? null,
           status:        'active',
           imported_at:   new Date().toISOString(),
-          must_change_password: true,
+          must_change_password: !!authUserId,
         })
         .select('id')
         .single()
@@ -300,7 +327,7 @@ export async function POST(req: NextRequest) {
       if (userErr) {
         // Only clean up the auth account if we created it fresh this run —
         // never delete a pre-existing auth account we merely reused.
-        if (!reusedExistingAuthUser) await supabase.auth.admin.deleteUser(authUserId)
+        if (authUserId && !reusedExistingAuthUser) await supabase.auth.admin.deleteUser(authUserId)
         throw new Error(userErr.message)
       }
 
@@ -376,8 +403,9 @@ export async function POST(req: NextRequest) {
       // 2026-10-20, "ข้อ 6" — same fix as the single-create route: the
       // deterministic `Connex${employee_code}2024!` password above is never
       // shown anywhere, so without this the imported employee has no way to
-      // learn it. Best-effort, doesn't fail the row if it errors.
-      await sendSetPasswordEmail(r.email)
+      // learn it. Best-effort, doesn't fail the row if it errors. Skipped
+      // for rows with no email (2026-10-22) — nothing to send yet.
+      if (r.email) await sendSetPasswordEmail(r.email)
 
       results.push({ row: idx, employee_code: r.employee_code, success: true })
       successCount++

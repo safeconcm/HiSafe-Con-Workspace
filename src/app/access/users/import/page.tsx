@@ -15,13 +15,29 @@ import {
 } from 'lucide-react'
 import Link from 'next/link'
 
-const REQUIRED_COLS = ['company_code', 'employee_code', 'email', 'first_name_th', 'last_name_th', 'hire_date']
+// email is intentionally NOT in REQUIRED_COLS (2026-10-22, "พนักงานบางคนไม่มี
+// อีเมล หรือ ยังไม่ทราบอีเมล ... ก็ควรให้ลงระบบได้ แล้วค่อยเปลี่ยนใส่ที่หลัง") —
+// a blank cell or "-" is accepted and just means "no login yet"; the API
+// (src/app/api/admin/users/import/route.ts) creates the profile row without
+// a Supabase Auth account for those rows, and an admin can fill in a real
+// email later at the user's edit page to enable login.
+const REQUIRED_COLS = ['company_code', 'employee_code', 'first_name_th', 'last_name_th', 'hire_date']
+// 'no' — plain running row number (2026-10-22, "ควรใส่ No. ลำดับพนักงานด้วย")
+// for HR's own bookkeeping/reference while filling in the sheet; it's not
+// required and not used for anything by the import itself (employee_code is
+// still the real identifier), so it's deliberately left out of
+// REQUIRED_COLS — a blank or out-of-order "No." never blocks an import.
 const ALL_COLS = [
-  'company_code','employee_code','email','first_name_th','last_name_th',
+  'no','company_code','employee_code','email','first_name_th','last_name_th',
   'first_name_en','last_name_en','position_th','position_en','department',
   'role','hire_date','phone','annual_leave_balance','sick_leave_balance','personal_leave_balance',
   'employment_status','probation_days','base_salary',
 ]
+// Display label for the 'no' column's header — everything else in ALL_COLS
+// doubles as both the lowercase key parsed from the file and the preview
+// table's <th>, but "no" alone would read oddly as a header, so give it a
+// one-off display override.
+const COL_LABEL: Record<string, string> = { no: 'No.' }
 
 function parseCSV(text: string): { headers: string[]; rows: Record<string, string>[] } {
   const lines = text.trim().split('\n').map(l => l.trim()).filter(Boolean)
@@ -138,9 +154,10 @@ export default function ImportUsersPage() {
 
   const downloadTemplate = () => {
     const BOM = '\uFEFF'
-    const csv = BOM + [ALL_COLS.join(','),
-      'SAFECON,SC-001,somchai@safecon.co.th,สมชาย,ใจดี,Somchai,Jaidee,วิศวกร,Engineer,Engineering,employee,2022-01-01,0812345678,8,28,4,ประจำ,,25000',
-      'HIGHCON,HC-001,somsri@highcon.co.th,สมศรี,มีสุข,Somsri,Meesuk,ธุรการ,Admin,Administration,employee,2023-03-15,0898765432,8,28,4,ทดลองงาน,120,18000',
+    const header = ALL_COLS.map(c => COL_LABEL[c] ?? c).join(',')
+    const csv = BOM + [header,
+      '1,SAFECON,SC-001,somchai@safecon.co.th,สมชาย,ใจดี,Somchai,Jaidee,วิศวกร,Engineer,Engineering,employee,2022-01-01,0812345678,8,28,4,ประจำ,,25000',
+      '2,HIGHCON,HC-001,somsri@highcon.co.th,สมศรี,มีสุข,Somsri,Meesuk,ธุรการ,Admin,Administration,employee,2023-03-15,0898765432,8,28,4,ทดลองงาน,120,18000',
     ].join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
     const url  = URL.createObjectURL(blob)
@@ -172,7 +189,9 @@ export default function ImportUsersPage() {
             </div>
             <ol className="text-sm text-gray-600 space-y-1 list-decimal pl-4">
               <li>ดาวน์โหลด Template แล้วกรอกข้อมูลพนักงาน (แก้ไขเป็นไฟล์ Excel แล้วอัปโหลด .xlsx ได้เลย ไม่ต้องแปลงกลับเป็น CSV)</li>
+              <li>No.: ลำดับพนักงานในไฟล์ สำหรับดูอ้างอิงเฉยๆ ไม่บังคับและไม่มีผลต่อการนำเข้า (ตัวที่ใช้อ้างอิงจริงคือ employee_code)</li>
               <li>คอลัมน์บังคับ: <code className="text-xs bg-gray-100 px-1 rounded">{REQUIRED_COLS.join(', ')}</code></li>
+              <li>email: ไม่บังคับ — ถ้าพนักงานยังไม่มีอีเมลหรือยังไม่ทราบ เว้นว่างหรือใส่ &quot;-&quot; ได้เลย ระบบจะนำเข้าให้ปกติ เพียงแต่ยังไม่สามารถ login ได้ แล้วค่อยกลับมาใส่อีเมลทีหลังที่หน้าแก้ไขผู้ใช้ เพื่อเปิดใช้งาน login ให้พนักงานคนนั้น</li>
               <li>company_code: SAFECON หรือ HIGHCON — ใส่ต่อแถวได้ นำเข้าทั้ง 2 บริษัทพร้อมกันในไฟล์เดียวได้</li>
               <li>วันที่ใช้รูปแบบ YYYY-MM-DD เช่น 2022-01-15 (รองรับ D/M/YYYY เช่น 26/6/2026 ด้วย — ถ้าอัปโหลดจาก Excel และคอลัมน์เป็นชนิดวันที่ ระบบแปลงให้อัตโนมัติ)</li>
               <li>role: employee/พนักงาน, supervisor/หัวหน้างาน, hr/ฝ่ายบุคคล, admin/ผู้ดูแลระบบ (พิมพ์ไทยหรืออังกฤษก็ได้ ไม่กรอก = employee)</li>
@@ -232,7 +251,7 @@ export default function ImportUsersPage() {
                 <thead>
                   <tr>
                     {ALL_COLS.filter(c => headers.includes(c)).map(h => (
-                      <th key={h}>{h}</th>
+                      <th key={h}>{COL_LABEL[h] ?? h}</th>
                     ))}
                   </tr>
                 </thead>

@@ -13,7 +13,11 @@ import Link             from 'next/link'
 
 const schema = z.object({
   employee_code: z.string().min(1, 'กรุณากรอกรหัสพนักงาน'),
-  email:         z.string().email('อีเมลไม่ถูกต้อง'),
+  // Optional (2026-10-22, "พนักงานบางคนไม่มีอีเมล ... ก็ควรให้ลงระบบได้ แล้ว
+  // ค่อยเปลี่ยนใส่ที่หลัง") — blank is fine; a non-blank value still has to
+  // look like a real email. Admin fills it in later at /access/users/[id]
+  // to enable login for this employee.
+  email: z.union([z.string().email('อีเมลไม่ถูกต้อง'), z.literal('')]).optional(),
   first_name_th: z.string().min(1, 'กรุณากรอกชื่อ'),
   last_name_th:  z.string().min(1, 'กรุณากรอกนามสกุล'),
   first_name_en: z.string().optional(),
@@ -75,8 +79,8 @@ export default function NewUserPage() {
             <FormField label="รหัสพนักงาน" error={errors.employee_code?.message} required>
               <input {...register('employee_code')} className="form-input" placeholder="SC-001" />
             </FormField>
-            <FormField label="อีเมล" error={errors.email?.message} required>
-              <input {...register('email')} type="email" className="form-input" placeholder="name@company.com" />
+            <FormField label="อีเมล" error={errors.email?.message}>
+              <input {...register('email')} type="email" className="form-input" placeholder="name@company.com (ถ้ายังไม่มีเว้นว่างได้ ใส่ทีหลังได้)" />
             </FormField>
             <FormField label="ชื่อ (ไทย)" error={errors.first_name_th?.message} required>
               <input {...register('first_name_th')} className="form-input" placeholder="สมชาย" />

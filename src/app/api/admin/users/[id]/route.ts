@@ -17,6 +17,7 @@ import {
   getSessionFromHeaders, createAdminSupabaseClient,
   ok, badRequest, unauthorized, forbidden,
   notFound, serverError, writeAuditLog,
+  findAuthUserByEmail, sendSetPasswordEmail,
 } from '@/lib/api-helpers'
 
 type Ctx = { params: Promise<{ id: string }> }
@@ -142,29 +143,81 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   // linked Supabase Auth account, so changing it needs a format check, a
   // uniqueness check, and — if the user has ever logged in (auth_user_id set)
   // — an update to auth.users too, otherwise login would break silently.
+  //
+  // 2026-10-22, "ตารางเป็นช่อง หรือ - ก็ควรให้ลงระบบได้ แล้วค่อยเปลี่ยนใส่
+  // ที่หลัง ก็สามารถ login เข้าระบบได้" — email is now optional at creation
+  // (see POST /api/admin/users and the import route), so this is the other
+  // half: a user created with no email has auth_user_id === null, and
+  // filling in a real email here for the first time must CREATE a brand-new
+  // Supabase Auth account (not just update one that doesn't exist yet),
+  // link it via auth_user_id, and send the set-password email — mirroring
+  // exactly what happens at single-create time.
+  let sentSetPasswordEmail = false
   if ('email' in body) {
-    const newEmail = String(body.email ?? '').trim().toLowerCase()
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
-      return badRequest('รูปแบบอีเมลไม่ถูกต้อง')
-    }
-    if (newEmail !== existing.email) {
-      const { data: dupe } = await supabase
-        .from('users').select('id').eq('email', newEmail).neq('id', params.id).maybeSingle()
-      if (dupe) return badRequest('มีผู้ใช้อื่นใช้อีเมลนี้อยู่แล้ว')
-
+    const raw = String(body.email ?? '').trim()
+    if (!raw || raw === '-') {
+      // Clearing email back out. Only allowed for a user who never had a
+      // login wired up — pulling the email out from under an active login
+      // would orphan the Supabase Auth account silently, so that's blocked.
       if (existing.auth_user_id) {
-        const { error: authErr } = await supabase.auth.admin.updateUserById(
-          existing.auth_user_id, { email: newEmail, email_confirm: true }
-        )
-        if (authErr) return serverError(new Error(`เปลี่ยนอีเมลไม่สำเร็จ (ระบบล็อกอิน): ${authErr.message}`))
+        return badRequest('ผู้ใช้นี้มีบัญชี login อยู่แล้ว ไม่สามารถลบอีเมลออกได้ (เปลี่ยนเป็นอีเมลอื่นแทนได้)')
       }
-      updates.email = newEmail
+      updates.email = null
+    } else {
+      const newEmail = raw.toLowerCase()
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+        return badRequest('รูปแบบอีเมลไม่ถูกต้อง')
+      }
+      if (newEmail !== existing.email) {
+        const { data: dupe } = await supabase
+          .from('users').select('id').eq('email', newEmail).neq('id', params.id).maybeSingle()
+        if (dupe) return badRequest('มีผู้ใช้อื่นใช้อีเมลนี้อยู่แล้ว')
+
+        if (existing.auth_user_id) {
+          // Already has a login — just update its email.
+          const { error: authErr } = await supabase.auth.admin.updateUserById(
+            existing.auth_user_id, { email: newEmail, email_confirm: true }
+          )
+          if (authErr) return serverError(new Error(`เปลี่ยนอีเมลไม่สำเร็จ (ระบบล็อกอิน): ${authErr.message}`))
+        } else {
+          // First email ever set on this user — create their login now.
+          // Reuse any orphaned auth account for this email (e.g. a prior
+          // "Login with Google" attempt), same fallback as the create/import
+          // routes, instead of failing the save.
+          const { data: authData, error: authErr } = await supabase.auth.admin.createUser({
+            email: newEmail,
+            password: `Connex${Math.random().toString(36).slice(2, 10)}!`,
+            email_confirm: true,
+          })
+          let newAuthUserId: string
+          if (authErr) {
+            if (/already.*(registered|exists)/i.test(authErr.message)) {
+              const existingAuth = await findAuthUserByEmail(supabase, newEmail)
+              if (!existingAuth) return serverError(new Error(`สร้างบัญชี login ไม่สำเร็จ: ${authErr.message}`))
+              newAuthUserId = existingAuth.id
+            } else {
+              return serverError(new Error(`สร้างบัญชี login ไม่สำเร็จ: ${authErr.message}`))
+            }
+          } else {
+            newAuthUserId = authData.user.id
+          }
+          updates.auth_user_id = newAuthUserId
+          updates.must_change_password = true
+          sentSetPasswordEmail = true
+        }
+        updates.email = newEmail
+      }
     }
   }
 
   const { data: updated, error } = await supabase
     .from('users').update(updates).eq('id', params.id).select().single()
   if (error) return serverError(error)
+
+  // Sent only after the row update itself succeeds, so a DB failure never
+  // leaves the employee with a set-password email for an account that
+  // doesn't actually exist yet on their profile.
+  if (sentSetPasswordEmail) await sendSetPasswordEmail(updated.email)
 
   await writeAuditLog({
     session, action: 'user.updated', entity_type: 'user',

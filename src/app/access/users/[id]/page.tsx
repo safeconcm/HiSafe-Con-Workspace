@@ -279,7 +279,9 @@ export default function UserDetailPage() {
           </div>
           <div>
             <h1 className="text-lg font-semibold">{fullNameTH(user)}</h1>
-            <p className="text-sm text-gray-400">{user.employee_code} · {user.email}</p>
+            <p className="text-sm text-gray-400">
+              {user.employee_code} · {user.email ?? <span className="text-amber-600 italic">ยังไม่มีอีเมล</span>}
+            </p>
           </div>
         </div>
         {/* 1-page profile summary PDF — renders on demand via
@@ -379,8 +381,21 @@ export default function UserDetailPage() {
               </div>
               <div>
                 <label className="form-label">อีเมล (ใช้ login ด้วย)</label>
-                <input type="email" value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} className="form-input disabled:bg-gray-50 disabled:text-gray-500" disabled={!isAdmin} />
-                {isAdmin && <p className="text-xs text-amber-600 mt-1">เปลี่ยนแล้วต้องใช้อีเมลใหม่ login ครั้งถัดไป</p>}
+                <input
+                  type="email" value={form.email}
+                  placeholder={!user.email ? 'ยังไม่มีอีเมล — กรอกเพื่อเปิดใช้งาน login' : undefined}
+                  onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                  className="form-input disabled:bg-gray-50 disabled:text-gray-500" disabled={!isAdmin}
+                />
+                {isAdmin && (
+                  user.email
+                    ? <p className="text-xs text-amber-600 mt-1">เปลี่ยนแล้วต้องใช้อีเมลใหม่ login ครั้งถัดไป</p>
+                    // 2026-10-22: this user has no login yet (auth_user_id
+                    // null) — saving a real email here for the first time
+                    // creates it, so the note here is forward-looking rather
+                    // than the "already changed" one above.
+                    : <p className="text-xs text-amber-600 mt-1">กรอกอีเมลแล้วกด &quot;บันทึก&quot; เพื่อสร้างบัญชี login และส่งอีเมลตั้งรหัสผ่านให้พนักงานคนนี้</p>
+                )}
               </div>
               <div>
                 <label className="form-label">วันเริ่มงาน</label>

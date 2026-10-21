@@ -53,9 +53,16 @@ export function useCreateUser() {
       if (!res.ok) throw new Error(json.error)
       return json.data
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ['admin-users'] })
-      toast.success('เพิ่มผู้ใช้แล้ว', 'ระบบส่งอีเมลตั้งรหัสผ่านให้ผู้ใช้แล้ว')
+      // 2026-10-22: a user created with no email yet (see src/app/access/
+      // users/new/page.tsx) has nothing for sendSetPasswordEmail to send to
+      // — only claim that in the toast when the created row actually has
+      // an email.
+      toast.success(
+        'เพิ่มผู้ใช้แล้ว',
+        data?.email ? 'ระบบส่งอีเมลตั้งรหัสผ่านให้ผู้ใช้แล้ว' : 'ยังไม่มีอีเมล — เพิ่มทีหลังได้ที่หน้าแก้ไขผู้ใช้ เพื่อเปิดใช้งาน login',
+      )
     },
     onError: (e: Error) => toast.error('ไม่สามารถเพิ่มผู้ใช้', e.message),
   })

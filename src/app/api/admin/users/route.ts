@@ -103,35 +103,48 @@ export async function POST(req: NextRequest) {
     password,
   } = body
 
-  if (!employee_code || !email || !first_name_th || !last_name_th || !hire_date) {
-    return badRequest('employee_code, email, first_name_th, last_name_th, hire_date required')
+  if (!employee_code || !first_name_th || !last_name_th || !hire_date) {
+    return badRequest('employee_code, first_name_th, last_name_th, hire_date required')
   }
+
+  // Email is optional (2026-10-22, "พนักงานบางคนไม่มีอีเมล หรือ ยังไม่ทราบ
+  // อีเมล ... ก็ควรให้ลงระบบได้ แล้วค่อยเปลี่ยนใส่ที่หลัง") — a blank or '-'
+  // email means "no login yet"; the employee's profile is created without a
+  // Supabase Auth account, and an admin can add a real email later via
+  // PATCH /api/admin/users/[id], which is what actually creates the login
+  // (see that route for the matching logic).
+  const normalizedEmail = email && String(email).trim() && String(email).trim() !== '-'
+    ? String(email).trim().toLowerCase()
+    : null
 
   const supabase   = createAdminSupabaseClient()
   const currentYear = new Date().getFullYear()
 
-  // 1. Create Supabase Auth user. If the email already has an auth account
-  // but no `users` profile row (e.g. a prior "Login with Google" attempt
-  // before HR added them as an employee), reuse that auth id instead of
-  // failing — this is the same fix applied to the CSV/Excel import route.
-  let authUserId: string
+  // 1. Create Supabase Auth user — only if an email was given. If the email
+  // already has an auth account but no `users` profile row (e.g. a prior
+  // "Login with Google" attempt before HR added them as an employee), reuse
+  // that auth id instead of failing — this is the same fix applied to the
+  // CSV/Excel import route.
+  let authUserId: string | null = null
   let reusedExistingAuthUser = false
-  const { data: authData, error: authErr } = await supabase.auth.admin.createUser({
-    email,
-    password: password ?? `Connex${Math.random().toString(36).slice(2, 10)}!`,
-    email_confirm: true,
-  })
-  if (authErr) {
-    if (/already.*(registered|exists)/i.test(authErr.message)) {
-      const existing = await findAuthUserByEmail(supabase, email)
-      if (!existing) return badRequest('อีเมลนี้มีในระบบแล้ว')
-      authUserId = existing.id
-      reusedExistingAuthUser = true
+  if (normalizedEmail) {
+    const { data: authData, error: authErr } = await supabase.auth.admin.createUser({
+      email: normalizedEmail,
+      password: password ?? `Connex${Math.random().toString(36).slice(2, 10)}!`,
+      email_confirm: true,
+    })
+    if (authErr) {
+      if (/already.*(registered|exists)/i.test(authErr.message)) {
+        const existing = await findAuthUserByEmail(supabase, normalizedEmail)
+        if (!existing) return badRequest('อีเมลนี้มีในระบบแล้ว')
+        authUserId = existing.id
+        reusedExistingAuthUser = true
+      } else {
+        return serverError(authErr)
+      }
     } else {
-      return serverError(authErr)
+      authUserId = authData.user.id
     }
-  } else {
-    authUserId = authData.user.id
   }
 
   // 2. Insert user profile
@@ -141,7 +154,7 @@ export async function POST(req: NextRequest) {
       company_id:    session.company_id,
       employee_code: employee_code.trim().toUpperCase(),
       auth_user_id:  authUserId,
-      email:         email.trim().toLowerCase(),
+      email:         normalizedEmail,
       first_name_th, last_name_th,
       first_name_en: first_name_en ?? null,
       last_name_en:  last_name_en  ?? null,
@@ -152,7 +165,7 @@ export async function POST(req: NextRequest) {
       hire_date,
       phone:         phone          ?? null,
       status:        'active',
-      must_change_password: true,
+      must_change_password: !!authUserId,
     })
     .select()
     .single()
@@ -161,7 +174,7 @@ export async function POST(req: NextRequest) {
     // Rollback auth user — but only if we created it fresh this run; a
     // reused orphaned account should be left alone (it existed before
     // this request and doesn't belong to us to delete).
-    if (!reusedExistingAuthUser) await supabase.auth.admin.deleteUser(authUserId)
+    if (authUserId && !reusedExistingAuthUser) await supabase.auth.admin.deleteUser(authUserId)
     if (userErr.message.includes('unique')) return badRequest('รหัสพนักงานนี้มีในระบบแล้ว')
     return serverError(userErr)
   }
@@ -201,7 +214,9 @@ export async function POST(req: NextRequest) {
   // password generated above is otherwise unrecoverable, so send the new
   // hire a real set-password link right away instead of leaving them with
   // no way to log in until they guess to click "ลืมรหัสผ่าน" themselves.
-  await sendSetPasswordEmail(user.email)
+  // Skipped entirely when there's no email yet (2026-10-22) — there's no
+  // login to set a password for until an admin fills in an email later.
+  if (user.email) await sendSetPasswordEmail(user.email)
 
   return created(user)
 }

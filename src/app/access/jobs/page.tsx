@@ -8,6 +8,7 @@ import * as XLSX            from 'xlsx'
 import { useJobs, useCreateJob, useUpdateJob, useDeleteJob, useJobsRevenueSummary } from '@/hooks/useAdmin'
 import { JOB_STATUS_LABEL, cn } from '@/utils'
 import { groupJobs } from '@/lib/jobs-grouping'
+import { formatTHBCompact } from '@/components/charts/RevenueCharts'
 import {
   Plus, Pencil, Trash2, Loader2, Briefcase, Upload, AlertTriangle, Search,
   ChevronDown, ChevronRight, Coins, FileDown, FileSpreadsheet, FileText, BarChart3,
@@ -20,6 +21,16 @@ import type { JobStatus } from '@/types/database'
 function formatTHB(n: number | null | undefined): string {
   if (n === null || n === undefined) return '—'
   return n.toLocaleString('th-TH', { maximumFractionDigits: 2 }) + ' บาท'
+}
+
+// Compact K/M display for this page's top มูลค่างานรวม card (2026-10-22,
+// "ยอดรวมทั้งหมด (ทุกปี) ตัวเลขมันเยอะ ให้แสดงแบบ K M") — same compact
+// formatter the /access/jobs/revenue page already uses, so the two places
+// a total ever shows up never disagree on how to shorten it. Full precision
+// stays one hover away via a `title` tooltip.
+function formatTHBShort(n: number | null | undefined): string {
+  if (n === null || n === undefined) return '—'
+  return formatTHBCompact(n) + ' บาท'
 }
 
 // วันที่เริ่ม/สิ้นสุด (2026-10-21) — DB stores 'YYYY-MM-DD'; render as Thai
@@ -298,13 +309,13 @@ export default function AdminJobsPage() {
           <div className="flex flex-wrap items-end gap-6">
             <div>
               <p className="text-xs text-gray-400">ยอดรวมทั้งหมด (ทุกปี)</p>
-              <p className="text-2xl font-semibold text-gray-900">{formatTHB(revenue.total)}</p>
+              <p className="text-2xl font-semibold text-gray-900" title={formatTHB(revenue.total)}>{formatTHBShort(revenue.total)}</p>
             </div>
             <div className="flex flex-wrap gap-4">
               {revenue.byYear.map(({ year: y, value }) => (
                 <div key={y} className="rounded-lg bg-gray-50 px-3 py-2">
                   <p className="text-xs text-gray-400">ปี {y}</p>
-                  <p className="text-sm font-medium text-gray-800">{formatTHB(value)}</p>
+                  <p className="text-sm font-medium text-gray-800" title={formatTHB(value)}>{formatTHBShort(value)}</p>
                 </div>
               ))}
             </div>
