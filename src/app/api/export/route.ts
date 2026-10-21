@@ -3,10 +3,25 @@
 // Generates Excel (.xlsx) or CSV exports for HR
 
 import { NextRequest, NextResponse } from 'next/server'
+import { deflateRawSync } from 'node:zlib'
 import {
   getSessionFromHeaders, createAdminSupabaseClient,
   unauthorized, forbidden, badRequest, serverError, isHROrAdmin,
 } from '@/lib/api-helpers'
+
+// 2026-10-22, "ไฟล์เอกสาร pdf csv excel ขอเป็นไฟล์ size ไม่เกิน 1 mb เพื่อ
+// สะดวก รวดเร็วในการโหลด" — a standing standard, not a fix for any file
+// that's actually over 1MB yet (checked: logos/forms under 150KB, these
+// exports are currently small). Logged here so the size is checked and
+// visible on every export, not just assumed, so a regression in the future
+// (far more rows, a larger embedded asset) gets caught the moment it
+// happens instead of silently shipping a slow download.
+const SIZE_BUDGET_BYTES = 1_000_000
+function warnIfOverBudget(label: string, byteLength: number) {
+  if (byteLength > SIZE_BUDGET_BYTES) {
+    console.warn(`[export] ${label} is ${(byteLength / 1_000_000).toFixed(2)}MB — over the 1MB target`)
+  }
+}
 
 // Pre-compute CRC32 table once at module level
 const CRC32_TABLE = (() => {
@@ -73,21 +88,27 @@ function buildXLSX(headers: string[], rows: (string|number|null)[][]): Buffer {
 <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
 </Relationships>`
 
-  // Build ZIP manually (XLSX = ZIP)
+  // Build ZIP manually (XLSX = ZIP). 2026-10-22: switched from "store"
+  // (method=0, no compression) to real DEFLATE (method=8), via Node's
+  // built-in zlib — no new dependency, and this XML content (the worksheet
+  // especially, which is the bulk of a large export) is highly repetitive
+  // text that typically compresses 80-90%, which is what actually keeps a
+  // several-thousand-row export under the 1MB target as data grows, rather
+  // than just hoping row counts stay small.
   function zipEntry(name: string, data: Buffer): Buffer {
-    const nameBytes  = Buffer.from(name, 'utf8')
-    const crc        = crc32Global(data)
-    const compressed = data // Store uncompressed (method=0) for simplicity
+    const nameBytes   = Buffer.from(name, 'utf8')
+    const crc         = crc32Global(data)
+    const compressed  = deflateRawSync(data)
     const local = Buffer.alloc(30 + nameBytes.length)
     local.writeUInt32LE(0x04034b50, 0)  // signature
     local.writeUInt16LE(20, 4)          // version needed
     local.writeUInt16LE(0, 6)           // flags
-    local.writeUInt16LE(0, 8)           // compression (store)
+    local.writeUInt16LE(8, 8)           // compression (deflate)
     local.writeUInt16LE(0, 10)          // mod time
     local.writeUInt16LE(0, 12)          // mod date
-    local.writeUInt32LE(crc, 14)        // crc32
-    local.writeUInt32LE(data.length, 18) // compressed size
-    local.writeUInt32LE(data.length, 22) // uncompressed size
+    local.writeUInt32LE(crc, 14)              // crc32
+    local.writeUInt32LE(compressed.length, 18) // compressed size
+    local.writeUInt32LE(data.length, 22)       // uncompressed size
     local.writeUInt16LE(nameBytes.length, 26) // filename length
     local.writeUInt16LE(0, 28)          // extra length
     nameBytes.copy(local, 30)
@@ -95,13 +116,16 @@ function buildXLSX(headers: string[], rows: (string|number|null)[][]): Buffer {
   }
 
 
-  const files: { name: string; data: Buffer; offset: number }[] = []
+  const files: { name: string; data: Buffer; compressedLength: number; offset: number }[] = []
   let offset = 0
 
   function addFile(name: string, content: string) {
     const data  = Buffer.from(content, 'utf8')
     const entry = zipEntry(name, data)
-    files.push({ name, data, offset })
+    // entry = 30-byte local header + nameBytes + compressed data, so the
+    // compressed payload length is whatever's left after those two parts.
+    const compressedLength = entry.length - 30 - Buffer.byteLength(name, 'utf8')
+    files.push({ name, data, compressedLength, offset })
     offset += entry.length
     return entry
   }
@@ -115,16 +139,16 @@ function buildXLSX(headers: string[], rows: (string|number|null)[][]): Buffer {
   ]
 
   // Central directory
-  const cdEntries = files.map(({ name, data, offset: off }) => {
+  const cdEntries = files.map(({ name, data, compressedLength, offset: off }) => {
     const nameBytes = Buffer.from(name, 'utf8')
     const crc = crc32Global(data)
     const cd = Buffer.alloc(46 + nameBytes.length)
     cd.writeUInt32LE(0x02014b50, 0)
     cd.writeUInt16LE(20, 4); cd.writeUInt16LE(20, 6)
-    cd.writeUInt16LE(0, 8); cd.writeUInt16LE(0, 10)
+    cd.writeUInt16LE(0, 8); cd.writeUInt16LE(8, 10) // compression method (deflate)
     cd.writeUInt16LE(0, 12); cd.writeUInt16LE(0, 14)
     cd.writeUInt32LE(crc, 16)
-    cd.writeUInt32LE(data.length, 20)
+    cd.writeUInt32LE(compressedLength, 20)
     cd.writeUInt32LE(data.length, 24)
     cd.writeUInt16LE(nameBytes.length, 28)
     cd.writeUInt16LE(0, 30); cd.writeUInt16LE(0, 32)
@@ -325,6 +349,7 @@ export async function GET(req: NextRequest) {
 
   if (format === 'xlsx') {
     const buf = buildXLSX(headers, rows)
+    warnIfOverBudget(`${filename}.xlsx`, buf.byteLength)
     // Convert Node Buffer to ArrayBuffer for NextResponse
     const arrayBuf = buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)
     return new NextResponse(arrayBuf as ArrayBuffer, {
@@ -336,6 +361,7 @@ export async function GET(req: NextRequest) {
     })
   } else {
     const csv = buildCSV(headers, rows)
+    warnIfOverBudget(`${filename}.csv`, Buffer.byteLength(csv, 'utf8'))
     return new NextResponse(csv, {
       status: 200,
       headers: {

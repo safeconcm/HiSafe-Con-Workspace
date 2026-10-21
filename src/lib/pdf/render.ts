@@ -87,6 +87,15 @@ export async function renderPdfFromHtml(
       printBackground: true,
       margin: opts?.margin ?? { top: '10mm', bottom: '10mm', left: '10mm', right: '10mm' },
     })
+    // 2026-10-22, "ไฟล์เอกสาร pdf csv excel ขอเป็นไฟล์ size ไม่เกิน 1 mb" —
+    // a standing target, not a response to any PDF actually over it today
+    // (every embedded asset here — the three logos, the scanned leave-form
+    // background — is well under 150KB; see src/lib/pdf/company-logo.ts).
+    // Logged here so a future template that adds a bigger image gets caught
+    // immediately instead of silently shipping a slow download.
+    if (pdf.byteLength > 1_000_000) {
+      console.warn(`[pdf] generated PDF is ${(pdf.byteLength / 1_000_000).toFixed(2)}MB — over the 1MB target`)
+    }
     return new Uint8Array(pdf)
   } finally {
     // Always close, even on error — a leaked browser process on a serverless
