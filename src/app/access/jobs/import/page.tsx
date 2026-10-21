@@ -13,7 +13,38 @@ import {
 import Link from 'next/link'
 
 const REQUIRED_COLS = ['job_code', 'name_th']
-const ALL_COLS = ['job_code', 'name_th', 'name_en', 'client_name', 'description', 'contract_value', 'start_date', 'end_date', 'sequence_no']
+// Column order fixed to match the template (2026-10-21, "การนำไฟลื CSV เข้า
+// มันต้องเรียงหัวข้อตามนี้ No. job_code name_th name_en client_name
+// description Contract No./PO. Amount (THB) Start date End date") —
+// sequence_no (ลำดับ/No.) leads, then identity/text fields, then the money/
+// date fields in the exact order requested.
+const ALL_COLS = ['sequence_no', 'job_code', 'name_th', 'name_en', 'client_name', 'description', 'contract_no', 'contract_value', 'start_date', 'end_date']
+
+// Human-readable template header row, 1:1 positionally with ALL_COLS above.
+const TEMPLATE_HEADERS = ['No.', 'job_code', 'name_th', 'name_en', 'client_name', 'description', 'Contract No./PO.', 'Amount (THB)', 'Start date', 'End date']
+
+// A user's file may use either the friendly display header ("No.",
+// "Contract No./PO.", "Amount (THB)", "Start date"/"End date" — the exact
+// wording requested) or the old plain internal name (sequence_no,
+// contract_no, contract_value, start_date/end_date) — both are accepted so
+// re-importing an older export never breaks. Matched case-insensitively.
+const HEADER_ALIASES: Record<string, string> = {
+  'no.':  'sequence_no',
+  'no':   'sequence_no',
+  'contract no./po.': 'contract_no',
+  'contract no.':      'contract_no',
+  'contract no':       'contract_no',
+  'po.':               'contract_no',
+  'po':                'contract_no',
+  'amount (thb)': 'contract_value',
+  'amount':       'contract_value',
+  'start date': 'start_date',
+  'end date':   'end_date',
+}
+function normalizeHeader(raw: string): string {
+  const h = raw.trim().toLowerCase()
+  return HEADER_ALIASES[h] ?? h
+}
 
 // Excel serial date -> 'YYYY-MM-DD' (2026-10-21, date columns added). Excel
 // stores dates as a day count from 1899-12-30; this is the standard
@@ -31,7 +62,7 @@ function parseCSV(text: string): { headers: string[]; rows: Record<string, strin
   if (!lines.length) return { headers: [], rows: [] }
 
   const firstLine = lines[0].replace(/^﻿/, '')
-  const headers   = firstLine.split(',').map(h => h.replace(/^"|"$/g, '').trim().toLowerCase())
+  const headers   = firstLine.split(',').map(h => normalizeHeader(h.replace(/^"|"$/g, '')))
 
   const rows = lines.slice(1).map(line => {
     const cells: string[] = []
@@ -76,7 +107,7 @@ function parseExcel(buffer: ArrayBuffer): { headers: string[]; rows: Record<stri
   const raw: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: '' })
   if (!raw.length) return { headers: [], rows: [] }
 
-  const headers = (raw[0] as any[]).map(h => String(h ?? '').trim().toLowerCase())
+  const headers = (raw[0] as any[]).map(h => normalizeHeader(String(h ?? '')))
 
   const rows = raw.slice(1)
     .filter(r => Array.isArray(r) && r.some(cell => String(cell ?? '').trim() !== ''))
@@ -147,9 +178,12 @@ export default function ImportJobsPage() {
 
   const downloadTemplate = () => {
     const BOM = '﻿'
-    const csv = BOM + [ALL_COLS.join(','),
-      'JOB101,โครงการก่อสร้าง A,Construction Project A,บริษัท ABC จำกัด,งานสร้างอาคารสำนักงาน,500000,2026-01-15,2026-12-31,1',
-      'JOB102,โครงการปรับปรุงอาคาร B,Building Renovation B,บริษัท XYZ จำกัด,,,,,',
+    // Sample rows follow ALL_COLS order: No., job_code, name_th, name_en,
+    // client_name, description, Contract No./PO., Amount (THB), Start date,
+    // End date.
+    const csv = BOM + [TEMPLATE_HEADERS.join(','),
+      '1,JOB101,โครงการก่อสร้าง A,Construction Project A,บริษัท ABC จำกัด,งานสร้างอาคารสำนักงาน,PO-2026-001,500000,2026-01-15,2026-12-31',
+      ',JOB102,โครงการปรับปรุงอาคาร B,Building Renovation B,บริษัท XYZ จำกัด,,,,,',
     ].join('\n')
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
     const url  = URL.createObjectURL(blob)
@@ -185,7 +219,10 @@ export default function ImportJobsPage() {
               <li>Job Code ที่นำเข้าจะผูกกับปี {year} (ปีที่เลือกไว้ในหน้า Job Codes)</li>
               <li>ถ้า Job Code ซ้ำกับที่มีอยู่แล้วในปีเดียวกัน จะไม่ถูกปฏิเสธ — ระบบจะ<strong>เติมเฉพาะข้อมูลที่ยังว่างอยู่</strong>ให้ (เช่น มูลค่างาน, วันที่, ลำดับ) ส่วนข้อมูลที่กรอกไว้แล้วจะไม่ถูกเขียนทับ ดังนั้นนำเข้าไฟล์เดิมซ้ำได้อย่างปลอดภัย</li>
               <li>สถานะเริ่มต้นของ Job ที่สร้างใหม่คือ &quot;กำลังดำเนินการ&quot; — ไปปรับเป็นพัก/ปิดได้ทีหลังที่หน้า Job Codes (การนำเข้าจะไม่เปลี่ยนสถานะของ Job ที่มีอยู่แล้ว)</li>
-              <li>คอลัมน์ <code className="text-xs bg-gray-100 px-1 rounded">contract_value</code> (มูลค่างาน), <code className="text-xs bg-gray-100 px-1 rounded">start_date</code>/<code className="text-xs bg-gray-100 px-1 rounded">end_date</code> (วันที่เริ่ม/สิ้นสุด แบบ YYYY-MM-DD หรือคอลัมน์วันที่ใน Excel), และ <code className="text-xs bg-gray-100 px-1 rounded">sequence_no</code> (ลำดับ Job) เป็นตัวเลือกทั้งหมด — เว้นว่างได้</li>
+              <li>
+                ลำดับคอลัมน์ในไฟล์ควรเรียงตามนี้: <code className="text-xs bg-gray-100 px-1 rounded">No., job_code, name_th, name_en, client_name, description, Contract No./PO., Amount (THB), Start date, End date</code> (ใช้ชื่อหัวข้อแบบนี้ หรือชื่อแบบเดิม เช่น sequence_no/contract_no/contract_value/start_date/end_date ก็ได้เหมือนกัน)
+              </li>
+              <li>คอลัมน์ <code className="text-xs bg-gray-100 px-1 rounded">No.</code> (ลำดับ Job), <code className="text-xs bg-gray-100 px-1 rounded">Contract No./PO.</code> (เลขที่สัญญา/PO), <code className="text-xs bg-gray-100 px-1 rounded">Amount (THB)</code> (มูลค่างาน), และ <code className="text-xs bg-gray-100 px-1 rounded">Start date</code>/<code className="text-xs bg-gray-100 px-1 rounded">End date</code> (วันที่เริ่ม/สิ้นสุด แบบ YYYY-MM-DD หรือคอลัมน์วันที่ใน Excel) เป็นตัวเลือกทั้งหมด — เว้นว่างได้</li>
               <li>นำเข้าได้สูงสุด 500 รายการต่อครั้ง</li>
             </ol>
           </div>

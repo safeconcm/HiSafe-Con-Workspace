@@ -29,7 +29,7 @@ const MAX_ROWS = 500
 // value is NULL. job_code/name_th/year/status are intentionally excluded —
 // identity fields never change via this path, and status is a deliberate
 // user action elsewhere (see STATUS_WARNING in the Jobs page).
-const FILLABLE_COLS = ['name_en', 'client_name', 'description', 'contract_value', 'start_date', 'end_date', 'sequence_no'] as const
+const FILLABLE_COLS = ['name_en', 'client_name', 'description', 'contract_no', 'contract_value', 'start_date', 'end_date', 'sequence_no'] as const
 
 function parseContractValue(raw: string | undefined): { ok: true; value: number | null } | { ok: false; error: string } {
   const s = raw?.trim()
@@ -120,6 +120,7 @@ export async function POST(req: NextRequest) {
       name_en:        r.name_en?.trim()     || null,
       client_name:    r.client_name?.trim() || null,
       description:    r.description?.trim() || null,
+      contract_no:    r.contract_no?.trim() || null,
       contract_value: cv.ok  ? cv.value  : null,
       start_date:     sd.ok  ? sd.value  : null,
       end_date:       ed.ok  ? ed.value  : null,

@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
 
   let query = supabase
     .from('jobs')
-    .select('id, job_code, name_th, name_en, year, status, client_name, description, contract_value, start_date, end_date, sequence_no, created_at', { count: 'exact' })
+    .select('id, job_code, name_th, name_en, year, status, client_name, description, contract_value, contract_no, start_date, end_date, sequence_no, created_at', { count: 'exact' })
     .eq('company_id', session.company_id)
     .eq('year', year)
     .order('job_code')
@@ -104,6 +104,7 @@ export async function POST(req: NextRequest) {
       status:         body.status              ?? 'active',
       description:    body.description?.trim() ?? null,
       client_name:    body.client_name?.trim() ?? null,
+      contract_no:    body.contract_no?.trim()  ?? null,
       contract_value: contractValue,
       start_date:     startDate.value,
       end_date:       endDate.value,

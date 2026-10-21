@@ -131,12 +131,13 @@ export function generateJobCodesListHTML(data: JobCodesListTemplateData): string
         <th>ลูกค้า</th>
         <th>สถานะ</th>
         <th>ระยะเวลา</th>
+        <th>Contract No./PO.</th>
         <th class="num">มูลค่างาน (บาท)</th>
       </tr>
     </thead>
     <tbody>
       ${groups.map(g => `
-        <tr class="group-row"><td colspan="7">${g.key} (${g.jobs.length})</td></tr>
+        <tr class="group-row"><td colspan="8">${g.key} (${g.jobs.length})</td></tr>
         ${g.jobs.map(job => `
           <tr class="job-row">
             <td class="num">${job.sequence_no ?? '—'}</td>
@@ -145,11 +146,12 @@ export function generateJobCodesListHTML(data: JobCodesListTemplateData): string
             <td>${job.client_name ?? '—'}</td>
             <td>${STATUS_TH[job.status] ?? job.status}</td>
             <td>${job.start_date || job.end_date ? `${formatThaiDate(job.start_date)} – ${formatThaiDate(job.end_date)}` : '—'}</td>
+            <td>${job.contract_no ?? '—'}</td>
             <td class="num">${formatTHB(job.contract_value)}</td>
           </tr>
         `).join('')}
       `).join('')}
-      ${!total ? `<tr><td colspan="7" style="text-align:center;color:#aaa;padding:20px;">ไม่มี Job</td></tr>` : ''}
+      ${!total ? `<tr><td colspan="8" style="text-align:center;color:#aaa;padding:20px;">ไม่มี Job</td></tr>` : ''}
     </tbody>
   </table>
 

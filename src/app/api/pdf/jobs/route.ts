@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
 
   let query = supabase
     .from('jobs')
-    .select('id, job_code, name_th, name_en, year, status, client_name, description, contract_value, start_date, end_date, sequence_no')
+    .select('id, job_code, name_th, name_en, year, status, client_name, description, contract_value, contract_no, start_date, end_date, sequence_no')
     .eq('company_id', session.company_id)
     .eq('year', year)
     .order('job_code')

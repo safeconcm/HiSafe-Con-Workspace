@@ -56,7 +56,7 @@ export default function AdminJobsPage() {
   const [year,     setYear]     = useState(now.getFullYear())
   const [showForm, setShowForm] = useState(false)
   const [editing,  setEditing]  = useState<any | null>(null)
-  const [form,     setForm]     = useState({ job_code: '', name_th: '', name_en: '', client_name: '', description: '', contract_value: '', start_date: '', end_date: '', sequence_no: '' })
+  const [form,     setForm]     = useState({ job_code: '', name_th: '', name_en: '', client_name: '', description: '', contract_no: '', contract_value: '', start_date: '', end_date: '', sequence_no: '' })
   // Pending status change awaiting confirmation (2026-10-20, "ข้อ 6") — null
   // when no confirmation modal is open.
   const [confirmChange, setConfirmChange] = useState<{ job: any; nextStatus: JobStatus } | null>(null)
@@ -124,7 +124,7 @@ export default function AdminJobsPage() {
   // on every row as a plain "กลุ่ม" column — flat formats have no good way
   // to show a nested sub-header, so this is the equivalent info per-row
   // instead of losing it.
-  const EXPORT_COLS = ['ลำดับ', 'Job Code', 'ชื่องาน (ไทย)', 'ชื่องาน (อังกฤษ)', 'ลูกค้า', 'กลุ่ม', 'สถานะ', 'วันที่เริ่ม', 'วันที่สิ้นสุด', 'มูลค่างาน', 'รายละเอียด']
+  const EXPORT_COLS = ['ลำดับ', 'Job Code', 'ชื่องาน (ไทย)', 'ชื่องาน (อังกฤษ)', 'ลูกค้า', 'กลุ่ม', 'สถานะ', 'วันที่เริ่ม', 'วันที่สิ้นสุด', 'Contract No./PO.', 'มูลค่างาน', 'รายละเอียด']
   const buildExportRows = (): (string | number)[][] => {
     const rows: (string | number)[][] = [EXPORT_COLS]
     for (const group of jobGroups) {
@@ -139,6 +139,7 @@ export default function AdminJobsPage() {
           JOB_STATUS_LABEL[job.status as JobStatus] ?? job.status,
           job.start_date ?? '',
           job.end_date ?? '',
+          job.contract_no ?? '',
           job.contract_value ?? '',
           job.description ?? '',
         ])
@@ -187,7 +188,7 @@ export default function AdminJobsPage() {
       await createJob.mutateAsync({ ...form, year })
       setShowForm(false)
     }
-    setForm({ job_code: '', name_th: '', name_en: '', client_name: '', description: '', contract_value: '', start_date: '', end_date: '', sequence_no: '' })
+    setForm({ job_code: '', name_th: '', name_en: '', client_name: '', description: '', contract_no: '', contract_value: '', start_date: '', end_date: '', sequence_no: '' })
   }
 
   // Dropdown onChange — if moving AWAY from active, hold for confirmation
@@ -211,6 +212,7 @@ export default function AdminJobsPage() {
     setForm({
       job_code: job.job_code, name_th: job.name_th, name_en: job.name_en ?? '',
       client_name: job.client_name ?? '', description: job.description ?? '',
+      contract_no: job.contract_no ?? '',
       contract_value: job.contract_value != null ? String(job.contract_value) : '',
       start_date: job.start_date ?? '', end_date: job.end_date ?? '',
       sequence_no: job.sequence_no != null ? String(job.sequence_no) : '',
@@ -260,7 +262,7 @@ export default function AdminJobsPage() {
           </div>
 
           <button
-            onClick={() => { setEditing(null); setForm({ job_code:'',name_th:'',name_en:'',client_name:'',description:'',contract_value:'',start_date:'',end_date:'',sequence_no:'' }); setShowForm(true) }}
+            onClick={() => { setEditing(null); setForm({ job_code:'',name_th:'',name_en:'',client_name:'',description:'',contract_no:'',contract_value:'',start_date:'',end_date:'',sequence_no:'' }); setShowForm(true) }}
             className="flex items-center gap-2 rounded-lg bg-blue-700 px-4 py-2 text-sm font-medium text-white hover:bg-blue-800"
           >
             <Plus className="w-4 h-4" />
@@ -370,6 +372,11 @@ export default function AdminJobsPage() {
                 className="form-input" placeholder="บริษัท ABC จำกัด" />
             </div>
             <div>
+              <label className="form-label">Contract No./PO.</label>
+              <input value={form.contract_no} onChange={e => setForm(f => ({ ...f, contract_no: e.target.value }))}
+                className="form-input" placeholder="เช่น PO-2026-001" />
+            </div>
+            <div>
               <label className="form-label">มูลค่างาน (บาท)</label>
               <input type="number" min="0" step="0.01" value={form.contract_value}
                 onChange={e => setForm(f => ({ ...f, contract_value: e.target.value }))}
@@ -421,6 +428,7 @@ export default function AdminJobsPage() {
                 <th>ลูกค้า</th>
                 <th>สถานะ</th>
                 <th>ระยะเวลา</th>
+                <th>Contract No./PO.</th>
                 <th className="text-right">มูลค่างาน</th>
                 <th className="w-24 text-right">จัดการ</th>
               </tr>
@@ -433,7 +441,7 @@ export default function AdminJobsPage() {
                 return (
                 <Fragment key={groupId}>
                   <tr className="bg-gray-50 cursor-pointer hover:bg-gray-100 select-none" onClick={() => toggleGroup(groupId)}>
-                    <td colSpan={8} className="!py-1.5 text-xs font-semibold text-gray-500">
+                    <td colSpan={9} className="!py-1.5 text-xs font-semibold text-gray-500">
                       <span className="inline-flex items-center gap-1.5">
                         {isCollapsed ? <ChevronRight className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                         {code} <span className="text-gray-400 font-normal">({groupJobs.length})</span>
@@ -465,6 +473,7 @@ export default function AdminJobsPage() {
                           ? <>{formatThaiDate(job.start_date)} – {formatThaiDate(job.end_date)}</>
                           : '—'}
                       </td>
+                      <td className="text-xs text-gray-600 whitespace-nowrap">{job.contract_no ?? '—'}</td>
                       <td className="text-sm text-gray-600 text-right whitespace-nowrap">{formatTHB(job.contract_value)}</td>
                       <td>
                         <div className="flex items-center gap-2 justify-end">
@@ -483,7 +492,7 @@ export default function AdminJobsPage() {
               })}
               {!filteredJobs.length && (
                 <tr>
-                  <td colSpan={8} className="text-center py-10 text-gray-400 text-sm">
+                  <td colSpan={9} className="text-center py-10 text-gray-400 text-sm">
                     {jobs.length ? 'ไม่พบ Job ที่ค้นหา' : `ยังไม่มี Job ปี ${year}`}
                   </td>
                 </tr>

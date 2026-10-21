@@ -35,7 +35,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   const body = await req.json().catch(() => ({}))
   const allowed = [
     'job_code', 'name_th', 'name_en', 'status', 'description', 'client_name',
-    'contract_value', 'start_date', 'end_date', 'sequence_no',
+    'contract_value', 'contract_no', 'start_date', 'end_date', 'sequence_no',
   ]
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
 

@@ -228,6 +228,9 @@ export interface Job {
   start_date: string | null
   end_date: string | null
   sequence_no: number | null
+  // Contract No./PO. (2026-10-21, "ต้องเพิ่มใส่ Contract No./PO.") — free-text,
+  // optional; the client's own contract/PO reference number, not a system id.
+  contract_no: string | null
   created_by: string | null
   created_at: string
   updated_at: string
