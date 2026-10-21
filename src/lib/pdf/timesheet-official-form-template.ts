@@ -225,7 +225,21 @@ export function generateTimesheetOfficialFormHTML(data: TimesheetOfficialFormDat
 <meta charset="UTF-8">
 <title>Timesheet Official Form - ${employeeName} ${EN_MONTHS[month - 1]} ${year}</title>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700&display=swap');
+  /* 2026-10-21: removed the Google Fonts @import that used to sit here.
+     render.ts's renderPdfFromHtml() waits for page.setContent(...,
+     {waitUntil:'networkidle0'}) — i.e. it blocks until no network requests
+     are in flight for 500ms. An external @import is exactly the kind of
+     request that can hang that wait, and this route's own maxDuration=30s
+     budget also has to cover Chromium's own cold start on top of it.
+     Checked Supabase storage (documents/timesheet-official/*.pdf, the path
+     this route uploads to on success): zero rows ever, for any timesheet —
+     this route has never once finished inside its time budget, which lines
+     up with that @import being the hang. Removing it lets the `sans-serif`
+     fallback already in the font stack below do the work instead (the
+     headless Chromium image bundles a system sans-serif with Thai glyph
+     coverage) — no visual change expected for the English labels this form
+     is mostly made of, and Thai text (names, nicknames) still renders,
+     just in the system font rather than Sarabun specifically. */
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { font-family: Arial, 'Sarabun', sans-serif; font-size: 8.5px; line-height: 1.15; color: #000; background: #fff; }
   /* 2026-07-21, item 1: page height is no longer forced to a literal 210mm
