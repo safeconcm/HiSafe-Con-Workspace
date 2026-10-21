@@ -18,7 +18,18 @@ import { generateTimesheetOfficialFormHTML, type TimesheetOfficialFormData } fro
 import { renderPdfFromHtml } from '@/lib/pdf/render'
 import { getWorkingDayMapForMonth } from '@/lib/work-schedule'
 
-export const maxDuration = 30
+// 2026-10-21: bumped 30 -> 60s. This route has a documented history of
+// 504 Gateway Timeout on every attempt (confirmed via Supabase storage:
+// documents/timesheet-official/*.pdf has zero rows ever, for any
+// timesheet — this route has never once finished inside its old 30s
+// budget). Removing the Google Fonts @import (see
+// timesheet-official-form-template.ts) didn't fix it, so the remaining
+// suspect is Chromium's own cold start + this route's extra DB work
+// (holidays/leaves/workingDayMap queries, 2 signature downloads) on top
+// of it, combined pushing past 30s. 60s is the max Vercel allows on the
+// Hobby plan for serverless functions — if cold start is the real cause,
+// this should cover it without needing a plan upgrade.
+export const maxDuration = 60
 
 export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
   const params = await ctx.params
