@@ -100,13 +100,17 @@ export default async function DashboardPage() {
   const available = (b: typeof annualBalance): number =>
     b ? Math.max(b.quota_days + b.carried_forward + b.adjusted_days - b.used_days - b.pending_days, 0) : 0
 
-  // HR/Admin manage everyone else's leave & timesheet, and executive
-  // supervisors (e.g. the MD, see users.is_executive) don't submit their own
-  // through the system either — in practice they're the ones
-  // approving/managing everyone else's. Hide the personal leave/timesheet
-  // widgets for both cases here to match the sidebar (see Sidebar.tsx) —
-  // decided 2026-07-11.
-  const showPersonalWidgets = ['employee', 'supervisor'].includes(me.role) && !me.is_executive
+  // 2026-10-26, "admin แอด User ให้ HC-002 เป็น role HR ... จะลายื่นใบของ
+  // ตัวเองไม่ได้ เนื่องจาก role HR ไม่มี Tab ให้ลา" — this used to also
+  // exclude hr/admin outright (matching the OLD sidebar rule from
+  // 2026-07-11), but the sidebar itself was changed on 2026-10-25 to only
+  // gate "การลา"/Timesheet on is_executive, not role (see Sidebar.tsx) —
+  // this file was missed in that pass, so the sidebar tab showed up again
+  // but this home-page quick-action card/leave-balance widgets stayed
+  // hidden for hr/admin, which is exactly what got reported here. Role no
+  // longer matters — only an explicit is_executive flag hides these now,
+  // same single source of truth as the sidebar.
+  const showPersonalWidgets = !me.is_executive
 
   return (
     <div className="page-container space-y-6">
