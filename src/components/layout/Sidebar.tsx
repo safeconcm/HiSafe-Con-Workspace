@@ -143,16 +143,22 @@ const NAV_ITEMS: NavItem[] = [
     onlyForOrgRoot: true,
   },
   {
-    // HR/Admin don't submit their own leave through the system in practice
-    // (small team — they're the ones approving/managing everyone else's, and
-    // whoever sits at the top of the org tree has no one to approve theirs
-    // anyway, see find_approver()'s NULL-parent auto-approve case). Hidden
-    // for hr/admin rather than route-blocked, so nothing breaks if that
-    // changes later — see conversation 2026-07-11.
+    // 2026-10-25, "admin แอด User ให้ A เป็น HR แต่ A ก็เป็นพนักงานปกติที่
+    // รับบทบาท HR ... เวลาที่ A จะลายื่นใบของตัวเองไม่ได้" — this used to be
+    // hidden for role 'hr'/'admin' on the assumption that HR/Admin never
+    // submit their own leave (true for a dedicated full-time HR person, but
+    // breaks the moment one person wears both the employee and HR hat, which
+    // is the common case in a small company). `role` now has nothing to do
+    // with whether someone sees this — the only gate is `hideForExecutive`,
+    // which only applies to someone an Admin has explicitly marked as
+    // `is_executive` (genuine top-management who really has no one to
+    // approve their own leave — see find_approver()'s NULL-parent
+    // auto-approve case, and the is_executive toggle on the user edit page).
+    // Defaults to false for everyone, including every HR/Admin, so this menu
+    // stays visible unless an Admin deliberately opts someone out.
     label: 'การลา',
     href:  '/leave/my',
     icon:  CalendarDays,
-    roles: ['employee', 'supervisor'],
     hideForExecutive: true,
     children: [
       { label: 'ใบลาของฉัน',    href: '/leave/my'  },
@@ -161,12 +167,11 @@ const NAV_ITEMS: NavItem[] = [
     ],
   },
   {
-    // Same reasoning as 'การลา' above — HR/Admin manage timesheets, they
-    // don't submit their own through the system.
+    // Same reasoning as 'การลา' above (2026-10-25) — role no longer hides
+    // this; only an explicit is_executive flag does.
     label: 'Timesheet',
     href:  '/timesheet',
     icon:  Clock,
-    roles: ['employee', 'supervisor'],
     hideForExecutive: true,
   },
   {

@@ -96,6 +96,7 @@ export default function UserDetailPage() {
     first_name_en: '', last_name_en: '',
     position_th: '', department: '',
     phone: '', email: '', role: 'employee', status: 'active', hire_date: '',
+    is_executive: false,
   })
 
   useEffect(() => {
@@ -112,6 +113,7 @@ export default function UserDetailPage() {
       role:          user.role,
       status:        user.status,
       hire_date:     user.hire_date     ?? '',
+      is_executive:  user.is_executive  ?? false,
     })
   }, [user])
 
@@ -416,6 +418,29 @@ export default function UserDetailPage() {
                     <option key={v} value={v}>{l}</option>
                   ))}
                 </select>
+              </div>
+              {/* 2026-10-25, "admin แอด User ให้ A เป็น HR แต่ A ก็เป็น
+                  พนักงานปกติที่รับบทบาท HR ... เวลาที่ A จะลายื่นใบของ
+                  ตัวเองไม่ได้" — role alone no longer hides the เมนูการลา/
+                  Timesheet for anyone (see Sidebar.tsx); this checkbox is now
+                  the only thing that does, so a role=hr/admin person stays
+                  able to submit their own leave by default, and an Admin has
+                  to deliberately opt someone out here if they're genuinely
+                  top-management with no leave to submit. */}
+              <div className="sm:col-span-2">
+                <label className="flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={form.is_executive}
+                    onChange={e => setForm(f => ({ ...f, is_executive: e.target.checked }))}
+                    disabled={!isAdmin}
+                    className="rounded border-gray-300"
+                  />
+                  เป็นผู้บริหาร (ไม่ยื่นใบลา/Timesheet ของตัวเองผ่านระบบ)
+                </label>
+                <p className="text-xs text-gray-400 mt-1 ml-6">
+                  ไม่เกี่ยวกับ Role — ถ้าไม่ติ๊ก คนนี้จะยื่นใบลาของตัวเองได้ตามปกติ ไม่ว่า Role จะเป็นอะไรก็ตาม
+                </p>
               </div>
             </div>
           </div>

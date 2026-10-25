@@ -128,6 +128,14 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     'first_name_th','last_name_th','first_name_en','last_name_en',
     'position_th','position_en','department','role','status',
     'hire_date','phone','avatar_url','resign_date',
+    // 2026-10-25, "admin แอด User ให้ A เป็น HR แต่ A ก็เป็นพนักงานปกติที่รับ
+    // บทบาท HR ... เวลาที่ A จะลายื่นใบของตัวเองไม่ได้" — is_executive used
+    // to only ever be set outside the app (seed/migration), so there was no
+    // way for an Admin to actually control who it hides the leave/timesheet
+    // menu for (see Sidebar.tsx). Now editable here so Admin can opt a
+    // genuine top-management person out explicitly, instead of it being an
+    // invisible, role-wide assumption.
+    'is_executive',
   ]
 
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
