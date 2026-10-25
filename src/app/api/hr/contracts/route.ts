@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server'
 import {
   getSessionFromHeaders, createAdminSupabaseClient,
   ok, created, badRequest, unauthorized, forbidden,
-  serverError, writeAuditLog, isHROrAdmin,
+  serverError, writeAuditLog, isHROrAdmin, getAccessibleCompanyIds,
 } from '@/lib/api-helpers'
 
 export async function GET(req: NextRequest) {
@@ -19,6 +19,12 @@ export async function GET(req: NextRequest) {
 
   const supabase = createAdminSupabaseClient()
 
+  // 2026-10-26, cross-company read grant (Issue 2) — only widens the
+  // HR/Admin branch below; the employee branch further filters by
+  // user_id === session.id, which already pins to one company, so this is
+  // a no-op for them. Same pattern as api/leave/route.ts.
+  const accessibleCompanyIds = await getAccessibleCompanyIds(session)
+
   let query = supabase
     .from('contracts')
     .select(`
@@ -27,7 +33,7 @@ export async function GET(req: NextRequest) {
         id, employee_code, first_name_th, last_name_th, department, position_th
       )
     `, { count: 'exact' })
-    .eq('company_id', session.company_id)
+    .in('company_id', accessibleCompanyIds)
     .order('created_at', { ascending: false })
     .range(from, from + limit - 1)
 

@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server'
 import {
   getSessionFromHeaders, createAdminSupabaseClient,
   ok, created, badRequest, unauthorized, forbidden,
-  serverError, writeAuditLog, isHROrAdmin,
+  serverError, writeAuditLog, isHROrAdmin, getAccessibleCompanyIds,
 } from '@/lib/api-helpers'
 
 export async function GET(req: NextRequest) {
@@ -11,12 +11,19 @@ export async function GET(req: NextRequest) {
   if (!session) return unauthorized()
 
   const year = new URL(req.url).searchParams.get('year') ?? String(new Date().getFullYear())
+  // 2026-10-26, cross-company read grant (Issue 2) — only widens for
+  // HR/Admin; other roles keep seeing only their own company's holidays
+  // (merging two companies' holiday calendars would be confusing for an
+  // employee just checking their own timesheet).
+  const companyIds = isHROrAdmin(session)
+    ? await getAccessibleCompanyIds(session)
+    : [session.company_id]
   const supabase = createAdminSupabaseClient()
 
   const { data, error } = await supabase
     .from('holidays')
     .select('*')
-    .eq('company_id', session.company_id)
+    .in('company_id', companyIds)
     .eq('year', Number(year))
     .eq('is_active', true)
     .order('holiday_date')

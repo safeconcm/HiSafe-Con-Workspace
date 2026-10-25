@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server'
 import {
   getSessionFromHeaders, createAdminSupabaseClient,
   ok, badRequest, unauthorized, forbidden, notFound,
-  serverError, writeAuditLog, isHROrAdmin,
+  serverError, writeAuditLog, isHROrAdmin, getAccessibleCompanyIds,
 } from '@/lib/api-helpers'
 
 type Ctx = { params: Promise<{ id: string }> }
@@ -12,13 +12,15 @@ export async function GET(req: NextRequest, ctx: Ctx) {
   const params = await ctx.params
   const session = getSessionFromHeaders(req)
   if (!session) return unauthorized()
+  // 2026-10-26, cross-company read grant (Issue 2)
+  const accessibleCompanyIds = await getAccessibleCompanyIds(session)
   const supabase = createAdminSupabaseClient()
   const { data, error } = await supabase.from('resignations')
     .select(`*, user:users!resignations_user_id_fkey(
       id, employee_code, first_name_th, last_name_th,
       department, position_th, hire_date, email
     )`)
-    .eq('id', params.id).eq('company_id', session.company_id).single()
+    .eq('id', params.id).in('company_id', accessibleCompanyIds).single()
   if (error || !data) return notFound('Resignation')
   if (!isHROrAdmin(session) && data.user_id !== session.id) return forbidden()
   return ok(data)
@@ -30,9 +32,10 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   if (!session)              return unauthorized()
   if (!isHROrAdmin(session)) return forbidden()
 
+  const accessibleCompanyIds = await getAccessibleCompanyIds(session)
   const supabase = createAdminSupabaseClient()
   const { data: existing } = await supabase.from('resignations').select('*')
-    .eq('id', params.id).eq('company_id', session.company_id).single()
+    .eq('id', params.id).in('company_id', accessibleCompanyIds).single()
   if (!existing) return notFound('Resignation')
 
   const body    = await req.json().catch(() => ({}))

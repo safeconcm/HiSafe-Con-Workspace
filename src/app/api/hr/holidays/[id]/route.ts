@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server'
 import {
   getSessionFromHeaders, createAdminSupabaseClient,
   ok, unauthorized, forbidden, notFound, serverError,
-  writeAuditLog, isHROrAdmin,
+  writeAuditLog, isHROrAdmin, getAccessibleCompanyIds,
 } from '@/lib/api-helpers'
 
 export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: string }> }) {
@@ -12,9 +12,10 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ id: stri
   if (!session)              return unauthorized()
   if (!isHROrAdmin(session)) return forbidden()
 
+  const accessibleCompanyIds = await getAccessibleCompanyIds(session)
   const supabase = createAdminSupabaseClient()
   const { data: existing } = await supabase
-    .from('holidays').select('id').eq('id', params.id).eq('company_id', session.company_id).single()
+    .from('holidays').select('id').eq('id', params.id).in('company_id', accessibleCompanyIds).single()
   if (!existing) return notFound('Holiday')
 
   await supabase.from('holidays').update({ is_active: false }).eq('id', params.id)

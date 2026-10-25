@@ -6,7 +6,7 @@ import { NextRequest } from 'next/server'
 import {
   getSessionFromHeaders, createAdminSupabaseClient,
   ok, notFound, badRequest, unauthorized, forbidden,
-  serverError, isHROrAdmin, writeAuditLog,
+  serverError, isHROrAdmin, writeAuditLog, getAccessibleCompanyIds,
 } from '@/lib/api-helpers'
 
 const SIGNED_URL_TTL = 60 * 10 // 10 minutes — detail page is viewed then closed
@@ -30,10 +30,12 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!isHROrAdmin(session)) return forbidden()
   const { id } = await params
 
+  // 2026-10-26, cross-company read grant (Issue 2)
+  const accessibleCompanyIds = await getAccessibleCompanyIds(session)
   const supabase = createAdminSupabaseClient()
   const { data, error } = await supabase
     .from('job_applications').select('*, company:companies(code, name_th, logo_url)')
-    .eq('id', id).eq('company_id', session.company_id)
+    .eq('id', id).in('company_id', accessibleCompanyIds)
     .single()
 
   if (error || !data) return notFound('ใบสมัคร')
@@ -68,13 +70,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     patch.reviewed_at = new Date().toISOString()
   }
 
+  const accessibleCompanyIds = await getAccessibleCompanyIds(session)
   const supabase = createAdminSupabaseClient()
-  const { data: before } = await supabase.from('job_applications').select('status').eq('id', id).eq('company_id', session.company_id).single()
+  const { data: before } = await supabase.from('job_applications').select('status').eq('id', id).in('company_id', accessibleCompanyIds).single()
   if (!before) return notFound('ใบสมัคร')
 
   const { data, error } = await supabase
     .from('job_applications').update(patch)
-    .eq('id', id).eq('company_id', session.company_id)
+    .eq('id', id).in('company_id', accessibleCompanyIds)
     .select('*, company:companies(code, name_th, logo_url)').single()
 
   if (error) return serverError(error)

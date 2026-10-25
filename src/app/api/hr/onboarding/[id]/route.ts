@@ -6,7 +6,7 @@ import { NextRequest } from 'next/server'
 import {
   getSessionFromHeaders, createAdminSupabaseClient,
   ok, badRequest, unauthorized, forbidden, notFound,
-  serverError, writeAuditLog, isHROrAdmin,
+  serverError, writeAuditLog, isHROrAdmin, getAccessibleCompanyIds,
 } from '@/lib/api-helpers'
 
 type Ctx = { params: Promise<{ id: string }> }
@@ -17,10 +17,11 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   if (!session)              return unauthorized()
   if (!isHROrAdmin(session)) return forbidden()
 
+  const accessibleCompanyIds = await getAccessibleCompanyIds(session)
   const supabase = createAdminSupabaseClient()
   const { data: existing } = await supabase
     .from('onboarding_checklists').select('*')
-    .eq('id', params.id).eq('company_id', session.company_id).single()
+    .eq('id', params.id).in('company_id', accessibleCompanyIds).single()
   if (!existing) return notFound('Onboarding checklist')
 
   const body = await req.json().catch(() => null)

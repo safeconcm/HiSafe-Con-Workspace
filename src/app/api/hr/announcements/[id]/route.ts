@@ -30,7 +30,7 @@ import { NextRequest } from 'next/server'
 import {
   getSessionFromHeaders, createAdminSupabaseClient,
   ok, unauthorized, forbidden, notFound, serverError,
-  writeAuditLog, isHROrAdmin,
+  writeAuditLog, isHROrAdmin, getAccessibleCompanyIds,
 } from '@/lib/api-helpers'
 
 type Ctx = { params: Promise<{ id: string }> }
@@ -44,12 +44,14 @@ export async function DELETE(req: NextRequest, ctx: Ctx) {
   const payload = await req.json().catch(() => null)
   const retractForAll = payload?.retract_for_all === true
 
+  // 2026-10-26, cross-company read grant (Issue 2)
+  const accessibleCompanyIds = await getAccessibleCompanyIds(session)
   const supabase = createAdminSupabaseClient()
   const { data: existing } = await supabase
     .from('announcements')
     .select('id, title, company_ids, hidden_for_user_ids')
     .eq('id', params.id)
-    .contains('company_ids', [session.company_id])
+    .overlaps('company_ids', accessibleCompanyIds)
     .is('deleted_at', null)
     .maybeSingle()
   if (!existing) return notFound('Announcement')

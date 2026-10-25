@@ -11,7 +11,7 @@ import { NextRequest } from 'next/server'
 import {
   getSessionFromHeaders, createAdminSupabaseClient,
   ok, badRequest, unauthorized, forbidden, notFound, serverError,
-  writeAuditLog, findAuthUserByEmail, isHROrAdmin,
+  writeAuditLog, findAuthUserByEmail, isHROrAdmin, getAccessibleCompanyIds,
 } from '@/lib/api-helpers'
 
 type Ctx = { params: Promise<{ id: string }> }
@@ -27,11 +27,16 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   const role = body.role ?? 'employee'
   if (!employee_code) return badRequest('กรุณาระบุรหัสพนักงาน')
 
+  // 2026-10-26, cross-company read grant (Issue 2) — lets HR with a grant
+  // hire from an application belonging to the granted company. The new
+  // employee is created in that application's own company (app.company_id
+  // below), not necessarily session.company_id.
+  const accessibleCompanyIds = await getAccessibleCompanyIds(session)
   const supabase = createAdminSupabaseClient()
 
   const { data: app, error: appErr } = await supabase
     .from('job_applications').select('*')
-    .eq('id', params.id).eq('company_id', session.company_id).single()
+    .eq('id', params.id).in('company_id', accessibleCompanyIds).single()
   if (appErr || !app) return notFound('ใบสมัคร')
   if (app.converted_user_id) return badRequest('ใบสมัครนี้ถูกรับเข้าทำงานไปแล้ว')
   if (!app.email) return badRequest('ใบสมัครไม่มีอีเมล ไม่สามารถสร้างบัญชีได้')
@@ -100,7 +105,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   const { data: user, error: userErr } = await supabase
     .from('users')
     .insert({
-      company_id:    session.company_id,
+      company_id:    app.company_id ?? session.company_id,
       employee_code,
       auth_user_id:  authUserId,
       email:         app.email.trim().toLowerCase(),
@@ -125,25 +130,26 @@ export async function POST(req: NextRequest, ctx: Ctx) {
 
   // 4. Leave balances
   await supabase.rpc('init_leave_balances', {
-    p_user_id: user.id, p_company_id: session.company_id,
+    p_user_id: user.id, p_company_id: app.company_id ?? session.company_id,
     p_hire_date: hireDate, p_year: new Date().getFullYear(),
   }).then(() => {}, () => {})
 
   // 5. Initial contract (probation), mirroring the CSV-import contract logic
   {
+    const hireCompanyId = app.company_id ?? session.company_id
     const contractYear = new Date().getFullYear()
     const { count } = await supabase.from('contracts')
       .select('id', { count: 'exact', head: true })
-      .eq('company_id', session.company_id)
+      .eq('company_id', hireCompanyId)
       .gte('created_at', `${contractYear}-01-01`)
-    const compCode = session.company_id.slice(-4).toUpperCase()
+    const compCode = hireCompanyId.slice(-4).toUpperCase()
     const contract_no = `CT-${compCode}-${contractYear}-${String((count ?? 0) + 1).padStart(4, '0')}`
 
     const probEnd = new Date(hireDate)
     probEnd.setDate(probEnd.getDate() + probationDays)
 
     await supabase.from('contracts').insert({
-      company_id: session.company_id, user_id: user.id, contract_no,
+      company_id: hireCompanyId, user_id: user.id, contract_no,
       contract_type: 'permanent', status: 'active', start_date: hireDate,
       position_th: positionTh, department,
       probation_days: probationDays,

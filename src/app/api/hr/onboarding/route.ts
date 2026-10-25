@@ -13,6 +13,7 @@ import { NextRequest } from 'next/server'
 import {
   getSessionFromHeaders, createAdminSupabaseClient,
   ok, unauthorized, forbidden, serverError, isHROrAdmin,
+  getAccessibleCompanyIds,
 } from '@/lib/api-helpers'
 import { defaultOnboardingItems } from '@/lib/onboarding-items'
 
@@ -26,6 +27,9 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const status = searchParams.get('status') // 'in_progress' | 'completed'
 
+  // 2026-10-26, cross-company read grant (Issue 2)
+  const accessibleCompanyIds = await getAccessibleCompanyIds(session)
+
   const supabase = createAdminSupabaseClient()
 
   // Backfill: recently-hired active employees with no checklist yet.
@@ -34,7 +38,7 @@ export async function GET(req: NextRequest) {
   const { data: recentHires } = await supabase
     .from('users')
     .select('id, company_id, hire_date')
-    .eq('company_id', session.company_id)
+    .in('company_id', accessibleCompanyIds)
     .eq('status', 'active')
     .not('hire_date', 'is', null)
     .gte('hire_date', cutoff.toISOString().split('T')[0])
@@ -67,7 +71,7 @@ export async function GET(req: NextRequest) {
         id, employee_code, first_name_th, last_name_th, department, position_th, hire_date, avatar_url
       )
     `)
-    .eq('company_id', session.company_id)
+    .in('company_id', accessibleCompanyIds)
     .order('created_at', { ascending: false })
 
   if (status) query = query.eq('status', status)

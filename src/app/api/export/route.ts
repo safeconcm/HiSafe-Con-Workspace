@@ -7,6 +7,7 @@ import { deflateRawSync } from 'node:zlib'
 import {
   getSessionFromHeaders, createAdminSupabaseClient,
   unauthorized, forbidden, badRequest, serverError, isHROrAdmin,
+  getAccessibleCompanyIds,
 } from '@/lib/api-helpers'
 
 // 2026-10-22, "ไฟล์เอกสาร pdf csv excel ขอเป็นไฟล์ size ไม่เกิน 1 mb เพื่อ
@@ -194,6 +195,9 @@ export async function GET(req: NextRequest) {
 
   if (!['xlsx','csv'].includes(format)) return badRequest('format must be xlsx or csv')
 
+  // 2026-10-26, cross-company read grant (Issue 2)
+  const accessibleCompanyIds = await getAccessibleCompanyIds(session)
+
   const supabase = createAdminSupabaseClient()
   let headers: string[] = []
   let rows: (string|number|null)[][] = []
@@ -206,7 +210,7 @@ export async function GET(req: NextRequest) {
       .select(`*, user:users!leave_requests_user_id_fkey(
         employee_code, first_name_th, last_name_th, department, position_th
       )`)
-      .eq('company_id', session.company_id)
+      .in('company_id', accessibleCompanyIds)
       .gte('start_date', `${year}-01-01`).lte('start_date', `${year}-12-31`)
       .order('start_date').limit(5000)
     if (status) q = q.eq('status', status)
@@ -234,7 +238,7 @@ export async function GET(req: NextRequest) {
       .select(`*, user:users!timesheets_user_id_fkey(
         employee_code, first_name_th, last_name_th, department
       )`)
-      .eq('company_id', session.company_id)
+      .in('company_id', accessibleCompanyIds)
       .eq('year', parseInt(year))
       .order('month').limit(5000)
     if (month) q = q.eq('month', parseInt(month))
@@ -257,7 +261,7 @@ export async function GET(req: NextRequest) {
       .select(`*, user:users!ot_requests_user_id_fkey(
         employee_code, first_name_th, last_name_th, department
       ), job:jobs(job_code, name_th)`)
-      .eq('company_id', session.company_id)
+      .in('company_id', accessibleCompanyIds)
       .gte('ot_date', `${year}-01-01`).lte('ot_date', `${year}-12-31`)
       .order('ot_date').limit(5000)
     if (status) q = q.eq('status', status)
@@ -280,7 +284,7 @@ export async function GET(req: NextRequest) {
   else if (type === 'users') {
     const { data, error } = await supabase.from('users')
       .select('employee_code,first_name_th,last_name_th,first_name_en,last_name_en,email,phone,department,position_th,role,status,hire_date,resign_date')
-      .eq('company_id', session.company_id)
+      .in('company_id', accessibleCompanyIds)
       .order('employee_code').limit(5000)
     if (error) return serverError(error)
 
@@ -302,7 +306,7 @@ export async function GET(req: NextRequest) {
       .select(`*, user:users!salary_records_user_id_fkey(
         employee_code, first_name_th, last_name_th, department
       )`)
-      .eq('company_id', session.company_id)
+      .in('company_id', accessibleCompanyIds)
       .gte('effective_date', `${year}-01-01`).lte('effective_date', `${year}-12-31`)
       .order('effective_date').limit(5000)
     const { data, error } = await q
@@ -323,7 +327,7 @@ export async function GET(req: NextRequest) {
       .select(`*, user:users!contracts_user_id_fkey(
         employee_code, first_name_th, last_name_th, department, position_th
       )`)
-      .eq('company_id', session.company_id)
+      .in('company_id', accessibleCompanyIds)
       .order('start_date', { ascending: false }).limit(5000)
     if (error) return serverError(error)
 

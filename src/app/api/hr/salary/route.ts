@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server'
 import {
   getSessionFromHeaders, createAdminSupabaseClient,
   ok, created, badRequest, unauthorized, forbidden,
-  serverError, writeAuditLog, isHROrAdmin,
+  serverError, writeAuditLog, isHROrAdmin, getAccessibleCompanyIds,
 } from '@/lib/api-helpers'
 
 export async function GET(req: NextRequest) {
@@ -18,6 +18,11 @@ export async function GET(req: NextRequest) {
   const from    = (page - 1) * limit
   const supabase = createAdminSupabaseClient()
 
+  // 2026-10-26, cross-company read grant (Issue 2) — only widens the
+  // HR/Admin branch below; the employee branch further filters by
+  // user_id === session.id, so this is a no-op for them.
+  const accessibleCompanyIds = await getAccessibleCompanyIds(session)
+
   let query = supabase
     .from('salary_records')
     .select(`
@@ -28,7 +33,7 @@ export async function GET(req: NextRequest) {
       approved_by:users!salary_records_approved_by_id_fkey(first_name_th, last_name_th),
       created_by_user:users!salary_records_created_by_fkey(first_name_th, last_name_th)
     `, { count: 'exact' })
-    .eq('company_id', session.company_id)
+    .in('company_id', accessibleCompanyIds)
     .order('effective_date', { ascending: false })
     .range(from, from + limit - 1)
 

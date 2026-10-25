@@ -31,18 +31,27 @@
 // what the Jobs list already shows as J24/J25/J26 groups, instead of
 // re-deriving a second, inevitably-divergent notion of "year".
 import { NextRequest } from 'next/server'
-import { getSessionFromHeaders, createAdminSupabaseClient, ok, unauthorized, serverError } from '@/lib/api-helpers'
+import {
+  getSessionFromHeaders, createAdminSupabaseClient, ok, unauthorized, serverError,
+  isHROrAdmin, getAccessibleCompanyIds,
+} from '@/lib/api-helpers'
 import { jobGroupCode, clientGroupLabel } from '@/lib/jobs-grouping'
 
 export async function GET(req: NextRequest) {
   const session = getSessionFromHeaders(req)
   if (!session) return unauthorized()
 
+  // 2026-10-26, cross-company read grant (Issue 2) — only widens for
+  // HR/Admin; other roles keep seeing only their own company's totals.
+  const companyIds = isHROrAdmin(session)
+    ? await getAccessibleCompanyIds(session)
+    : [session.company_id]
+
   const supabase = createAdminSupabaseClient()
   const { data, error } = await supabase
     .from('jobs')
     .select('job_code, name_th, contract_value, client_name')
-    .eq('company_id', session.company_id)
+    .in('company_id', companyIds)
 
   if (error) return serverError(error)
 

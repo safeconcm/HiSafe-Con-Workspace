@@ -5,6 +5,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import {
   getSessionFromHeaders, createAdminSupabaseClient,
   unauthorized, forbidden, serverError, isHROrAdmin,
+  getAccessibleCompanyIds,
 } from '@/lib/api-helpers'
 import { TIMESHEET_STATUS_LABEL } from '@/utils'
 
@@ -17,6 +18,9 @@ export async function GET(req: NextRequest) {
   const year  = searchParams.get('year')  ?? String(new Date().getFullYear())
   const month = searchParams.get('month')
 
+  // 2026-10-26, cross-company read grant (Issue 2)
+  const accessibleCompanyIds = await getAccessibleCompanyIds(session)
+
   const supabase = createAdminSupabaseClient()
 
   let query = supabase
@@ -28,7 +32,7 @@ export async function GET(req: NextRequest) {
       ),
       lines:timesheet_lines(work_date, hours, line_type, job:jobs(job_code, name_th))
     `)
-    .eq('company_id', session.company_id)
+    .in('company_id', accessibleCompanyIds)
     .eq('year', parseInt(year))
     .order('month', { ascending: true })
     .limit(2000)

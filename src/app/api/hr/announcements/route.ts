@@ -17,7 +17,7 @@ import { NextRequest } from 'next/server'
 import {
   getSessionFromHeaders, createAdminSupabaseClient,
   ok, created, badRequest, unauthorized, forbidden, notFound, serverError,
-  writeAuditLog, dispatchNotifications,
+  writeAuditLog, dispatchNotifications, getAccessibleCompanyIds,
 } from '@/lib/api-helpers'
 
 const CATEGORIES = ['general', 'policy', 'event', 'emergency'] as const
@@ -27,11 +27,18 @@ export async function GET(req: NextRequest) {
   if (!session) return unauthorized()
   if (session.role !== 'hr' && session.role !== 'admin') return forbidden()
 
+  // 2026-10-26, cross-company read grant (Issue 2) — an HR with a grant to
+  // another company should also see (and be able to manage) announcements
+  // targeted solely at that other company, not just ones that include
+  // their own home company. .overlaps() instead of .contains() so a
+  // company_ids array matching ANY accessible company qualifies.
+  const accessibleCompanyIds = await getAccessibleCompanyIds(session)
+
   const supabase = createAdminSupabaseClient()
   const { data, error } = await supabase
     .from('announcements')
     .select('id, company_ids, category, title, body, attachment_url, attachment_type, attachment_name, require_ack, created_by, created_at, users:created_by(first_name_th, last_name_th)')
-    .contains('company_ids', [session.company_id])
+    .overlaps('company_ids', accessibleCompanyIds)
     .is('deleted_at', null)
     // Excludes announcements this admin personally hid from their own
     // "จัดการอัปเดต" list (2026-07-13) — see hidden_for_user_ids comment.
@@ -60,12 +67,13 @@ export async function DELETE(req: NextRequest) {
   const retractForAll = payload?.retract_for_all === true
   if (!ids.length) return badRequest('กรุณาเลือกประกาศที่ต้องการลบ')
 
+  const accessibleCompanyIds = await getAccessibleCompanyIds(session)
   const supabase = createAdminSupabaseClient()
   const { data: rows, error: fetchErr } = await supabase
     .from('announcements')
     .select('id, title, hidden_for_user_ids, deleted_at')
     .in('id', ids)
-    .contains('company_ids', [session.company_id])
+    .overlaps('company_ids', accessibleCompanyIds)
     .is('deleted_at', null)
   if (fetchErr) return serverError(fetchErr)
   if (!rows || !rows.length) return notFound('Announcements')

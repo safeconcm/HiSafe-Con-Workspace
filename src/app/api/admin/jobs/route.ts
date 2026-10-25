@@ -7,6 +7,7 @@ import {
   getSessionFromHeaders, createAdminSupabaseClient,
   ok, created, badRequest, unauthorized, forbidden,
   serverError, writeAuditLog, escapeForOrFilter,
+  isHROrAdmin, getAccessibleCompanyIds,
 } from '@/lib/api-helpers'
 
 // วันที่เริ่ม/สิ้นสุด + ลำดับ Job (2026-10-21) — all optional. A date column
@@ -68,12 +69,18 @@ export async function GET(req: NextRequest) {
   const status = searchParams.get('status') ?? 'active'
   const search = searchParams.get('q')
 
+  // 2026-10-26, cross-company read grant (Issue 2) — only widens for
+  // HR/Admin; other roles keep seeing only their own company's jobs.
+  const companyIds = isHROrAdmin(session)
+    ? await getAccessibleCompanyIds(session)
+    : [session.company_id]
+
   const supabase = createAdminSupabaseClient()
 
   let query = supabase
     .from('jobs')
     .select('id, job_code, name_th, name_en, year, status, client_name, description, contract_value, contract_no, start_date, end_date, sequence_no, created_at', { count: 'exact' })
-    .eq('company_id', session.company_id)
+    .in('company_id', companyIds)
     .eq('year', year)
     .order('job_code')
 

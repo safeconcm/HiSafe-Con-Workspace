@@ -4,6 +4,7 @@ import {
   getSessionFromHeaders, createAdminSupabaseClient,
   ok, created, badRequest, unauthorized, forbidden,
   serverError, writeAuditLog, dispatchNotifications, isHROrAdmin,
+  getAccessibleCompanyIds,
 } from '@/lib/api-helpers'
 import { defaultClearanceItems } from '@/lib/onboarding-items'
 
@@ -18,6 +19,11 @@ export async function GET(req: NextRequest) {
   const from    = (page - 1) * limit
   const supabase = createAdminSupabaseClient()
 
+  // 2026-10-26, cross-company read grant (Issue 2) — only widens the
+  // HR/Admin branch below; the employee branch further filters by
+  // user_id === session.id, so this is a no-op for them.
+  const accessibleCompanyIds = await getAccessibleCompanyIds(session)
+
   let query = supabase
     .from('resignations')
     .select(`
@@ -29,7 +35,7 @@ export async function GET(req: NextRequest) {
       acknowledged_by_user:users!resignations_acknowledged_by_fkey(first_name_th, last_name_th),
       approved_by_user:users!resignations_approved_by_fkey(first_name_th, last_name_th)
     `, { count: 'exact' })
-    .eq('company_id', session.company_id)
+    .in('company_id', accessibleCompanyIds)
     .order('created_at', { ascending: false })
     .range(from, from + limit - 1)
 

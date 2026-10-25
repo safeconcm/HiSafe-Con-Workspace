@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server'
 import {
   getSessionFromHeaders, createAdminSupabaseClient,
   ok, created, badRequest, unauthorized, forbidden,
-  serverError, writeAuditLog, isHROrAdmin,
+  serverError, writeAuditLog, isHROrAdmin, getAccessibleCompanyIds,
 } from '@/lib/api-helpers'
 
 export async function GET(req: NextRequest) {
@@ -18,6 +18,8 @@ export async function GET(req: NextRequest) {
   const page   = parseInt(searchParams.get('page')  ?? '1')
   const limit  = parseInt(searchParams.get('limit') ?? '20')
   const from   = (page - 1) * limit
+  // 2026-10-26, cross-company read grant (Issue 2)
+  const accessibleCompanyIds = await getAccessibleCompanyIds(session)
   const supabase = createAdminSupabaseClient()
 
   if (type === 'applicants') {
@@ -26,7 +28,7 @@ export async function GET(req: NextRequest) {
         *,
         job_opening:job_openings(id, title_th, department)
       `, { count: 'exact' })
-      .eq('company_id', session.company_id)
+      .in('company_id', accessibleCompanyIds)
       .order('applied_date', { ascending: false })
       .range(from, from + limit - 1)
     if (status) query = query.eq('status', status)
@@ -39,7 +41,7 @@ export async function GET(req: NextRequest) {
   // Job openings
   let query = supabase.from('job_openings')
     .select('*, applicant_count:applicants(count)', { count: 'exact' })
-    .eq('company_id', session.company_id)
+    .in('company_id', accessibleCompanyIds)
     .order('open_date', { ascending: false })
     .range(from, from + limit - 1)
   if (status) query = query.eq('status', status)

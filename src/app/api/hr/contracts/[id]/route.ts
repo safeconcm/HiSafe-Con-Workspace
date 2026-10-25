@@ -4,6 +4,7 @@ import {
   getSessionFromHeaders, createAdminSupabaseClient,
   ok, badRequest, unauthorized, forbidden, notFound,
   serverError, writeAuditLog, isHROrAdmin, dispatchNotifications,
+  getAccessibleCompanyIds,
 } from '@/lib/api-helpers'
 
 type Ctx = { params: Promise<{ id: string }> }
@@ -13,6 +14,11 @@ export async function GET(req: NextRequest, ctx: Ctx) {
   const session = getSessionFromHeaders(req)
   if (!session) return unauthorized()
 
+  // 2026-10-26, cross-company read grant (Issue 2) — lets HR with a grant
+  // open a single contract record that belongs to the granted company, so
+  // the merged list in hr/contracts/route.ts can link through to it.
+  const accessibleCompanyIds = await getAccessibleCompanyIds(session)
+
   const supabase = createAdminSupabaseClient()
   const { data, error } = await supabase
     .from('contracts')
@@ -21,7 +27,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
       department, position_th, hire_date, email, phone
     )`)
     .eq('id', params.id)
-    .eq('company_id', session.company_id)
+    .in('company_id', accessibleCompanyIds)
     .single()
 
   if (error || !data) return notFound('Contract')
@@ -35,9 +41,11 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   if (!session)              return unauthorized()
   if (!isHROrAdmin(session)) return forbidden()
 
+  const accessibleCompanyIds = await getAccessibleCompanyIds(session)
+
   const supabase = createAdminSupabaseClient()
   const { data: existing } = await supabase.from('contracts').select('*')
-    .eq('id', params.id).eq('company_id', session.company_id).single()
+    .eq('id', params.id).in('company_id', accessibleCompanyIds).single()
   if (!existing) return notFound('Contract')
 
   const body    = await req.json().catch(() => ({}))
@@ -90,7 +98,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       : null
 
     await dispatchNotifications({
-      company_id:     session.company_id,
+      company_id:     data.company_id ?? session.company_id,
       recipient_ids:  [data.user_id],
       event_type:     'general',
       title:          'ผลการประเมินทดลองงาน',

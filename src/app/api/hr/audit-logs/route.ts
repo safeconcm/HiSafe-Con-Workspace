@@ -5,6 +5,7 @@ import { NextRequest } from 'next/server'
 import {
   getSessionFromHeaders, createAdminSupabaseClient,
   ok, unauthorized, forbidden, serverError, isHROrAdmin,
+  getAccessibleCompanyIds,
 } from '@/lib/api-helpers'
 
 export async function GET(req: NextRequest) {
@@ -22,12 +23,15 @@ export async function GET(req: NextRequest) {
   const date_to     = searchParams.get('date_to')
   const from        = (page - 1) * limit
 
+  // 2026-10-26, cross-company read grant (Issue 2)
+  const accessibleCompanyIds = await getAccessibleCompanyIds(session)
+
   const supabase = createAdminSupabaseClient()
 
   let query = supabase
     .from('audit_logs')
     .select('*', { count: 'exact' })
-    .eq('company_id', session.company_id)
+    .in('company_id', accessibleCompanyIds)
     .order('created_at', { ascending: false })
     .range(from, from + limit - 1)
 

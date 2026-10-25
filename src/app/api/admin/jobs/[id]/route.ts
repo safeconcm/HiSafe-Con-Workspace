@@ -14,7 +14,7 @@ import { NextRequest } from 'next/server'
 import {
   getSessionFromHeaders, createAdminSupabaseClient,
   ok, badRequest, unauthorized, forbidden,
-  notFound, serverError, writeAuditLog,
+  notFound, serverError, writeAuditLog, getAccessibleCompanyIds,
 } from '@/lib/api-helpers'
 import { parseOptionalDate, parseOptionalInt } from '../route'
 
@@ -26,10 +26,12 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   if (!session)                return unauthorized()
   if (session.role !== 'admin') return forbidden()
 
+  // 2026-10-26, cross-company read grant (Issue 2)
+  const accessibleCompanyIds = await getAccessibleCompanyIds(session)
   const supabase = createAdminSupabaseClient()
   const { data: existing } = await supabase
     .from('jobs').select('*')
-    .eq('id', params.id).eq('company_id', session.company_id).single()
+    .eq('id', params.id).in('company_id', accessibleCompanyIds).single()
   if (!existing) return notFound('Job')
 
   const body = await req.json().catch(() => ({}))
@@ -99,11 +101,12 @@ export async function DELETE(req: NextRequest, ctx: Ctx) {
   if (!session)                return unauthorized()
   if (session.role !== 'admin') return forbidden()
 
+  const accessibleCompanyIds = await getAccessibleCompanyIds(session)
   const supabase = createAdminSupabaseClient()
 
   const { data: existing } = await supabase
     .from('jobs').select('*')
-    .eq('id', params.id).eq('company_id', session.company_id).maybeSingle()
+    .eq('id', params.id).in('company_id', accessibleCompanyIds).maybeSingle()
   if (!existing) return notFound('Job')
 
   // Checked up front (clearer message than waiting for the FK error below),
@@ -121,7 +124,7 @@ export async function DELETE(req: NextRequest, ctx: Ctx) {
 
   const { error } = await supabase
     .from('jobs').delete()
-    .eq('id', params.id).eq('company_id', session.company_id)
+    .eq('id', params.id).in('company_id', accessibleCompanyIds)
 
   if (error) {
     // Belt-and-suspenders: a FK violation slipping past the counts above

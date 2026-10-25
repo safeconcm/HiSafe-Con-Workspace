@@ -19,6 +19,7 @@ import { NextRequest } from 'next/server'
 import {
   getSessionFromHeaders, createAdminSupabaseClient,
   ok, unauthorized, forbidden, serverError, isHROrAdmin,
+  getAccessibleCompanyIds,
 } from '@/lib/api-helpers'
 
 export async function GET(req: NextRequest) {
@@ -37,6 +38,13 @@ export async function GET(req: NextRequest) {
 
   const supabase = createAdminSupabaseClient()
 
+  // 2026-10-26, cross-company read grant (Issue 2) — only widens for
+  // HR/Admin; a supervisor's own-company scope is unaffected (supervisors
+  // aren't granted cross-company access).
+  const companyIds = isHROrAdmin(session)
+    ? await getAccessibleCompanyIds(session)
+    : [session.company_id]
+
   let query = supabase
     .from('timesheets')
     .select(`
@@ -45,7 +53,7 @@ export async function GET(req: NextRequest) {
         id, employee_code, first_name_th, last_name_th, department, position_th
       )
     `, { count: 'exact' })
-    .eq('company_id', session.company_id)
+    .in('company_id', companyIds)
     .eq('year', parseInt(year))
     .order('year',  { ascending: false })
     .order('month', { ascending: false })
