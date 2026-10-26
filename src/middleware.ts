@@ -37,6 +37,11 @@ const PUBLIC_ROUTES = ['/login', '/forgot-password', '/reset-password', '/api/au
 // GET /api/admin/users and GET /api/admin/users/[id]. Creating/importing
 // users, org structure, job codes, and system settings stay Admin-only.
 const ROLE_ROUTES: Record<string, string[]> = {
+  // CONNEX Inside (2026-10-26, "เปิด Module Connex Inside ที่ปิด ให้ admin
+  // เท่านั้นที่มองเห็น") — standalone top-level module (src/app/inside),
+  // same pattern as /access: Admin-only, enforced here AND with a friendlier
+  // full-page redirect in src/app/inside/layout.tsx.
+  '/inside':              ['admin'],
   '/hr':                  ['hr', 'admin'],
   // CONNEX Access pages (2026-10-16) — moved here from /admin/* (see
   // src/app/access/layout.tsx); the /admin/* entries below stay only as a

@@ -33,7 +33,7 @@ import { redirect } from 'next/navigation'
 import { cookies } from 'next/headers'
 import { pickActiveRow, ACTIVE_COMPANY_COOKIE } from '@/lib/company-context'
 import { fullNameTH } from '@/utils'
-import { Users, ShieldCheck, LogOut } from 'lucide-react'
+import { Users, ShieldCheck, LogOut, LineChart } from 'lucide-react'
 import Image from 'next/image'
 import Link from 'next/link'
 import { Card } from '@/components/ui/Card'
@@ -78,6 +78,19 @@ const APPS = [
     // Payroll job cost จะอยู่ด้วยกัน") — HR reaches it through CONNEX EM's
     // own sidebar now (see Sidebar.tsx's HR dropdown), not through this
     // card, so this is Admin-only again.
+    roles: ['admin'] as const,
+  },
+  {
+    key: 'inside',
+    name: 'CONNEX Inside',
+    description: 'ภาพรวมข้อมูลองค์กร / มูลค่างาน',
+    icon: LineChart,
+    href: '/inside',
+    color: 'bg-amber-600',
+    // Admin-only (2026-10-26, "เปิด Module Connex Inside ที่ปิด ให้ admin
+    // เท่านั้นที่มองเห็น") — enforced again at src/middleware.ts
+    // (ROLE_ROUTES['/inside']) and src/app/inside/layout.tsx; this just
+    // keeps the card itself from showing to non-admins on the hub.
     roles: ['admin'] as const,
   },
 ] as const
