@@ -9,6 +9,15 @@ import {
   notFound, serverError, writeAuditLog, isHROrAdmin,
 } from '@/lib/api-helpers'
 import { getWorkingDayMapForMonth } from '@/lib/work-schedule'
+// 2026-11-02, "พนักงาน HIGHCON ไม่สามารถดำเนินการในวันเสาร์ได้ ... ไม่สามารถ
+// บันทึก Timesheet ในวันเสาร์ได้" / SAFECON's "เพิ่มวันเสาร์ที่ต้องทำงานเป็น
+// รายครั้งหรือรายสัปดาห์ ... ระบบแจ้งว่าวันเสาร์เป็นวันหยุด" — the PATCH
+// handler below used to hardcode Sat/Sun as always blocked and never even
+// queried company_work_schedules/company_workday_overrides at all, so no
+// per-company weekly pattern or date override could ever make a Saturday
+// (or any other day) actually savable here, regardless of what HR
+// configured. See the exact same bug (same fix) already applied to
+// calc_leave_days (DB function) for leave submission.
 
 type Ctx = { params: Promise<{ id: string }> }
 
@@ -143,6 +152,12 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     .eq('is_active', true)
   const holidayDates = new Set((holidays ?? []).map((h: any) => h.holiday_date))
 
+  // This company's actual working-day pattern (weekly pattern + date
+  // overrides) — same source of truth the Timesheet grid/PDF already use
+  // (see src/lib/work-schedule.ts), instead of assuming every company's
+  // weekend is Sat+Sun.
+  const workingDayMap = await getWorkingDayMapForMonth(supabase, session.company_id, year, month)
+
   // Fetch leave lines (auto-locked by approved leave)
   const { data: leaveLines } = await supabase
     .from('timesheet_lines')
@@ -158,7 +173,6 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
 
   for (const line of body.lines) {
     const d = new Date(line.work_date)
-    const dow = d.getDay()
     const dateStr = line.work_date
 
     // Must be in this month/year
@@ -166,9 +180,11 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       errors.push(`${dateStr}: วันที่ไม่อยู่ในเดือนนี้`)
       continue
     }
-    // No weekends
-    if (dow === 0 || dow === 6) {
-      errors.push(`${dateStr}: ไม่สามารถกรอกวันเสาร์-อาทิตย์`)
+    // Not a working day for this company (per its own weekly pattern +
+    // date overrides — see workingDayMap above). undefined (no entry for
+    // this day-of-month) is treated the same as a configured day off.
+    if (workingDayMap.get(d.getDate()) !== true) {
+      errors.push(`${dateStr}: ไม่ใช่วันทำงานของบริษัท`)
       continue
     }
     // No holidays
