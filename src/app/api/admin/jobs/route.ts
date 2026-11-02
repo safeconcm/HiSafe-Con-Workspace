@@ -65,7 +65,12 @@ export async function GET(req: NextRequest) {
   if (!session) return unauthorized()
 
   const { searchParams } = new URL(req.url)
-  const year   = parseInt(searchParams.get('year')   ?? String(new Date().getFullYear()))
+  const yearParam = searchParams.get('year')
+  // year=all (2026-11-02, CONNEX Inside Job Codes tab) — skips the year
+  // filter entirely so the read-only overview can show every Job Code at
+  // once instead of one year at a time. Omitting the param still defaults
+  // to the current year, same as before.
+  const year   = yearParam === 'all' ? null : parseInt(yearParam ?? String(new Date().getFullYear()))
   const status = searchParams.get('status') ?? 'active'
   const search = searchParams.get('q')
 
@@ -81,9 +86,9 @@ export async function GET(req: NextRequest) {
     .from('jobs')
     .select('id, job_code, name_th, name_en, year, status, client_name, description, contract_value, contract_no, start_date, end_date, sequence_no, created_at', { count: 'exact' })
     .in('company_id', companyIds)
-    .eq('year', year)
     .order('job_code')
 
+  if (year !== null) query = query.eq('year', year)
   if (status !== 'all') query = query.eq('status', status)
   if (search) {
     const s = escapeForOrFilter(search)
@@ -93,7 +98,7 @@ export async function GET(req: NextRequest) {
   const { data, count, error } = await query
   if (error) return serverError(error)
 
-  return ok({ jobs: data ?? [], total: count ?? 0, year })
+  return ok({ jobs: data ?? [], total: count ?? 0, year: year ?? 'all' })
 }
 
 export async function POST(req: NextRequest) {

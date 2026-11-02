@@ -450,11 +450,14 @@ export async function getUserRateForPeriod(
   }
 }
 
-export async function computeJobCostSummary(
-  companyId: string, year: number, month?: number
+// Shared accumulation core for computeJobCostSummary (one year, or one cycle
+// within it) and computeJobCostAllTime (every cycle that has ever had an
+// approved Timesheet, for the Job Codes life-to-date labor-cost column in
+// CONNEX Inside — 2026-11-02, "เพิ่มการคิดค่าใช้จ่ายค่าแรง staff ตาม Job").
+// Both just differ in which {start,end} cycle windows they pass in.
+async function accumulateJobCostOverCycles(
+  companyId: string, cycles: { start: string; end: string }[]
 ): Promise<JobCostSummaryLine[]> {
-  const cycles = month ? [cyclePeriod(year, month)] : Array.from({ length: 12 }, (_, i) => cyclePeriod(year, i + 1))
-
   const supabase = createAdminSupabaseClient()
   const jobMap = new Map<string, JobCostSummaryLine & { employees: Set<string> }>()
 
@@ -532,6 +535,39 @@ export async function computeJobCostSummary(
   return Array.from(jobMap.values())
     .map(({ employees, ...rest }) => ({ ...rest, employee_count: employees.size }))
     .sort((a, b) => b.cost - a.cost)
+}
+
+export async function computeJobCostSummary(
+  companyId: string, year: number, month?: number
+): Promise<JobCostSummaryLine[]> {
+  const cycles = month ? [cyclePeriod(year, month)] : Array.from({ length: 12 }, (_, i) => cyclePeriod(year, i + 1))
+  return accumulateJobCostOverCycles(companyId, cycles)
+}
+
+// Life-to-date labor cost per Job Code — every pay cycle that has ever had
+// an approved Timesheet for this company, not just one year (2026-11-02,
+// CONNEX Inside Job Codes tab: "เพิ่มการคิดค่าใช้จ่ายค่าแรง staff ตาม Job").
+// Finds the distinct (year, month) Timesheet buckets that actually exist
+// instead of guessing a date range, so it stays correct as new cycles get
+// approved without needing a hardcoded start year.
+export async function computeJobCostAllTime(companyId: string): Promise<JobCostSummaryLine[]> {
+  const supabase = createAdminSupabaseClient()
+  const { data: tsMonths } = await supabase
+    .from('timesheets')
+    .select('year, month')
+    .eq('company_id', companyId)
+    .eq('status', 'approved')
+
+  const seen = new Set<string>()
+  const cycles: { start: string; end: string }[] = []
+  for (const t of tsMonths ?? []) {
+    const key = `${t.year}-${t.month}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    cycles.push(cyclePeriod(t.year, t.month))
+  }
+  if (!cycles.length) return []
+  return accumulateJobCostOverCycles(companyId, cycles)
 }
 
 // ── Cost Centers (Activity Code) summary ────────────────────────────────

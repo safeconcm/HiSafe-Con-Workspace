@@ -130,7 +130,7 @@ export function useImportUsers() {
 
 // ── Jobs ─────────────────────────────────────────────────────
 
-export function useJobs(year?: number, status?: string) {
+export function useJobs(year?: number | 'all', status?: string) {
   const y = year ?? new Date().getFullYear()
   return useQuery({
     queryKey: ['jobs', y, status ?? 'active'],
@@ -252,6 +252,24 @@ export function useJobsRevenueSummary() {
         byClient: { client: string; value: number; count: number }[]
         total: number; countWithValue: number; countTotal: number
         unassignedValue: number; unassignedCount: number
+      }
+    },
+  })
+}
+
+// ต้นทุนแรงงานสะสมตาม Job (life-to-date) — CONNEX Inside Job Codes tab
+// (2026-11-02, "เพิ่มการคิดค่าใช้จ่ายค่าแรง staff ตาม Job"). Separate query
+// key (not prefixed with 'jobs') since it comes from Timesheet data, not
+// the jobs table, and doesn't need to be invalidated by Job CRUD mutations.
+export function useJobsLaborCostAllTime() {
+  return useQuery({
+    queryKey: ['jobs-labor-cost-all-time'],
+    queryFn: async () => {
+      const res  = await fetch('/api/admin/jobs/labor-cost')
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error)
+      return json.data as {
+        rows: { job_id: string | null; job_code: string; job_name: string; hours: number; cost: number; employee_count: number }[]
       }
     },
   })
