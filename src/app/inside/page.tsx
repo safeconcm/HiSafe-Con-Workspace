@@ -6,12 +6,14 @@
 // แต่แยก Tab ไว้") so each metric group gets its own tab instead of one long
 // scrolling page:
 //   - มูลค่างาน: Job Codes revenue summary, by year/client (RevenueTab.tsx)
-//   - Headcount / Payroll: reuses the MD dashboard's exec_summary report
-//     (HeadcountPayrollTab.tsx)
 //   - Job Codes (2026-11-02, "เอา Job codes มาอยู่ใน CONNEX Inside ด้วย และ
 //     เพิ่มการคิดค่าใช่จ่ายค่าแรง staff ตาม Job ด้วย"): read-only Job Code
 //     list with a life-to-date Staff labor-cost column (JobCodesTab.tsx) —
 //     full management (add/edit/delete/import) stays at CONNEX Access.
+//   - Headcount / Payroll: reuses the MD dashboard's exec_summary report
+//     (HeadcountPayrollTab.tsx) — moved after Job Codes (2026-11-02, "ควรอยู่
+//     ถัดจาก Job Codes") so the two Job-related tabs (มูลค่างาน, Job Codes)
+//     sit next to each other.
 // More tabs can be added here later without touching any existing one.
 import { useState } from 'react'
 import Link from 'next/link'
@@ -22,8 +24,8 @@ import { JobCodesTab } from './JobCodesTab'
 
 const TABS = [
   { key: 'revenue',   label: 'มูลค่างาน',          icon: Coins },
-  { key: 'headcount', label: 'Headcount / Payroll', icon: Users },
   { key: 'jobcodes',  label: 'Job Codes',           icon: Briefcase },
+  { key: 'headcount', label: 'Headcount / Payroll', icon: Users },
 ] as const
 
 type TabKey = typeof TABS[number]['key']
@@ -81,8 +83,8 @@ export default function ConnexInsidePage() {
         </div>
 
         {tab === 'revenue' && <RevenueTab />}
-        {tab === 'headcount' && <HeadcountPayrollTab />}
         {tab === 'jobcodes' && <JobCodesTab />}
+        {tab === 'headcount' && <HeadcountPayrollTab />}
       </div>
     </div>
   )
